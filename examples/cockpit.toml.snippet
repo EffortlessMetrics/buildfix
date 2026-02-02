@@ -1,0 +1,7 @@
+# cockpit.toml snippet — composition policy for buildfix
+[sensors.buildfix]
+blocking = false
+missing = "skip"
+
+# Typical: run buildfix as plan-only on PRs and upload artifacts.
+# Apply is reserved for maintainer workflows.

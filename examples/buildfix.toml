@@ -1,0 +1,31 @@
+# buildfix.toml — actuator policy (allow/deny, safety, caps)
+
+[policy]
+# If allow is non-empty, only allowlisted fix keys are eligible.
+allow = [
+  "builddiag/workspace.resolver_v2/*",
+  "depguard/deps.path_requires_version/*",
+  "depguard/deps.workspace_inheritance/*",
+  "builddiag/rust.msrv_consistent/*",
+]
+
+deny = [
+  # Example: deny MSRV normalization until the workspace standard is fully settled
+  # "builddiag/rust.msrv_consistent/*",
+]
+
+allow_guarded = false
+allow_unsafe = false
+allow_dirty = false
+
+max_ops = 50
+max_files = 25
+max_patch_bytes = 250000
+
+[backups]
+enabled = true
+suffix = ".buildfix.bak"
+
+[params]
+# Unsafe fixes can be unblocked by providing explicit parameters.
+# rust_version = "1.75"
