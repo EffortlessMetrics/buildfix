@@ -1,0 +1,18 @@
+[package]
+name = "buildfix-types"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = []
+
+[dependencies]
+camino.workspace = true
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

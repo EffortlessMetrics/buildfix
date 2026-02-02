@@ -1,0 +1,20 @@
+[package]
+name = "buildfix-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+toml_edit = "0.22"
+buildfix-types = { path = "../buildfix-types" }
+buildfix-edit = { path = "../buildfix-edit" }
+
+[[bin]]
+name = "apply_op"
+path = "fuzz_targets/apply_op.rs"
+test = false
+doc = false

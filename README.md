@@ -1,40 +1,45 @@
-# buildfix — architecture kit
+# buildfix (architecture-kit workspace)
 
-This folder is a **copy-ready** documentation + contract bundle for `buildfix`, the **actuator** in a receipts-first PR cockpit ecosystem.
+This repository is a multi-crate workspace for **buildfix**: a receipt-driven repair tool aimed at common Cargo workspace hygiene issues.
 
-It includes:
+The intent is mechanical:
 
-- Requirements, design, architecture, and implementation plan (markdown)
-- Fix registry and safety model (markdown)
-- Test strategy (BDD + fixtures + snapshots + proptest + fuzz + mutation)
-- JSON Schemas for:
-  - `buildfix.plan.v1`
-  - `buildfix.apply.v1`
-  - `buildfix.report.v1` (envelope-compatible summary for cockpit display)
-- Example configs (`buildfix.toml`, `cockpit.toml` snippet)
-- Gherkin feature files for BDD
+- Sensors (buildscan/builddiag/depguard) emit `artifacts/<sensor>/report.json`.
+- `buildfix plan` reads receipts and produces:
+  - `artifacts/buildfix/plan.json`
+  - `artifacts/buildfix/plan.md`
+  - `artifacts/buildfix/patch.diff` (preview)
+  - `artifacts/buildfix/report.json` (cockpit-compatible)
+- `buildfix apply` reads `plan.json` and (optionally) writes edits back to the repo.
 
-## Intended use
+## Crates
 
-- Drop the docs into your `buildfix` repo (`docs/` + `schemas/`).
-- Use the schemas to validate artifacts in CI.
-- Use the feature files as the starting point for BDD step definitions.
+- `buildfix-types` — schemaed DTOs (plan/apply/report, operations, receipt envelope).
+- `buildfix-receipts` — tolerant receipt loader (`artifacts/*/report.json`).
+- `buildfix-domain` — planner: receipts → deterministic planned operations.
+- `buildfix-edit` — editor: operations → `toml_edit` mutations + unified diffs.
+- `buildfix-render` — markdown rendering for artifacts.
+- `buildfix` (in `buildfix-cli`) — the CLI.
+- `buildfix-bdd` — cucumber harness (scenario-style tests).
+- `xtask` — small workspace helper.
 
-## Canonical buildfix artifacts
+## Quick start
 
+```bash
+# Plan
+cargo run -p buildfix -- plan
+
+# Dry-run apply (generates apply.json/apply.md + patch.diff but does not write)
+cargo run -p buildfix -- apply
+
+# Apply changes (safe fixes only by default)
+cargo run -p buildfix -- apply --apply
+
+# Allow guarded fixes (e.g., MSRV normalization)
+cargo run -p buildfix -- apply --apply --allow-guarded
 ```
-artifacts/buildfix/
-  plan.json      # buildfix.plan.v1
-  plan.md        # human summary
-  patch.diff     # unified diff preview
-  apply.json     # buildfix.apply.v1
-  report.json    # buildfix.report.v1 (optional; for cockpit ingestion)
-```
 
-## Philosophy (non-negotiables)
+## Notes
 
-- **No writes without explicit apply.**
-- **Plan → patch → apply**, always auditably reversible.
-- **No builds/tests/benchmarks.** Proof stays in sensors + CI.
-- **No “inventing” versions.** If it’s ambiguous, it’s unsafe.
-- **Receipts are the interface**: buildfix depends on envelope semantics, not sensor internals.
+- This workspace is designed to be integrated under a larger “director” system.
+- Dependencies are not vendored; a normal Cargo environment with registry access is expected.

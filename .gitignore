@@ -1,8 +1,6 @@
-# build artifacts
-target/
-artifacts/
-*.bak
-*.tmp
-
-# fuzz
-fuzz/target/
+/target
+**/target
+/artifacts
+*.log
+*.swp
+.DS_Store
