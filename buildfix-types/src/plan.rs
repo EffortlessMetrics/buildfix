@@ -40,6 +40,7 @@ impl BuildfixPlan {
             run: RunInfo {
                 started_at: Some(Utc::now()),
                 ended_at: None,
+                git_head_sha: None,
             },
             plan_id: Uuid::new_v4().to_string(),
             policy,
@@ -49,6 +50,32 @@ impl BuildfixPlan {
             fixes: vec![],
             notes: vec![],
         }
+    }
+}
+
+/// Policy caps that limit the scope of a plan.
+///
+/// These caps are checked during plan generation and cause a policy block (exit 2)
+/// if exceeded.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PolicyCaps {
+    /// Maximum number of operations allowed in the plan.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_ops: Option<u64>,
+
+    /// Maximum number of files that can be modified.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_files: Option<u64>,
+
+    /// Maximum total bytes of patch output.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_patch_bytes: Option<u64>,
+}
+
+impl PolicyCaps {
+    /// Returns true if no caps are configured.
+    pub fn is_empty(&self) -> bool {
+        self.max_ops.is_none() && self.max_files.is_none() && self.max_patch_bytes.is_none()
     }
 }
 
@@ -65,6 +92,10 @@ pub struct PlanPolicySnapshot {
     /// Whether apply should refuse if target files have changed since plan.
     #[serde(default)]
     pub require_clean_hashes: bool,
+
+    /// Policy caps limiting the scope of the plan.
+    #[serde(default, skip_serializing_if = "PolicyCaps::is_empty")]
+    pub caps: PolicyCaps,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -151,6 +182,16 @@ pub struct LocationRef {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Precondition {
-    FileExists { path: Utf8PathBuf },
-    FileSha256 { path: Utf8PathBuf, sha256: String },
+    FileExists {
+        path: Utf8PathBuf,
+    },
+    FileSha256 {
+        path: Utf8PathBuf,
+        sha256: String,
+    },
+    /// Verifies the git HEAD SHA matches the expected value.
+    /// Used to ensure the plan is applied to the same repo state it was generated from.
+    GitHeadSha {
+        sha: String,
+    },
 }

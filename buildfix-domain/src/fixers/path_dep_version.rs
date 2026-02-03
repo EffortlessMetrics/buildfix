@@ -1,4 +1,4 @@
-use crate::fixers::Fixer;
+use crate::fixers::{Fixer, FixerMeta};
 use crate::planner::ReceiptSet;
 use crate::ports::RepoView;
 use buildfix_types::ops::{FixId, Operation, SafetyClass};
@@ -11,8 +11,14 @@ pub struct PathDepVersionFixer;
 
 impl PathDepVersionFixer {
     const FIX_ID: &'static str = "cargo.path_dep_add_version";
+    const DESCRIPTION: &'static str = "Adds version field to path dependencies for publishability";
+    const SENSORS: &'static [&'static str] = &["depguard"];
+    const CHECK_IDS: &'static [&'static str] =
+        &["deps.path_requires_version", "cargo.path_requires_version"];
 
-    fn manifest_paths_from_triggers(triggers: &[buildfix_types::plan::FindingRef]) -> BTreeSet<Utf8PathBuf> {
+    fn manifest_paths_from_triggers(
+        triggers: &[buildfix_types::plan::FindingRef],
+    ) -> BTreeSet<Utf8PathBuf> {
         let mut out = BTreeSet::new();
         for t in triggers {
             let Some(loc) = &t.location else { continue };
@@ -23,7 +29,11 @@ impl PathDepVersionFixer {
         out
     }
 
-    fn infer_dep_version(repo: &dyn RepoView, manifest: &Utf8Path, dep_path: &str) -> Option<String> {
+    fn infer_dep_version(
+        repo: &dyn RepoView,
+        manifest: &Utf8Path,
+        dep_path: &str,
+    ) -> Option<String> {
         // 1) Target crate Cargo.toml
         let base = manifest.parent().unwrap_or_else(|| Utf8Path::new(""));
         let target_manifest: Utf8PathBuf = base.join(dep_path).join("Cargo.toml");
@@ -76,13 +86,36 @@ impl PathDepVersionFixer {
         // target.'cfg(...)'.dependencies
         if let Some(target) = doc.get("target").and_then(|i| i.as_table()) {
             for (target_key, target_item) in target.iter() {
-                let Some(target_tbl) = target_item.as_table() else { continue };
+                let Some(target_tbl) = target_item.as_table() else {
+                    continue;
+                };
                 let target_name = target_key.to_string();
 
                 for (tbl_name, prefix) in [
-                    ("dependencies", vec!["target".to_string(), target_name.clone(), "dependencies".to_string()]),
-                    ("dev-dependencies", vec!["target".to_string(), target_name.clone(), "dev-dependencies".to_string()]),
-                    ("build-dependencies", vec!["target".to_string(), target_name.clone(), "build-dependencies".to_string()]),
+                    (
+                        "dependencies",
+                        vec![
+                            "target".to_string(),
+                            target_name.clone(),
+                            "dependencies".to_string(),
+                        ],
+                    ),
+                    (
+                        "dev-dependencies",
+                        vec![
+                            "target".to_string(),
+                            target_name.clone(),
+                            "dev-dependencies".to_string(),
+                        ],
+                    ),
+                    (
+                        "build-dependencies",
+                        vec![
+                            "target".to_string(),
+                            target_name.clone(),
+                            "build-dependencies".to_string(),
+                        ],
+                    ),
                 ] {
                     if let Some(dep_tbl) = target_tbl.get(tbl_name).and_then(|i| i.as_table()) {
                         out.extend(Self::collect_from_dep_table(dep_tbl, prefix));
@@ -103,7 +136,10 @@ impl PathDepVersionFixer {
             if let Some(inline) = dep_item.as_inline_table() {
                 let path = inline.get("path").and_then(|v| v.as_str());
                 let version = inline.get("version").and_then(|v| v.as_str());
-                let workspace_true = inline.get("workspace").and_then(|v| v.as_bool()).unwrap_or(false);
+                let workspace_true = inline
+                    .get("workspace")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
 
                 if let Some(path) = path {
                     if version.is_none() && !workspace_true {
@@ -160,25 +196,36 @@ struct PathDepCandidate {
 }
 
 impl Fixer for PathDepVersionFixer {
+    fn meta(&self) -> FixerMeta {
+        FixerMeta {
+            fix_key: Self::FIX_ID,
+            description: Self::DESCRIPTION,
+            safety: SafetyClass::Safe,
+            consumes_sensors: Self::SENSORS,
+            consumes_check_ids: Self::CHECK_IDS,
+        }
+    }
+
     fn plan(
         &self,
         _ctx: &crate::planner::PlanContext,
         repo: &dyn RepoView,
         receipts: &ReceiptSet,
     ) -> anyhow::Result<Vec<PlannedFix>> {
-        let triggers = receipts.matching_findings(
-            &["depguard"],
-            &["deps.path_requires_version", "cargo.path_requires_version"],
-            &["missing_version"],
-        );
+        let triggers =
+            receipts.matching_findings(Self::SENSORS, Self::CHECK_IDS, &["missing_version"]);
         if triggers.is_empty() {
             return Ok(vec![]);
         }
 
-        let mut triggers_by_manifest: BTreeMap<Utf8PathBuf, Vec<buildfix_types::plan::FindingRef>> = BTreeMap::new();
+        let mut triggers_by_manifest: BTreeMap<Utf8PathBuf, Vec<buildfix_types::plan::FindingRef>> =
+            BTreeMap::new();
         for t in &triggers {
             if let Some(loc) = &t.location {
-                triggers_by_manifest.entry(loc.path.clone()).or_default().push(t.clone());
+                triggers_by_manifest
+                    .entry(loc.path.clone())
+                    .or_default()
+                    .push(t.clone());
             }
         }
 
@@ -203,7 +250,7 @@ impl Fixer for PathDepVersionFixer {
                 };
 
                 let title = format!(
-                    "Add version = "{}" for path dependency {}",
+                    "Add version = \"{}\" for path dependency {}",
                     version, cand.dep
                 );
 

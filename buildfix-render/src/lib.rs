@@ -12,10 +12,7 @@ pub fn render_plan_md(plan: &BuildfixPlan) -> String {
         "- Fixes: {} (safe {}, guarded {}, unsafe {})\n",
         plan.summary.fixes_total, plan.summary.safe, plan.summary.guarded, plan.summary.unsafe_
     ));
-    out.push_str(&format!(
-        "- Receipts: {}\n\n",
-        plan.receipts.len()
-    ));
+    out.push_str(&format!("- Receipts: {}\n\n", plan.receipts.len()));
 
     out.push_str("## Fixes\n\n");
     if plan.fixes.is_empty() {
@@ -24,11 +21,7 @@ pub fn render_plan_md(plan: &BuildfixPlan) -> String {
     }
 
     for (i, fix) in plan.fixes.iter().enumerate() {
-        out.push_str(&format!(
-            "### {}. {}\n\n",
-            i + 1,
-            fix.title
-        ));
+        out.push_str(&format!("### {}. {}\n\n", i + 1, fix.title));
         out.push_str(&format!("- Fix id: `{}`\n", fix.fix_id.0));
         out.push_str(&format!("- Safety: `{}`\n", safety_label(fix.safety)));
         out.push_str(&format!("- Operations: {}\n", fix.operations.len()));
@@ -39,14 +32,21 @@ pub fn render_plan_md(plan: &BuildfixPlan) -> String {
         if !fix.triggers.is_empty() {
             out.push_str("\n**Triggers**\n\n");
             for t in &fix.triggers {
-                let check = t.trigger.check_id.clone().unwrap_or_else(|| "-".to_string());
+                let check = t
+                    .trigger
+                    .check_id
+                    .clone()
+                    .unwrap_or_else(|| "-".to_string());
                 let code = t.trigger.code.clone().unwrap_or_else(|| "-".to_string());
                 let loc = t
                     .location
                     .as_ref()
                     .map(|l| format!("{}:{}", l.path, l.line.unwrap_or(0)))
                     .unwrap_or_else(|| "-".to_string());
-                out.push_str(&format!("- `{}/{}` `{}` at {}\n", t.trigger.tool, check, code, loc));
+                out.push_str(&format!(
+                    "- `{}/{}` `{}` at {}\n",
+                    t.trigger.tool, check, code, loc
+                ));
             }
         }
 

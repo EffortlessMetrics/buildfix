@@ -1,3 +1,6 @@
+mod config;
+mod explain;
+
 use anyhow::Context;
 use buildfix_domain::{FsRepoView, PlanContext, Planner, PlannerConfig};
 use buildfix_edit::{apply_plan, attach_preconditions, preview_patch, ApplyOptions};
@@ -5,15 +8,20 @@ use buildfix_render::{render_apply_md, render_plan_md};
 use buildfix_types::receipt::{RunInfo, ToolInfo, Verdict, VerdictStatus};
 use buildfix_types::report::BuildfixReport;
 use camino::{Utf8Path, Utf8PathBuf};
-use clap::{Parser, Subcommand};
 use chrono::Utc;
+use clap::{Parser, Subcommand};
+use config::ConfigMerger;
 use fs_err as fs;
 use std::process::ExitCode;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
-#[command(name = "buildfix", version, about = "Receipt-driven repair tool for Cargo workspace hygiene.")]
+#[command(
+    name = "buildfix",
+    version,
+    about = "Receipt-driven repair tool for Cargo workspace hygiene."
+)]
 struct Cli {
     #[command(subcommand)]
     cmd: Command,
@@ -25,6 +33,8 @@ enum Command {
     Plan(PlanArgs),
     /// Apply an existing plan (default: dry-run).
     Apply(ApplyArgs),
+    /// Explain what a fix does, its safety rationale, and remediation guidance.
+    Explain(ExplainArgs),
 }
 
 #[derive(Debug, Parser)]
@@ -77,6 +87,12 @@ struct ApplyArgs {
     allow_unsafe: bool,
 }
 
+#[derive(Debug, Parser)]
+struct ExplainArgs {
+    /// Fix key or fix ID to explain (e.g., "resolver-v2", "path-dep-version").
+    fix_key: String,
+}
+
 fn main() -> ExitCode {
     if let Err(e) = real_main() {
         error!("{:?}", e);
@@ -94,6 +110,7 @@ fn real_main() -> anyhow::Result<()> {
     match cli.cmd {
         Command::Plan(args) => cmd_plan(args),
         Command::Apply(args) => cmd_apply(args),
+        Command::Explain(args) => cmd_explain(args),
     }
 }
 
@@ -108,6 +125,19 @@ fn cmd_plan(args: PlanArgs) -> anyhow::Result<()> {
 
     fs::create_dir_all(&out_dir).with_context(|| format!("create {}", out_dir))?;
 
+    // Load config file and merge with CLI arguments
+    let file_config = config::load_or_default(&repo_root).context("load buildfix.toml config")?;
+    let merged = ConfigMerger::new(file_config).merge_plan_args(
+        &args.allow,
+        &args.deny,
+        args.no_clean_hashes,
+    );
+
+    debug!(
+        "merged config: allow={:?}, deny={:?}, require_clean_hashes={}",
+        merged.allow, merged.deny, merged.require_clean_hashes
+    );
+
     let receipts = buildfix_receipts::load_receipts(&artifacts_dir)
         .with_context(|| format!("load receipts from {}", artifacts_dir))?;
 
@@ -116,9 +146,9 @@ fn cmd_plan(args: PlanArgs) -> anyhow::Result<()> {
         repo_root: repo_root.clone(),
         artifacts_dir: artifacts_dir.clone(),
         config: PlannerConfig {
-            allow: args.allow.clone(),
-            deny: args.deny.clone(),
-            require_clean_hashes: !args.no_clean_hashes,
+            allow: merged.allow.clone(),
+            deny: merged.deny.clone(),
+            require_clean_hashes: merged.require_clean_hashes,
         },
     };
     let repo = FsRepoView::new(repo_root.clone());
@@ -135,6 +165,7 @@ fn cmd_plan(args: PlanArgs) -> anyhow::Result<()> {
         dry_run: true,
         allow_guarded: true,
         allow_unsafe: false,
+        backup_dir: None,
     };
     let patch = preview_patch(&repo_root, &plan, &preview_opts).context("preview patch")?;
 
@@ -155,6 +186,16 @@ fn cmd_apply(args: ApplyArgs) -> anyhow::Result<()> {
         .out_dir
         .unwrap_or_else(|| repo_root.join("artifacts").join("buildfix"));
 
+    // Load config file and merge with CLI arguments
+    let file_config = config::load_or_default(&repo_root).context("load buildfix.toml config")?;
+    let merged =
+        ConfigMerger::new(file_config).merge_apply_args(args.allow_guarded, args.allow_unsafe);
+
+    debug!(
+        "merged config: allow_guarded={}, allow_unsafe={}",
+        merged.allow_guarded, merged.allow_unsafe
+    );
+
     let plan_path = out_dir.join("plan.json");
     let plan_str = fs::read_to_string(&plan_path).with_context(|| format!("read {}", plan_path))?;
     let plan: buildfix_types::plan::BuildfixPlan =
@@ -162,8 +203,9 @@ fn cmd_apply(args: ApplyArgs) -> anyhow::Result<()> {
 
     let opts = ApplyOptions {
         dry_run: !args.apply,
-        allow_guarded: args.allow_guarded,
-        allow_unsafe: args.allow_unsafe,
+        allow_guarded: merged.allow_guarded,
+        allow_unsafe: merged.allow_unsafe,
+        backup_dir: Some(out_dir.join("backups")),
     };
 
     let tool = tool_info();
@@ -209,6 +251,7 @@ fn report_from_plan(plan: &buildfix_types::plan::BuildfixPlan, tool: ToolInfo) -
         run: RunInfo {
             started_at: Some(Utc::now()),
             ended_at: Some(Utc::now()),
+            git_head_sha: None,
         },
         verdict: Verdict {
             status,
@@ -230,7 +273,10 @@ fn report_from_plan(plan: &buildfix_types::plan::BuildfixPlan, tool: ToolInfo) -
     }
 }
 
-fn report_from_apply(apply: &buildfix_types::apply::BuildfixApply, tool: ToolInfo) -> BuildfixReport {
+fn report_from_apply(
+    apply: &buildfix_types::apply::BuildfixApply,
+    tool: ToolInfo,
+) -> BuildfixReport {
     let status = if apply.summary.failed > 0 {
         VerdictStatus::Fail
     } else if apply.summary.applied > 0 {
@@ -245,6 +291,7 @@ fn report_from_apply(apply: &buildfix_types::apply::BuildfixApply, tool: ToolInf
         run: RunInfo {
             started_at: Some(Utc::now()),
             ended_at: Some(Utc::now()),
+            git_head_sha: None,
         },
         verdict: Verdict {
             status,
@@ -264,4 +311,67 @@ fn report_from_apply(apply: &buildfix_types::apply::BuildfixApply, tool: ToolInf
             "failed": apply.summary.failed,
         })),
     }
+}
+
+fn cmd_explain(args: ExplainArgs) -> anyhow::Result<()> {
+    use explain::{format_safety_class, list_fix_keys, lookup_fix, safety_class_meaning};
+
+    let Some(fix) = lookup_fix(&args.fix_key) else {
+        let available = list_fix_keys().join(", ");
+        anyhow::bail!(
+            "Unknown fix key: '{}'\n\nAvailable fixes: {}",
+            args.fix_key,
+            available
+        );
+    };
+
+    // Title and basic info
+    println!("================================================================================");
+    println!("FIX: {}", fix.title);
+    println!("================================================================================");
+    println!();
+    println!("Key:     {}", fix.key);
+    println!("Fix ID:  {}", fix.fix_id);
+    println!("Safety:  {}", format_safety_class(fix.safety));
+    println!();
+
+    // Description
+    println!("DESCRIPTION");
+    println!("--------------------------------------------------------------------------------");
+    println!("{}", fix.description);
+    println!();
+
+    // Triggering findings
+    println!("TRIGGERING FINDINGS");
+    println!("--------------------------------------------------------------------------------");
+    println!("This fix is triggered by sensor findings matching:");
+    println!();
+    for trigger in fix.triggers {
+        let code_part = trigger
+            .code
+            .map(|c| format!(" / {}", c))
+            .unwrap_or_default();
+        println!("  - {} / {}{}", trigger.sensor, trigger.check_id, code_part);
+    }
+    println!();
+
+    // Safety class explanation
+    println!("SAFETY CLASS: {}", format_safety_class(fix.safety));
+    println!("--------------------------------------------------------------------------------");
+    println!("{}", safety_class_meaning(fix.safety));
+    println!();
+
+    // Safety rationale
+    println!("SAFETY RATIONALE");
+    println!("--------------------------------------------------------------------------------");
+    println!("{}", fix.safety_rationale);
+    println!();
+
+    // Remediation guidance
+    println!("REMEDIATION GUIDANCE");
+    println!("--------------------------------------------------------------------------------");
+    println!("{}", fix.remediation);
+    println!();
+
+    Ok(())
 }

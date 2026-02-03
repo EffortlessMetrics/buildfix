@@ -20,6 +20,10 @@ pub struct BuildfixApply {
 
     #[serde(default)]
     pub results: Vec<AppliedFixResult>,
+
+    /// Information about backups created during apply.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backup_info: Option<BackupInfo>,
 }
 
 impl BuildfixApply {
@@ -30,11 +34,13 @@ impl BuildfixApply {
             run: RunInfo {
                 started_at: Some(Utc::now()),
                 ended_at: None,
+                git_head_sha: None,
             },
             plan_id,
             applied: false,
             summary: ApplySummary::default(),
             results: vec![],
+            backup_info: None,
         }
     }
 }
@@ -69,7 +75,7 @@ pub struct AppliedFixResult {
     pub files_changed: Vec<FileChange>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ApplyStatus {
     Applied,
@@ -100,4 +106,35 @@ pub struct FileChange {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub applied_at: Option<DateTime<Utc>>,
+
+    /// Path to backup file created before modification.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backup_path: Option<String>,
+}
+
+/// Information about all backups created during apply.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct BackupInfo {
+    /// Directory where backups are stored.
+    pub backup_dir: String,
+
+    /// Mapping from original file path to backup file path.
+    #[serde(default)]
+    pub backups: Vec<BackupEntry>,
+}
+
+/// A single backup entry mapping original to backup path.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackupEntry {
+    /// Original file path (relative to repo root).
+    pub original_path: String,
+
+    /// Backup file path (absolute).
+    pub backup_path: String,
+
+    /// SHA256 of the backed up content.
+    pub sha256: String,
+
+    /// Timestamp when backup was created.
+    pub created_at: DateTime<Utc>,
 }

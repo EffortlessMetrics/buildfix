@@ -1,4 +1,4 @@
-use crate::fixers::Fixer;
+use crate::fixers::{Fixer, FixerMeta};
 use crate::planner::ReceiptSet;
 use crate::ports::RepoView;
 use buildfix_types::ops::{FixId, Operation, SafetyClass};
@@ -10,6 +10,11 @@ pub struct ResolverV2Fixer;
 
 impl ResolverV2Fixer {
     const FIX_ID: &'static str = "cargo.workspace_resolver_v2";
+    const DESCRIPTION: &'static str =
+        "Sets [workspace].resolver = \"2\" for correct feature unification";
+    const SENSORS: &'static [&'static str] = &["builddiag", "cargo"];
+    const CHECK_IDS: &'static [&'static str] =
+        &["workspace.resolver_v2", "cargo.workspace.resolver_v2"];
 
     fn needs_fix(repo: &dyn RepoView, manifest: &Utf8PathBuf) -> bool {
         let contents = match repo.read_to_string(manifest) {
@@ -37,17 +42,23 @@ impl ResolverV2Fixer {
 }
 
 impl Fixer for ResolverV2Fixer {
+    fn meta(&self) -> FixerMeta {
+        FixerMeta {
+            fix_key: Self::FIX_ID,
+            description: Self::DESCRIPTION,
+            safety: SafetyClass::Safe,
+            consumes_sensors: Self::SENSORS,
+            consumes_check_ids: Self::CHECK_IDS,
+        }
+    }
+
     fn plan(
         &self,
         _ctx: &crate::planner::PlanContext,
         repo: &dyn RepoView,
         receipts: &ReceiptSet,
     ) -> anyhow::Result<Vec<PlannedFix>> {
-        let triggers = receipts.matching_findings(
-            &["builddiag", "cargo"],
-            &["workspace.resolver_v2", "cargo.workspace.resolver_v2"],
-            &[],
-        );
+        let triggers = receipts.matching_findings(Self::SENSORS, Self::CHECK_IDS, &[]);
         if triggers.is_empty() {
             return Ok(vec![]);
         }
@@ -61,7 +72,7 @@ impl Fixer for ResolverV2Fixer {
             id: String::new(),
             fix_id: FixId::new(Self::FIX_ID),
             safety: SafetyClass::Safe,
-            title: "Set [workspace].resolver = "2"".to_string(),
+            title: "Set [workspace].resolver = \"2\"".to_string(),
             description: Some(
                 "Cargo's resolver v2 is required for correct feature unification in many modern workspaces."
                     .to_string(),

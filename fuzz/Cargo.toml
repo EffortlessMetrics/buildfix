@@ -9,12 +9,39 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
 toml_edit = "0.22"
+serde_json = "1"
+camino = "1"
 buildfix-types = { path = "../buildfix-types" }
 buildfix-edit = { path = "../buildfix-edit" }
 
 [[bin]]
 name = "apply_op"
 path = "fuzz_targets/apply_op.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "receipt_parse"
+path = "fuzz_targets/receipt_parse.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "operation_apply"
+path = "fuzz_targets/operation_apply.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "plan_parse"
+path = "fuzz_targets/plan_parse.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "full_pipeline"
+path = "fuzz_targets/full_pipeline.rs"
 test = false
 doc = false

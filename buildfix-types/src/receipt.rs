@@ -52,6 +52,11 @@ pub struct RunInfo {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ended_at: Option<DateTime<Utc>>,
+
+    /// Git HEAD SHA at the time this run was created.
+    /// Used to verify the plan is applied to the same repo state it was generated from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub git_head_sha: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

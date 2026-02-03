@@ -5,9 +5,14 @@
 //! - Apply operations (in-memory or to disk) using `toml_edit`.
 //! - Generate a unified diff preview.
 
+mod error;
+
+pub use error::{EditError, EditResult, PolicyBlockError};
+
 use anyhow::Context;
 use buildfix_types::apply::{
-    ApplyStatus, ApplySummary, AppliedFixResult, BuildfixApply, FileChange, PreconditionResult,
+    AppliedFixResult, ApplyStatus, ApplySummary, BackupEntry, BackupInfo, BuildfixApply,
+    FileChange, PreconditionResult,
 };
 use buildfix_types::ops::{Operation, SafetyClass};
 use buildfix_types::plan::{BuildfixPlan, Precondition};
@@ -25,6 +30,9 @@ pub struct ApplyOptions {
     pub dry_run: bool,
     pub allow_guarded: bool,
     pub allow_unsafe: bool,
+    /// Directory to store backups. If None, backups are stored alongside files with `.buildfix-bak` extension.
+    /// If Some, backups are stored in `<backup_dir>/backups/` preserving relative paths.
+    pub backup_dir: Option<Utf8PathBuf>,
 }
 
 impl Default for ApplyOptions {
@@ -33,6 +41,7 @@ impl Default for ApplyOptions {
             dry_run: false,
             allow_guarded: false,
             allow_unsafe: false,
+            backup_dir: None,
         }
     }
 }
@@ -148,7 +157,26 @@ pub fn apply_plan(
     let outcome = execute_plan(repo_root, plan, opts)?;
     let patch = render_patch(&outcome.before, &outcome.after);
 
+    let mut backup_info: Option<BackupInfo> = None;
+    let mut file_backups: BTreeMap<Utf8PathBuf, String> = BTreeMap::new();
+
     if !opts.dry_run {
+        // Determine which files actually changed.
+        let mut changed_files: BTreeSet<Utf8PathBuf> = BTreeSet::new();
+        for (path, new_contents) in &outcome.after {
+            let old = outcome.before.get(path).cloned().unwrap_or_default();
+            if &old != new_contents {
+                changed_files.insert(path.clone());
+            }
+        }
+
+        // Create backups before writing any files.
+        if !changed_files.is_empty() {
+            let (bi, fb) = create_backups(repo_root, &changed_files, &outcome.before, opts)?;
+            backup_info = Some(bi);
+            file_backups = fb;
+        }
+
         // Write only changed files.
         for (path, new_contents) in &outcome.after {
             let old = outcome.before.get(path).cloned().unwrap_or_default();
@@ -163,10 +191,93 @@ pub fn apply_plan(
     let mut apply = BuildfixApply::new(tool, plan.plan_id.clone());
     apply.applied = !opts.dry_run;
     apply.summary = outcome.summary;
-    apply.results = outcome.results;
+    apply.backup_info = backup_info;
+
+    // Update results with backup paths.
+    let mut results = outcome.results;
+    for result in &mut results {
+        for fc in &mut result.files_changed {
+            if let Some(backup_path) = file_backups.get(Utf8Path::new(&fc.path)) {
+                fc.backup_path = Some(backup_path.clone());
+            }
+        }
+    }
+    apply.results = results;
     apply.run.ended_at = Some(Utc::now());
 
     Ok((apply, patch))
+}
+
+/// Creates backups for all files that will be modified.
+/// Returns (BackupInfo, mapping from original path to backup path).
+fn create_backups(
+    repo_root: &Utf8Path,
+    changed_files: &BTreeSet<Utf8PathBuf>,
+    before: &BTreeMap<Utf8PathBuf, String>,
+    opts: &ApplyOptions,
+) -> anyhow::Result<(BackupInfo, BTreeMap<Utf8PathBuf, String>)> {
+    let backup_dir = compute_backup_dir(opts);
+    let backup_dir_str = backup_dir
+        .as_ref()
+        .map(|p| p.to_string())
+        .unwrap_or_default();
+
+    let mut entries = Vec::new();
+    let mut file_backups = BTreeMap::new();
+
+    for path in changed_files {
+        let abs = abs_path(repo_root, path);
+        let contents = before.get(path).cloned().unwrap_or_default();
+        let sha = sha256_hex(contents.as_bytes());
+        let now = Utc::now();
+
+        let backup_path = if let Some(ref dir) = backup_dir {
+            // Store in <backup_dir>/backups/<relative_path>.buildfix-bak
+            let backup_subdir = dir.join("backups");
+            let backup_file = backup_subdir.join(format!("{}.buildfix-bak", path));
+
+            // Create parent directories.
+            if let Some(parent) = backup_file.parent() {
+                fs::create_dir_all(parent)
+                    .with_context(|| format!("create backup dir {}", parent))?;
+            }
+
+            fs::write(&backup_file, &contents)
+                .with_context(|| format!("write backup {}", backup_file))?;
+
+            backup_file
+        } else {
+            // Store alongside file with .buildfix-bak extension.
+            let backup_file = Utf8PathBuf::from(format!("{}.buildfix-bak", abs));
+
+            fs::write(&backup_file, &contents)
+                .with_context(|| format!("write backup {}", backup_file))?;
+
+            backup_file
+        };
+
+        entries.push(BackupEntry {
+            original_path: path.to_string(),
+            backup_path: backup_path.to_string(),
+            sha256: sha,
+            created_at: now,
+        });
+
+        file_backups.insert(path.clone(), backup_path.to_string());
+    }
+
+    Ok((
+        BackupInfo {
+            backup_dir: backup_dir_str,
+            backups: entries,
+        },
+        file_backups,
+    ))
+}
+
+/// Computes the backup directory from options.
+fn compute_backup_dir(opts: &ApplyOptions) -> Option<Utf8PathBuf> {
+    opts.backup_dir.clone()
 }
 
 struct ExecuteOutcome {
@@ -273,7 +384,9 @@ fn execute_plan(
             let before_c = before_snap.get(p).cloned().unwrap_or_default();
             let after_c = current.get(p).cloned().unwrap_or_default();
             if before_c != after_c {
-                result.files_changed.push(file_change(p, &before_c, &after_c));
+                result
+                    .files_changed
+                    .push(file_change(p, &before_c, &after_c));
             }
         }
 
@@ -307,6 +420,7 @@ fn file_change(path: &Utf8PathBuf, before: &str, after: &str) -> FileChange {
         before_bytes: Some(before_bytes.len() as u64),
         after_bytes: Some(after_bytes.len() as u64),
         applied_at: Some(Utc::now()),
+        backup_path: None, // Will be set later in apply_plan if backup was created.
     }
 }
 
@@ -318,12 +432,22 @@ fn files_touched(fix: &buildfix_types::plan::PlannedFix) -> BTreeSet<Utf8PathBuf
     set
 }
 
-fn eval_precondition(repo_root: &Utf8Path, pre: &Precondition) -> anyhow::Result<(bool, Option<String>)> {
+fn eval_precondition(
+    repo_root: &Utf8Path,
+    pre: &Precondition,
+) -> anyhow::Result<(bool, Option<String>)> {
     match pre {
         Precondition::FileExists { path } => {
             let abs = abs_path(repo_root, path);
             let ok = abs.exists();
-            Ok((ok, if ok { None } else { Some("file missing".to_string()) }))
+            Ok((
+                ok,
+                if ok {
+                    None
+                } else {
+                    Some("file missing".to_string())
+                },
+            ))
         }
         Precondition::FileSha256 { path, sha256 } => {
             let abs = abs_path(repo_root, path);
@@ -339,6 +463,34 @@ fn eval_precondition(repo_root: &Utf8Path, pre: &Precondition) -> anyhow::Result
                 },
             ))
         }
+        Precondition::GitHeadSha { sha } => {
+            // Get current git HEAD SHA
+            let output = std::process::Command::new("git")
+                .arg("rev-parse")
+                .arg("HEAD")
+                .current_dir(repo_root)
+                .output();
+
+            match output {
+                Ok(out) if out.status.success() => {
+                    let actual = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                    let ok = &actual == sha;
+                    Ok((
+                        ok,
+                        if ok {
+                            None
+                        } else {
+                            Some(format!("git HEAD mismatch: expected {sha}, got {actual}"))
+                        },
+                    ))
+                }
+                Ok(out) => {
+                    let err = String::from_utf8_lossy(&out.stderr);
+                    Ok((false, Some(format!("git rev-parse failed: {err}"))))
+                }
+                Err(e) => Ok((false, Some(format!("failed to run git: {e}")))),
+            }
+        }
     }
 }
 
@@ -347,7 +499,7 @@ fn render_patch(
     after: &BTreeMap<Utf8PathBuf, String>,
 ) -> String {
     let mut out = String::new();
-    let mut formatter = PatchFormatter::new();
+    let formatter = PatchFormatter::new();
 
     for (path, old) in before {
         let new = after.get(path).unwrap_or(old);
@@ -359,7 +511,7 @@ fn render_patch(
         out.push_str(&format!("--- a/{0}\n+++ b/{0}\n", path));
 
         let patch = diffy::create_patch(old, new);
-        out.push_str(&formatter.fmt_patch(&patch));
+        out.push_str(&formatter.fmt_patch(&patch).to_string());
         if !out.ends_with('\n') {
             out.push('\n');
         }
@@ -369,7 +521,9 @@ fn render_patch(
 }
 
 fn apply_op_to_content(contents: &str, op: &Operation) -> anyhow::Result<String> {
-    let mut doc = contents.parse::<DocumentMut>().unwrap_or_else(|_| DocumentMut::new());
+    let mut doc = contents
+        .parse::<DocumentMut>()
+        .unwrap_or_else(|_| DocumentMut::new());
 
     match op {
         Operation::EnsureWorkspaceResolverV2 { .. } => {
@@ -386,8 +540,8 @@ fn apply_op_to_content(contents: &str, op: &Operation) -> anyhow::Result<String>
             version,
             ..
         } => {
-            let dep_item =
-                get_dep_item_mut(&mut doc, toml_path).context("dependency not found at toml_path")?;
+            let dep_item = get_dep_item_mut(&mut doc, toml_path)
+                .context("dependency not found at toml_path")?;
 
             if let Some(inline) = dep_item.as_inline_table_mut() {
                 let current_path = inline.get("path").and_then(|v| v.as_str());
@@ -421,8 +575,8 @@ fn apply_op_to_content(contents: &str, op: &Operation) -> anyhow::Result<String>
             preserved,
             ..
         } => {
-            let dep_item =
-                get_dep_item_mut(&mut doc, toml_path).context("dependency not found at toml_path")?;
+            let dep_item = get_dep_item_mut(&mut doc, toml_path)
+                .context("dependency not found at toml_path")?;
 
             let mut inline = InlineTable::new();
             inline.insert("workspace", bool_value(true));
@@ -481,4 +635,105 @@ fn get_dep_item_mut<'a>(doc: &'a mut DocumentMut, toml_path: &[String]) -> Optio
     let dep = &toml_path[1];
     let deps = doc.get_mut(table_name)?.as_table_mut()?;
     deps.get_mut(dep)
+}
+
+/// Checks if an apply result indicates a policy block.
+///
+/// A policy block occurs when fixes could not be applied due to:
+/// - Precondition failures (file changed since plan was created)
+/// - Safety gate denials (guarded/unsafe fixes blocked)
+/// - Policy denials (allow/deny list)
+///
+/// Returns `Some(PolicyBlockError)` if there was a policy block, `None` otherwise.
+///
+/// Note: In dry-run mode, skipped fixes are not considered policy blocks since
+/// the user explicitly requested not to apply. Only actual failures (failed > 0)
+/// or skipped-due-to-policy (when not in dry-run) constitute policy blocks.
+pub fn check_policy_block(apply: &BuildfixApply, was_dry_run: bool) -> Option<PolicyBlockError> {
+    // In dry-run mode, we don't consider skipped fixes as policy blocks
+    // since the user explicitly requested not to apply.
+    if was_dry_run {
+        return None;
+    }
+
+    // Check for precondition failures
+    let precondition_failures: Vec<&AppliedFixResult> = apply
+        .results
+        .iter()
+        .filter(|r| {
+            r.status == ApplyStatus::Failed
+                && r.message
+                    .as_ref()
+                    .is_some_and(|m| m.contains("precondition"))
+        })
+        .collect();
+
+    if !precondition_failures.is_empty() {
+        let fix_ids: Vec<&str> = precondition_failures
+            .iter()
+            .map(|r| r.fix_id.0.as_str())
+            .collect();
+        return Some(PolicyBlockError::PreconditionMismatch {
+            message: format!(
+                "{} fix(es) failed due to precondition mismatch: {}",
+                fix_ids.len(),
+                fix_ids.join(", ")
+            ),
+        });
+    }
+
+    // Check for safety gate denials (skipped due to safety class)
+    let safety_denials: Vec<&AppliedFixResult> = apply
+        .results
+        .iter()
+        .filter(|r| {
+            r.status == ApplyStatus::Skipped
+                && r.message
+                    .as_ref()
+                    .is_some_and(|m| m.contains("safety class not allowed"))
+        })
+        .collect();
+
+    if !safety_denials.is_empty() {
+        let fix_ids: Vec<&str> = safety_denials.iter().map(|r| r.fix_id.0.as_str()).collect();
+        return Some(PolicyBlockError::SafetyGateDenial {
+            message: format!(
+                "{} fix(es) blocked by safety gate: {}",
+                fix_ids.len(),
+                fix_ids.join(", ")
+            ),
+        });
+    }
+
+    // Check for policy denials (denied by allow/deny list)
+    let policy_denials: Vec<&AppliedFixResult> = apply
+        .results
+        .iter()
+        .filter(|r| {
+            r.status == ApplyStatus::Skipped
+                && r.message
+                    .as_ref()
+                    .is_some_and(|m| m.contains("denied by policy"))
+        })
+        .collect();
+
+    if !policy_denials.is_empty() {
+        let fix_ids: Vec<&str> = policy_denials.iter().map(|r| r.fix_id.0.as_str()).collect();
+        return Some(PolicyBlockError::PolicyDenial {
+            message: format!(
+                "{} fix(es) denied by policy: {}",
+                fix_ids.len(),
+                fix_ids.join(", ")
+            ),
+        });
+    }
+
+    // Check for any other failures
+    if apply.summary.failed > 0 {
+        return Some(PolicyBlockError::PreconditionMismatch {
+            message: format!("{} fix(es) failed", apply.summary.failed),
+        });
+    }
+
+    None
 }

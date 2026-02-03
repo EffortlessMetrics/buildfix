@@ -8,7 +8,7 @@ use buildfix_types::plan::{
     PlanSummary, PlannedFix,
 };
 use buildfix_types::receipt::ToolInfo;
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8PathBuf;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -61,6 +61,7 @@ impl Planner {
             allow: ctx.config.allow.clone(),
             deny: ctx.config.deny.clone(),
             require_clean_hashes: ctx.config.require_clean_hashes,
+            caps: Default::default(),
         };
 
         let inputs = PlanInputs {
@@ -140,6 +141,7 @@ pub struct ReceiptSet {
 
 #[derive(Debug, Clone)]
 pub struct ReceiptRecord {
+    #[allow(dead_code)] // Useful for debugging/future use
     pub sensor_id: String,
     pub path: Utf8PathBuf,
     pub envelope: buildfix_types::receipt::ReceiptEnvelope,
@@ -222,7 +224,14 @@ fn stable_finding_key(f: &FindingRef) -> String {
     let loc = f
         .location
         .as_ref()
-        .map(|l| format!("{}:{}:{}", l.path, l.line.unwrap_or(0), l.column.unwrap_or(0)))
+        .map(|l| {
+            format!(
+                "{}:{}:{}",
+                l.path,
+                l.line.unwrap_or(0),
+                l.column.unwrap_or(0)
+            )
+        })
         .unwrap_or_else(|| "no_location".to_string());
 
     format!(
@@ -241,11 +250,7 @@ fn stable_fix_sort_key(f: &PlannedFix) -> String {
         .map(|op| op.manifest().to_string())
         .unwrap_or_default();
 
-    let op_key = f
-        .operations
-        .first()
-        .map(op_sort_key)
-        .unwrap_or_default();
+    let op_key = f.operations.first().map(op_sort_key).unwrap_or_default();
 
     format!("{}|{}|{}", f.fix_id.0, manifest, op_key)
 }
@@ -253,12 +258,12 @@ fn stable_fix_sort_key(f: &PlannedFix) -> String {
 fn op_sort_key(op: &Operation) -> String {
     match op {
         Operation::EnsureWorkspaceResolverV2 { .. } => "resolver_v2".to_string(),
-        Operation::EnsurePathDepHasVersion {
-            toml_path, dep, ..
-        } => format!("path_dep_version|{}|{}", dep, toml_path.join(".")),
-        Operation::UseWorkspaceDependency {
-            toml_path, dep, ..
-        } => format!("workspace_dep|{}|{}", dep, toml_path.join(".")),
+        Operation::EnsurePathDepHasVersion { toml_path, dep, .. } => {
+            format!("path_dep_version|{}|{}", dep, toml_path.join("."))
+        }
+        Operation::UseWorkspaceDependency { toml_path, dep, .. } => {
+            format!("workspace_dep|{}|{}", dep, toml_path.join("."))
+        }
         Operation::SetPackageRustVersion { .. } => "msrv".to_string(),
     }
 }
@@ -266,8 +271,8 @@ fn op_sort_key(op: &Operation) -> String {
 fn deterministic_fix_id(fix_id: &FixId, fix: &PlannedFix) -> Uuid {
     // Deterministic ID: v5(namespace, stable_key_bytes)
     const NAMESPACE: Uuid = Uuid::from_bytes([
-        0x4b, 0x5d, 0x35, 0x58, 0x06, 0x58, 0x4c, 0x05, 0x8e, 0x8c, 0x0b, 0x1a, 0x44, 0x53,
-        0x52, 0xd1,
+        0x4b, 0x5d, 0x35, 0x58, 0x06, 0x58, 0x4c, 0x05, 0x8e, 0x8c, 0x0b, 0x1a, 0x44, 0x53, 0x52,
+        0xd1,
     ]);
 
     let manifest = fix
@@ -276,11 +281,7 @@ fn deterministic_fix_id(fix_id: &FixId, fix: &PlannedFix) -> Uuid {
         .map(|op| op.manifest().to_string())
         .unwrap_or_default();
 
-    let op_key = fix
-        .operations
-        .first()
-        .map(op_sort_key)
-        .unwrap_or_default();
+    let op_key = fix.operations.first().map(op_sort_key).unwrap_or_default();
 
     let stable_key = format!("{}|{}|{}", fix_id.0, manifest, op_key);
     Uuid::new_v5(&NAMESPACE, stable_key.as_bytes())

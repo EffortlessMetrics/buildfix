@@ -1,4 +1,4 @@
-use crate::fixers::Fixer;
+use crate::fixers::{Fixer, FixerMeta};
 use crate::planner::ReceiptSet;
 use crate::ports::RepoView;
 use buildfix_types::ops::{FixId, Operation, SafetyClass};
@@ -11,6 +11,14 @@ pub struct MsrvNormalizeFixer;
 
 impl MsrvNormalizeFixer {
     const FIX_ID: &'static str = "cargo.normalize_rust_version";
+    const DESCRIPTION: &'static str =
+        "Normalizes per-crate MSRV to workspace canonical rust-version";
+    const SENSORS: &'static [&'static str] = &["builddiag", "cargo"];
+    const CHECK_IDS: &'static [&'static str] = &[
+        "rust.msrv_consistent",
+        "cargo.msrv_consistent",
+        "msrv.consistent",
+    ];
 
     fn canonical_rust_version(repo: &dyn RepoView) -> Option<String> {
         let contents = repo.read_to_string(Utf8Path::new("Cargo.toml")).ok()?;
@@ -57,8 +65,12 @@ impl MsrvNormalizeFixer {
     }
 
     fn needs_change(contents: &str, rust_version: &str) -> bool {
-        let Ok(doc) = contents.parse::<DocumentMut>() else { return true };
-        let Some(pkg) = doc.get("package").and_then(|i| i.as_table()) else { return true };
+        let Ok(doc) = contents.parse::<DocumentMut>() else {
+            return true;
+        };
+        let Some(pkg) = doc.get("package").and_then(|i| i.as_table()) else {
+            return true;
+        };
 
         let current = pkg
             .get("rust-version")
@@ -70,17 +82,23 @@ impl MsrvNormalizeFixer {
 }
 
 impl Fixer for MsrvNormalizeFixer {
+    fn meta(&self) -> FixerMeta {
+        FixerMeta {
+            fix_key: Self::FIX_ID,
+            description: Self::DESCRIPTION,
+            safety: SafetyClass::Guarded,
+            consumes_sensors: Self::SENSORS,
+            consumes_check_ids: Self::CHECK_IDS,
+        }
+    }
+
     fn plan(
         &self,
         _ctx: &crate::planner::PlanContext,
         repo: &dyn RepoView,
         receipts: &ReceiptSet,
     ) -> anyhow::Result<Vec<PlannedFix>> {
-        let triggers = receipts.matching_findings(
-            &["builddiag", "cargo"],
-            &["rust.msrv_consistent", "cargo.msrv_consistent", "msrv.consistent"],
-            &[],
-        );
+        let triggers = receipts.matching_findings(Self::SENSORS, Self::CHECK_IDS, &[]);
         if triggers.is_empty() {
             return Ok(vec![]);
         }
@@ -89,10 +107,14 @@ impl Fixer for MsrvNormalizeFixer {
             return Ok(vec![]);
         };
 
-        let mut triggers_by_manifest: BTreeMap<Utf8PathBuf, Vec<buildfix_types::plan::FindingRef>> = BTreeMap::new();
+        let mut triggers_by_manifest: BTreeMap<Utf8PathBuf, Vec<buildfix_types::plan::FindingRef>> =
+            BTreeMap::new();
         for t in &triggers {
             if let Some(loc) = &t.location {
-                triggers_by_manifest.entry(loc.path.clone()).or_default().push(t.clone());
+                triggers_by_manifest
+                    .entry(loc.path.clone())
+                    .or_default()
+                    .push(t.clone());
             }
         }
 
@@ -110,7 +132,7 @@ impl Fixer for MsrvNormalizeFixer {
                 id: String::new(),
                 fix_id: FixId::new(Self::FIX_ID),
                 safety: SafetyClass::Guarded,
-                title: format!("Set rust-version = "{}" in {}", rust_version, manifest),
+                title: format!("Set rust-version = \"{}\" in {}", rust_version, manifest),
                 description: Some(
                     "Normalizes per-crate MSRV declarations to the workspace canonical value."
                         .to_string(),

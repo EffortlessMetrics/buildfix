@@ -65,8 +65,11 @@ async fn builddiag_receipt(world: &mut BuildfixWorld) {
         }]
     });
 
-    fs::write(artifacts.join("report.json"), serde_json::to_string_pretty(&receipt).unwrap())
-        .unwrap();
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
 }
 
 #[when("I run buildfix plan")]
@@ -88,7 +91,9 @@ async fn assert_plan_contains_fix(world: &mut BuildfixWorld) {
 
     let fixes = v["fixes"].as_array().unwrap();
     assert!(
-        fixes.iter().any(|f| f["fix_id"] == "cargo.workspace_resolver_v2"),
+        fixes
+            .iter()
+            .any(|f| f["fix_id"] == "cargo.workspace_resolver_v2"),
         "expected a resolver v2 fix"
     );
 }
@@ -107,7 +112,9 @@ async fn run_apply(world: &mut BuildfixWorld) {
 #[then(expr = "the root Cargo.toml sets workspace resolver to {string}")]
 async fn assert_root_manifest_resolver(world: &mut BuildfixWorld, expected: String) {
     let root = repo_root(world).clone();
-    let contents = fs::read_to_string(root.join("Cargo.toml")).context("read Cargo.toml").unwrap();
+    let contents = fs::read_to_string(root.join("Cargo.toml"))
+        .context("read Cargo.toml")
+        .unwrap();
     assert!(
         contents.contains(&format!("resolver = \"{}\"", expected)),
         "expected resolver = \"{}\" in Cargo.toml, got:\n{}",

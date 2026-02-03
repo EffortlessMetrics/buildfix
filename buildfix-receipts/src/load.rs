@@ -44,8 +44,11 @@ pub fn load_receipts(artifacts_dir: &Utf8Path) -> anyhow::Result<Vec<LoadedRecei
             .to_string();
 
         let receipt = match fs::read_to_string(&utf8_path) {
-            Ok(s) => serde_json::from_str::<ReceiptEnvelope>(&s)
-                .map_err(|e| ReceiptLoadError::Json { message: e.to_string() }),
+            Ok(s) => {
+                serde_json::from_str::<ReceiptEnvelope>(&s).map_err(|e| ReceiptLoadError::Json {
+                    message: e.to_string(),
+                })
+            }
             Err(e) => Err(ReceiptLoadError::Io {
                 message: e.to_string(),
             }),
