@@ -5,6 +5,10 @@ edition.workspace = true
 license.workspace = true
 publish = false
 
+[[test]]
+name = "cucumber"
+harness = false
+
 [dependencies]
 anyhow.workspace = true
 camino.workspace = true

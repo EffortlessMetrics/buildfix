@@ -259,9 +259,9 @@ impl Fixer for PathDepVersionFixer {
                     fix_id: FixId::new(Self::FIX_ID),
                     safety: SafetyClass::Safe,
                     title,
-                    description: Some(format!(
-                        "Adds a version field so the path dependency is publishable / policy-compliant."
-                    )),
+                    description: Some(
+                        "Adds a version field so the path dependency is publishable / policy-compliant.".to_string()
+                    ),
                     triggers: triggers_by_manifest
                         .get(&manifest)
                         .cloned()

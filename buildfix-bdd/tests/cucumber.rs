@@ -125,5 +125,9 @@ async fn assert_root_manifest_resolver(world: &mut BuildfixWorld, expected: Stri
 
 #[tokio::main]
 async fn main() {
-    BuildfixWorld::cucumber().run("features").await;
+    let features_path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("features");
+    BuildfixWorld::cucumber()
+        .run(features_path)
+        .await;
 }

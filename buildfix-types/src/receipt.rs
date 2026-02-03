@@ -71,19 +71,14 @@ pub struct Verdict {
     pub reasons: Vec<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum VerdictStatus {
     Pass,
     Warn,
     Fail,
+    #[default]
     Unknown,
-}
-
-impl Default for VerdictStatus {
-    fn default() -> Self {
-        VerdictStatus::Unknown
-    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -124,18 +119,13 @@ pub struct Finding {
     pub data: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Severity {
+    #[default]
     Info,
     Warning,
     Error,
-}
-
-impl Default for Severity {
-    fn default() -> Self {
-        Severity::Info
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

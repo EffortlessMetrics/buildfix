@@ -39,6 +39,12 @@ pub struct Planner {
     fixers: Vec<Box<dyn fixers::Fixer>>,
 }
 
+impl Default for Planner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Planner {
     pub fn new() -> Self {
         Self {
@@ -83,7 +89,7 @@ impl Planner {
         }
 
         // Deterministic ordering.
-        fixes.sort_by(|a, b| stable_fix_sort_key(a).cmp(&stable_fix_sort_key(b)));
+        fixes.sort_by_key(stable_fix_sort_key);
 
         // Deterministic ids.
         for fix in fixes.iter_mut() {
@@ -120,8 +126,10 @@ fn to_receipt_ref(r: &LoadedReceipt) -> PlanReceiptRef {
 }
 
 fn summarize(fixes: &[PlannedFix]) -> PlanSummary {
-    let mut s = PlanSummary::default();
-    s.fixes_total = fixes.len() as u64;
+    let mut s = PlanSummary {
+        fixes_total: fixes.len() as u64,
+        ..Default::default()
+    };
     for f in fixes {
         match f.safety {
             SafetyClass::Safe => s.safe += 1,
@@ -215,7 +223,7 @@ impl ReceiptSet {
         }
 
         // Deterministic output order.
-        out.sort_by(|a, b| stable_finding_key(a).cmp(&stable_finding_key(b)));
+        out.sort_by_key(stable_finding_key);
         out
     }
 }

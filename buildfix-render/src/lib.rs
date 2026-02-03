@@ -50,7 +50,7 @@ pub fn render_plan_md(plan: &BuildfixPlan) -> String {
             }
         }
 
-        out.push_str("\n");
+        out.push('\n');
     }
 
     out
@@ -88,7 +88,7 @@ pub fn render_apply_md(apply: &BuildfixApply) -> String {
                 ));
             }
         }
-        out.push_str("\n");
+        out.push('\n');
     }
 
     out

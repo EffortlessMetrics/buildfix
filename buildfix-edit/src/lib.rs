@@ -25,7 +25,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use toml_edit::{value, DocumentMut, InlineTable, Item};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ApplyOptions {
     pub dry_run: bool,
     pub allow_guarded: bool,
@@ -33,17 +33,6 @@ pub struct ApplyOptions {
     /// Directory to store backups. If None, backups are stored alongside files with `.buildfix-bak` extension.
     /// If Some, backups are stored in `<backup_dir>/backups/` preserving relative paths.
     pub backup_dir: Option<Utf8PathBuf>,
-}
-
-impl Default for ApplyOptions {
-    fn default() -> Self {
-        Self {
-            dry_run: false,
-            allow_guarded: false,
-            allow_unsafe: false,
-            backup_dir: None,
-        }
-    }
 }
 
 /// Attach per-fix preconditions (FileExists + FileSha256) for each file touched by operations.
