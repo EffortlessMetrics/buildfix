@@ -39,7 +39,16 @@ cargo run -p buildfix -- apply --apply
 cargo run -p buildfix -- apply --apply --allow-guarded
 ```
 
+## Documentation
+
+Full documentation is in [`docs/`](docs/index.md):
+
+- **[Tutorials](docs/tutorials/)** — Getting started, your first fix
+- **[How-To Guides](docs/how-to/)** — Configure, integrate CI/CD, troubleshoot, extend
+- **[Reference](docs/reference/)** — CLI, fixes, config schema, output formats
+- **[Explanation](docs/)** — Architecture, safety model, design rationale
+
 ## Notes
 
-- This workspace is designed to be integrated under a larger “director” system.
+- This workspace is designed to be integrated under a larger "director" system.
 - Dependencies are not vendored; a normal Cargo environment with registry access is expected.
