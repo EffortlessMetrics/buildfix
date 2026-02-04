@@ -31,7 +31,11 @@ buildfix plan [OPTIONS]
 | `--out-dir <PATH>` | `<artifacts-dir>/buildfix` | Output directory for plan artifacts |
 | `--allow <PATTERN>` | | Allowlist patterns for fix IDs (repeatable) |
 | `--deny <PATTERN>` | | Denylist patterns for fix IDs (repeatable) |
+| `--max-ops <N>` | `50` | Maximum operations in plan |
+| `--max-files <N>` | `25` | Maximum files touched |
+| `--max-patch-bytes <N>` | `250000` | Maximum patch size in bytes |
 | `--no-clean-hashes` | `false` | Disable SHA256 preconditions (not recommended) |
+| `--git-head-precondition` | `false` | Include git HEAD SHA in preconditions |
 
 ### Outputs
 
@@ -72,6 +76,7 @@ buildfix apply [OPTIONS]
 | `--apply` | `false` | Actually write changes (otherwise dry-run) |
 | `--allow-guarded` | `false` | Allow guarded fixes to apply |
 | `--allow-unsafe` | `false` | Allow unsafe fixes to apply (requires params) |
+| `--allow-dirty` | `false` | Allow apply on dirty working tree |
 
 ### Behavior
 

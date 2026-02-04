@@ -1,0 +1,6 @@
+[workspace]
+members = ["crates/a"]
+resolver = "2"
+
+[workspace.dependencies]
+serde = "1.0"

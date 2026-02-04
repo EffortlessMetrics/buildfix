@@ -6,8 +6,8 @@ This guide walks through extending buildfix with a custom fixer.
 
 Fixers are the core planning units in buildfix. Each fixer:
 
-1. Matches sensor findings by fix key
-2. Probes the repo to determine applicability
+1. Declares metadata (fix key, safety class, consumed sensors/checks)
+2. Matches sensor findings via `ReceiptSet`
 3. Emits `PlannedFix` operations with a safety class
 
 ## Architecture
@@ -20,20 +20,16 @@ buildfix-domain/src/fixers/
 ├── resolver_v2.rs            # Workspace resolver v2
 ├── path_dep_version.rs       # Path dependency version
 ├── workspace_inheritance.rs  # Workspace dependency inheritance
-└── msrv_normalize.rs         # MSRV normalization
+└── msrv.rs                   # MSRV normalization
 ```
 
-## Step 1: Define the Fix Key
+## Step 1: Define Metadata
 
-Choose a fix key pattern that matches sensor findings:
+Choose identifiers for your fixer:
 
-```
-sensor_id / check_id / code
-```
-
-Example: `depguard / deps.path_requires_version / missing_version`
-
-Add the fix key to your sensor's receipt output.
+- **fix_key**: Unique key like `mysensor.my_fix`
+- **sensors**: Which sensor receipts to consume (e.g., `["builddiag", "depguard"]`)
+- **check_ids**: Which check IDs to match (e.g., `["my.check_id"]`)
 
 ## Step 2: Create the Fixer Module
 
@@ -42,95 +38,89 @@ Create a new file in `buildfix-domain/src/fixers/`:
 ```rust
 // buildfix-domain/src/fixers/my_fixer.rs
 
-use crate::{Fixer, PlanContext, PlannedFix, RepoView};
-use buildfix_receipts::LoadedReceipt;
-use buildfix_types::ops::{Operation, SafetyClass};
-use buildfix_types::plan::TriggerKey;
+use crate::fixers::{Fixer, FixerMeta};
+use crate::planner::ReceiptSet;
+use crate::ports::RepoView;
+use buildfix_types::ops::{FixId, Operation, SafetyClass};
+use buildfix_types::plan::PlannedFix;
+use camino::Utf8PathBuf;
+use toml_edit::DocumentMut;
 
 pub struct MyFixer;
 
+impl MyFixer {
+    const FIX_ID: &'static str = "mysensor.my_fix";
+    const DESCRIPTION: &'static str = "Brief description of what this fix does";
+    const SENSORS: &'static [&'static str] = &["mysensor"];
+    const CHECK_IDS: &'static [&'static str] = &["my.check_id"];
+
+    /// Check if the fix is needed by inspecting repo state.
+    fn needs_fix(repo: &dyn RepoView, manifest: &Utf8PathBuf) -> bool {
+        let contents = match repo.read_to_string(manifest) {
+            Ok(c) => c,
+            Err(_) => return false,
+        };
+
+        let doc = match contents.parse::<DocumentMut>() {
+            Ok(d) => d,
+            Err(_) => return false,
+        };
+
+        // Determine if fix is needed based on current state
+        // Return true if the fix should be applied
+        todo!()
+    }
+}
+
 impl Fixer for MyFixer {
-    fn fix_keys(&self) -> &[&str] {
-        &["mysensor/mycheck/mycode"]
+    fn meta(&self) -> FixerMeta {
+        FixerMeta {
+            fix_key: Self::FIX_ID,
+            description: Self::DESCRIPTION,
+            safety: SafetyClass::Safe,
+            consumes_sensors: Self::SENSORS,
+            consumes_check_ids: Self::CHECK_IDS,
+        }
     }
 
     fn plan(
         &self,
-        ctx: &PlanContext,
+        _ctx: &crate::planner::PlanContext,
         repo: &dyn RepoView,
-        receipts: &[LoadedReceipt],
-    ) -> Vec<PlannedFix> {
-        let mut fixes = Vec::new();
-
-        // Find relevant findings
-        for receipt in receipts {
-            for finding in &receipt.findings {
-                if !self.matches_finding(finding) {
-                    continue;
-                }
-
-                // Extract info from finding
-                let path = match &finding.location {
-                    Some(loc) => loc.path.clone(),
-                    None => continue,
-                };
-
-                // Read repo state
-                let content = match repo.read_file(&path) {
-                    Ok(c) => c,
-                    Err(_) => continue,
-                };
-
-                // Determine the fix
-                let operation = self.determine_operation(&content);
-                let safety = self.determine_safety(&content);
-
-                fixes.push(PlannedFix {
-                    fix_id: "mysensor.my_fix".to_string(),
-                    trigger: TriggerKey {
-                        sensor: receipt.tool_name.clone(),
-                        check_id: finding.check_id.clone(),
-                        code: finding.code.clone(),
-                    },
-                    target_file: path,
-                    operation,
-                    safety,
-                    rationale: "Explanation of why this fix is needed".to_string(),
-                    blocked: false,
-                    block_reason: None,
-                });
-            }
+        receipts: &ReceiptSet,
+    ) -> anyhow::Result<Vec<PlannedFix>> {
+        // Find matching findings from receipts
+        let triggers = receipts.matching_findings(Self::SENSORS, Self::CHECK_IDS, &[]);
+        if triggers.is_empty() {
+            return Ok(vec![]);
         }
 
-        fixes
-    }
-}
+        // Check if fix is actually needed
+        let manifest: Utf8PathBuf = "Cargo.toml".into();
+        if !Self::needs_fix(repo, &manifest) {
+            return Ok(vec![]);
+        }
 
-impl MyFixer {
-    fn matches_finding(&self, finding: &buildfix_receipts::Finding) -> bool {
-        // Match by check_id and/or code
-        finding.check_id.as_deref() == Some("mycheck")
-            && finding.code.as_deref() == Some("mycode")
-    }
-
-    fn determine_operation(&self, content: &str) -> Operation {
-        // Return the appropriate operation variant
-        // See buildfix_types::ops::Operation for available variants
-        todo!()
-    }
-
-    fn determine_safety(&self, content: &str) -> SafetyClass {
-        // Most fixes are Safe
-        // Use Guarded for high-impact deterministic changes
-        // Use Unsafe only when user input is required
-        SafetyClass::Safe
+        // Return the planned fix
+        Ok(vec![PlannedFix {
+            id: String::new(),  // Filled in by planner
+            fix_id: FixId::new(Self::FIX_ID),
+            safety: SafetyClass::Safe,
+            title: "Title shown in plan".to_string(),
+            description: Some("Detailed description".to_string()),
+            triggers,
+            operations: vec![
+                // Add your operations here
+            ],
+            preconditions: vec![],  // Filled in by attach_preconditions
+        }])
     }
 }
 ```
 
 ## Step 3: Define the Operation
 
-Add your operation to `buildfix-types/src/ops.rs`:
+If you need a new operation type, add it to `buildfix-types/src/ops.rs`:
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -140,8 +130,8 @@ pub enum Operation {
 
     /// My new operation
     MyOperation {
-        /// Target file path
-        file: String,
+        /// Target manifest file
+        manifest: Utf8PathBuf,
         /// Value to set
         value: String,
     },
@@ -150,53 +140,37 @@ pub enum Operation {
 
 ## Step 4: Implement the Edit
 
-Add edit logic to `buildfix-edit/src/lib.rs`:
+Add edit logic to `buildfix-edit/src/lib.rs` in the `apply_operation` function:
 
 ```rust
-fn apply_operation(
-    repo_root: &Utf8Path,
-    op: &Operation,
-    dry_run: bool,
-) -> Result<String> {
-    match op {
-        // ... existing cases ...
+Operation::MyOperation { manifest, value } => {
+    let path = repo_root.join(manifest);
+    let content = fs::read_to_string(&path)?;
 
-        Operation::MyOperation { file, value } => {
-            let path = repo_root.join(file);
-            let content = fs::read_to_string(&path)?;
+    // Parse and modify using toml_edit
+    let mut doc = content.parse::<DocumentMut>()?;
 
-            // Parse and modify
-            let mut doc = content.parse::<DocumentMut>()?;
-            // ... make changes ...
+    // Make changes...
+    // doc["section"]["key"] = toml_edit::value(value);
 
-            let new_content = doc.to_string();
-
-            if !dry_run {
-                fs::write(&path, &new_content)?;
-            }
-
-            Ok(new_content)
-        }
-    }
+    Ok(doc.to_string())
 }
 ```
 
 ## Step 5: Register the Fixer
 
-Add to the fixer registry in `buildfix-domain/src/fixers/mod.rs`:
+Add to `buildfix-domain/src/fixers/mod.rs`:
 
 ```rust
 mod my_fixer;
 
-pub use my_fixer::MyFixer;
-
-pub fn all_fixers() -> Vec<Box<dyn Fixer>> {
+pub fn builtin_fixers() -> Vec<Box<dyn Fixer>> {
     vec![
-        Box::new(ResolverV2Fixer),
-        Box::new(PathDepVersionFixer),
-        Box::new(WorkspaceInheritanceFixer),
-        Box::new(MsrvNormalizeFixer),
-        Box::new(MyFixer),  // Add here
+        Box::new(resolver_v2::ResolverV2Fixer),
+        Box::new(path_dep_version::PathDepVersionFixer),
+        Box::new(workspace_inheritance::WorkspaceInheritanceFixer),
+        Box::new(msrv::MsrvNormalizeFixer),
+        Box::new(my_fixer::MyFixer),  // Add here
     ]
 }
 ```
@@ -217,8 +191,8 @@ FixExplanation {
     triggers: &[
         TriggerPattern {
             sensor: "mysensor",
-            check_id: "mycheck",
-            code: Some("mycode"),
+            check_id: "my.check_id",
+            code: None,
         },
     ],
 },
@@ -228,38 +202,15 @@ FixExplanation {
 
 ### BDD Scenario
 
-Create `buildfix-bdd/tests/features/my_fixer.feature`:
+Add to `buildfix-bdd/features/plan_and_apply.feature`:
 
 ```gherkin
-Feature: My fixer
-
-  Scenario: Fix is applied when finding present
-    Given a workspace with my issue
-    And a receipt from mysensor with finding mycheck/mycode
-    When I run buildfix plan
-    Then the plan contains my_fix
-    And the patch shows the expected change
-
-  Scenario: Fix is skipped when not applicable
-    Given a workspace without my issue
-    And a receipt from mysensor with finding mycheck/mycode
-    When I run buildfix plan
-    Then the plan is empty
-```
-
-### Golden Fixture
-
-Create `buildfix-domain/tests/fixtures/my-fixer/`:
-
-```
-my-fixer/
-├── input/
-│   ├── Cargo.toml
-│   └── artifacts/mysensor/report.json
-├── expected/
-│   ├── plan.json
-│   └── patch.diff
-└── README.md
+Scenario: My fixer applies when finding present
+  Given a workspace with my issue
+  And a receipt from mysensor with finding my.check_id
+  When I run buildfix plan
+  Then the plan contains my_fix
+  And the patch shows the expected change
 ```
 
 ### Unit Test
@@ -268,14 +219,14 @@ my-fixer/
 #[test]
 fn test_my_fixer_produces_fix() {
     let fixer = MyFixer;
-    let ctx = test_context();
-    let repo = MockRepoView::new(/* ... */);
-    let receipts = vec![/* ... */];
+    let repo = MockRepoView::new(/* setup */);
+    let receipts = ReceiptSet::from(/* test receipts */);
+    let ctx = PlanContext::default();
 
-    let fixes = fixer.plan(&ctx, &repo, &receipts);
+    let fixes = fixer.plan(&ctx, &repo, &receipts).unwrap();
 
     assert_eq!(fixes.len(), 1);
-    assert_eq!(fixes[0].fix_id, "mysensor.my_fix");
+    assert_eq!(fixes[0].fix_id.as_str(), "mysensor.my_fix");
 }
 ```
 
@@ -285,7 +236,7 @@ When choosing a safety class:
 
 | Class | Use when |
 |-------|----------|
-| **Safe** | Single correct answer from repo truth |
+| **Safe** | Single correct answer derivable from repo truth |
 | **Guarded** | Deterministic but affects compatibility/workflow |
 | **Unsafe** | Multiple valid choices, needs user input |
 

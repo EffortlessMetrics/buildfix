@@ -3,6 +3,12 @@ name = "buildfix-receipts"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
+description = "Tolerant loader for sensor receipt files"
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["cargo", "workspace", "receipts", "json"]
+categories = ["development-tools"]
 
 [dependencies]
 anyhow.workspace = true

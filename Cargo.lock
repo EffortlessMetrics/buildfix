@@ -201,12 +201,14 @@ name = "buildfix-domain"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "buildfix-edit",
  "buildfix-receipts",
  "buildfix-types",
  "camino",
  "fs-err",
  "glob",
  "pretty_assertions",
+ "proptest",
  "serde",
  "serde_json",
  "tempfile",

@@ -5,7 +5,7 @@ use buildfix_receipts::LoadedReceipt;
 use buildfix_types::ops::{FixId, Operation, SafetyClass, TriggerKey};
 use buildfix_types::plan::{
     BuildfixPlan, FindingRef, LocationRef, PlanInputs, PlanPolicySnapshot, PlanReceiptRef,
-    PlanSummary, PlannedFix,
+    PlanSummary, PlannedFix, PolicyCaps,
 };
 use buildfix_types::receipt::ToolInfo;
 use camino::Utf8PathBuf;
@@ -16,6 +16,8 @@ pub struct PlannerConfig {
     pub allow: Vec<String>,
     pub deny: Vec<String>,
     pub require_clean_hashes: bool,
+    /// Policy caps limiting the scope of the plan.
+    pub caps: PolicyCaps,
 }
 
 impl Default for PlannerConfig {
@@ -24,6 +26,7 @@ impl Default for PlannerConfig {
             allow: vec![],
             deny: vec![],
             require_clean_hashes: true,
+            caps: PolicyCaps::default(),
         }
     }
 }
@@ -67,7 +70,7 @@ impl Planner {
             allow: ctx.config.allow.clone(),
             deny: ctx.config.deny.clone(),
             require_clean_hashes: ctx.config.require_clean_hashes,
-            caps: Default::default(),
+            caps: ctx.config.caps.clone(),
         };
 
         let inputs = PlanInputs {
@@ -98,9 +101,49 @@ impl Planner {
             }
         }
 
+        // Enforce caps before finalizing the plan
+        self.enforce_caps(&ctx.config.caps, &fixes)?;
+
         plan.summary = summarize(&fixes);
         plan.fixes = fixes;
         Ok(plan)
+    }
+
+    /// Enforce policy caps on the generated fixes.
+    ///
+    /// Returns an error if any cap is exceeded, which should result in exit code 2 (policy block).
+    fn enforce_caps(&self, caps: &PolicyCaps, fixes: &[PlannedFix]) -> anyhow::Result<()> {
+        // Count total operations
+        let total_ops: u64 = fixes.iter().map(|f| f.operations.len() as u64).sum();
+        if let Some(max_ops) = caps.max_ops {
+            if total_ops > max_ops {
+                anyhow::bail!(
+                    "plan exceeds max_ops cap: {} operations > {} allowed",
+                    total_ops,
+                    max_ops
+                );
+            }
+        }
+
+        // Count unique files touched
+        let mut files = std::collections::BTreeSet::new();
+        for fix in fixes {
+            for op in &fix.operations {
+                files.insert(op.manifest().clone());
+            }
+        }
+        let total_files = files.len() as u64;
+        if let Some(max_files) = caps.max_files {
+            if total_files > max_files {
+                anyhow::bail!(
+                    "plan exceeds max_files cap: {} files > {} allowed",
+                    total_files,
+                    max_files
+                );
+            }
+        }
+
+        Ok(())
     }
 }
 

@@ -40,3 +40,4 @@ Background and design rationale.
 - [Requirements](requirements.md) — Scope, inputs, outputs, invariants
 - [Preconditions](explanation/preconditions.md) — How drift detection works
 - [Determinism](explanation/determinism.md) — Why byte-stable outputs matter
+- [Testing Strategy](testing.md) — BDD, golden fixtures, property tests, fuzzing

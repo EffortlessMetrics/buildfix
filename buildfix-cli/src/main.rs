@@ -3,8 +3,12 @@ mod explain;
 
 use anyhow::Context;
 use buildfix_domain::{FsRepoView, PlanContext, Planner, PlannerConfig};
-use buildfix_edit::{apply_plan, attach_preconditions, preview_patch, ApplyOptions};
+use buildfix_edit::{
+    apply_plan, attach_preconditions, is_working_tree_dirty, preview_patch, ApplyOptions,
+    AttachPreconditionsOptions,
+};
 use buildfix_render::{render_apply_md, render_plan_md};
+use buildfix_types::plan::PolicyCaps;
 use buildfix_types::receipt::{RunInfo, ToolInfo, Verdict, VerdictStatus};
 use buildfix_types::report::BuildfixReport;
 use camino::{Utf8Path, Utf8PathBuf};
@@ -35,6 +39,8 @@ enum Command {
     Apply(ApplyArgs),
     /// Explain what a fix does, its safety rationale, and remediation guidance.
     Explain(ExplainArgs),
+    /// List all available fixes with their safety classifications.
+    ListFixes(ListFixesArgs),
 }
 
 #[derive(Debug, Parser)]
@@ -62,6 +68,23 @@ struct PlanArgs {
     /// Disable sha256 preconditions (not recommended).
     #[arg(long, default_value_t = false)]
     no_clean_hashes: bool,
+
+    /// Maximum number of operations allowed in the plan.
+    #[arg(long)]
+    max_ops: Option<u64>,
+
+    /// Maximum number of files allowed to be modified.
+    #[arg(long)]
+    max_files: Option<u64>,
+
+    /// Maximum size of the patch in bytes.
+    #[arg(long)]
+    max_patch_bytes: Option<u64>,
+
+    /// Require git HEAD SHA precondition for each fix.
+    /// Ensures plan can only be applied to the exact commit it was generated from.
+    #[arg(long, default_value_t = false)]
+    git_head_precondition: bool,
 }
 
 #[derive(Debug, Parser)]
@@ -85,12 +108,29 @@ struct ApplyArgs {
     /// Allow unsafe fixes to run.
     #[arg(long, default_value_t = false)]
     allow_unsafe: bool,
+
+    /// Allow applying fixes when the git working tree has uncommitted changes.
+    #[arg(long, default_value_t = false)]
+    allow_dirty: bool,
 }
 
 #[derive(Debug, Parser)]
 struct ExplainArgs {
     /// Fix key or fix ID to explain (e.g., "resolver-v2", "path-dep-version").
     fix_key: String,
+}
+
+#[derive(Debug, Parser)]
+struct ListFixesArgs {
+    /// Output format (text, json).
+    #[arg(long, value_enum, default_value = "text")]
+    format: OutputFormat,
+}
+
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+enum OutputFormat {
+    Text,
+    Json,
 }
 
 fn main() -> ExitCode {
@@ -111,6 +151,7 @@ fn real_main() -> anyhow::Result<()> {
         Command::Plan(args) => cmd_plan(args),
         Command::Apply(args) => cmd_apply(args),
         Command::Explain(args) => cmd_explain(args),
+        Command::ListFixes(args) => cmd_list_fixes(args),
     }
 }
 
@@ -133,9 +174,16 @@ fn cmd_plan(args: PlanArgs) -> anyhow::Result<()> {
         args.no_clean_hashes,
     );
 
+    // Build caps from CLI args (override config file values if provided)
+    let caps = PolicyCaps {
+        max_ops: args.max_ops.or(merged.max_ops),
+        max_files: args.max_files.or(merged.max_files),
+        max_patch_bytes: args.max_patch_bytes.or(merged.max_patch_bytes),
+    };
+
     debug!(
-        "merged config: allow={:?}, deny={:?}, require_clean_hashes={}",
-        merged.allow, merged.deny, merged.require_clean_hashes
+        "merged config: allow={:?}, deny={:?}, require_clean_hashes={}, caps={:?}",
+        merged.allow, merged.deny, merged.require_clean_hashes, caps
     );
 
     let receipts = buildfix_receipts::load_receipts(&artifacts_dir)
@@ -149,6 +197,7 @@ fn cmd_plan(args: PlanArgs) -> anyhow::Result<()> {
             allow: merged.allow.clone(),
             deny: merged.deny.clone(),
             require_clean_hashes: merged.require_clean_hashes,
+            caps: caps.clone(),
         },
     };
     let repo = FsRepoView::new(repo_root.clone());
@@ -158,7 +207,10 @@ fn cmd_plan(args: PlanArgs) -> anyhow::Result<()> {
         .plan(&ctx, &repo, &receipts, tool.clone())
         .context("generate plan")?;
 
-    attach_preconditions(&repo_root, &mut plan).context("attach preconditions")?;
+    let attach_opts = AttachPreconditionsOptions {
+        include_git_head: args.git_head_precondition,
+    };
+    attach_preconditions(&repo_root, &mut plan, &attach_opts).context("attach preconditions")?;
 
     // Preview patch with guarded fixes included; unsafe remains gated unless explicitly allowed.
     let preview_opts = ApplyOptions {
@@ -168,6 +220,18 @@ fn cmd_plan(args: PlanArgs) -> anyhow::Result<()> {
         backup_dir: None,
     };
     let patch = preview_patch(&repo_root, &plan, &preview_opts).context("preview patch")?;
+
+    // Enforce max_patch_bytes cap after patch generation
+    if let Some(max_bytes) = caps.max_patch_bytes {
+        let patch_bytes = patch.len() as u64;
+        if patch_bytes > max_bytes {
+            anyhow::bail!(
+                "patch exceeds max_patch_bytes cap: {} bytes > {} allowed",
+                patch_bytes,
+                max_bytes
+            );
+        }
+    }
 
     write_json(&out_dir.join("plan.json"), &plan)?;
     fs::write(out_dir.join("plan.md"), render_plan_md(&plan))?;
@@ -191,10 +255,32 @@ fn cmd_apply(args: ApplyArgs) -> anyhow::Result<()> {
     let merged =
         ConfigMerger::new(file_config).merge_apply_args(args.allow_guarded, args.allow_unsafe);
 
+    // Determine allow_dirty: CLI flag OR config file setting
+    let allow_dirty = args.allow_dirty || merged.allow_dirty;
+
     debug!(
-        "merged config: allow_guarded={}, allow_unsafe={}",
-        merged.allow_guarded, merged.allow_unsafe
+        "merged config: allow_guarded={}, allow_unsafe={}, allow_dirty={}",
+        merged.allow_guarded, merged.allow_unsafe, allow_dirty
     );
+
+    // Block apply on dirty working tree unless explicitly allowed
+    if args.apply && !allow_dirty {
+        match is_working_tree_dirty(&repo_root) {
+            Ok(true) => {
+                anyhow::bail!(
+                    "git working tree has uncommitted changes; \
+                     commit or stash changes first, or use --allow-dirty to override"
+                );
+            }
+            Ok(false) => {
+                debug!("working tree is clean");
+            }
+            Err(e) => {
+                // If git isn't available, log warning but don't block
+                debug!("could not check git status: {}", e);
+            }
+        }
+    }
 
     let plan_path = out_dir.join("plan.json");
     let plan_str = fs::read_to_string(&plan_path).with_context(|| format!("read {}", plan_path))?;
@@ -373,5 +459,42 @@ fn cmd_explain(args: ExplainArgs) -> anyhow::Result<()> {
     println!("{}", fix.remediation);
     println!();
 
+    Ok(())
+}
+
+fn cmd_list_fixes(args: ListFixesArgs) -> anyhow::Result<()> {
+    use explain::{format_safety_class, FIX_REGISTRY};
+
+    match args.format {
+        OutputFormat::Text => {
+            println!("Available fixes:\n");
+            println!("  {:<24} {:<10} TITLE", "KEY", "SAFETY");
+            println!("  {:<24} {:<10} -----", "---", "------");
+            for fix in FIX_REGISTRY {
+                println!(
+                    "  {:<24} {:<10} {}",
+                    fix.key,
+                    format_safety_class(fix.safety),
+                    fix.title
+                );
+            }
+            println!();
+            println!("Use 'buildfix explain <key>' for details.");
+        }
+        OutputFormat::Json => {
+            let fixes: Vec<_> = FIX_REGISTRY
+                .iter()
+                .map(|f| {
+                    serde_json::json!({
+                        "key": f.key,
+                        "fix_id": f.fix_id,
+                        "title": f.title,
+                        "safety": format_safety_class(f.safety).to_lowercase(),
+                    })
+                })
+                .collect();
+            println!("{}", serde_json::to_string_pretty(&fixes)?);
+        }
+    }
     Ok(())
 }

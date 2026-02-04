@@ -1,0 +1,67 @@
+{
+  "fixes": [
+    {
+      "description": "Cargo's resolver v2 is required for correct feature unification in many modern workspaces.",
+      "fix_id": "cargo.workspace_resolver_v2",
+      "operations": [
+        {
+          "manifest": "Cargo.toml",
+          "op": "ensure_workspace_resolver_v2"
+        }
+      ],
+      "preconditions": [
+        {
+          "path": "Cargo.toml",
+          "type": "file_exists"
+        }
+      ],
+      "safety": "safe",
+      "title": "Set [workspace].resolver = \"2\"",
+      "triggers": [
+        {
+          "location": {
+            "column": 1,
+            "line": 1,
+            "path": "Cargo.toml"
+          },
+          "message": "workspace resolver is not 2",
+          "trigger": {
+            "check_id": "workspace.resolver_v2",
+            "code": "not_v2",
+            "tool": "builddiag"
+          }
+        }
+      ]
+    }
+  ],
+  "inputs": {
+    "artifacts_dir": "<ARTIFACTS_DIR>",
+    "repo_root": "<REPO_ROOT>"
+  },
+  "policy": {
+    "allow": [],
+    "deny": [],
+    "require_clean_hashes": true
+  },
+  "receipts": [
+    {
+      "parse_ok": true,
+      "report_path": "<ARTIFACTS>/builddiag/report.json",
+      "schema": "builddiag.report.v1",
+      "sensor_id": "builddiag",
+      "tool_name": "builddiag"
+    }
+  ],
+  "run": {},
+  "schema": "buildfix.plan.v1",
+  "summary": {
+    "fixes_total": 1,
+    "guarded": 0,
+    "safe": 1,
+    "unsafe_": 0
+  },
+  "tool": {
+    "name": "buildfix",
+    "version": "test"
+  }
+}

@@ -35,8 +35,78 @@ pub struct ApplyOptions {
     pub backup_dir: Option<Utf8PathBuf>,
 }
 
+/// Options for attaching preconditions to a plan.
+#[derive(Debug, Clone, Default)]
+pub struct AttachPreconditionsOptions {
+    /// If true, attach a `GitHeadSha` precondition requiring the repo HEAD to match.
+    /// This ensures the plan can only be applied to the exact commit it was generated from.
+    pub include_git_head: bool,
+}
+
+/// Get the current git HEAD SHA for a repository.
+///
+/// Returns `Ok(sha)` if git is available and the directory is a git repo.
+/// Returns `Err` if git fails or is not available.
+pub fn get_head_sha(repo_root: &Utf8Path) -> anyhow::Result<String> {
+    let output = std::process::Command::new("git")
+        .arg("rev-parse")
+        .arg("HEAD")
+        .current_dir(repo_root)
+        .output()
+        .context("failed to run git rev-parse HEAD")?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("git rev-parse HEAD failed: {}", stderr.trim());
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+/// Check if the git working tree has uncommitted changes.
+///
+/// Returns `Ok(true)` if there are uncommitted changes (dirty).
+/// Returns `Ok(false)` if the working tree is clean.
+/// Returns `Err` if git fails or is not available.
+pub fn is_working_tree_dirty(repo_root: &Utf8Path) -> anyhow::Result<bool> {
+    // Check for staged or unstaged changes
+    let status_output = std::process::Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(repo_root)
+        .output()
+        .context("failed to run git status")?;
+
+    if !status_output.status.success() {
+        let stderr = String::from_utf8_lossy(&status_output.stderr);
+        anyhow::bail!("git status failed: {}", stderr.trim());
+    }
+
+    // If output is non-empty, there are changes
+    Ok(!status_output.stdout.is_empty())
+}
+
 /// Attach per-fix preconditions (FileExists + FileSha256) for each file touched by operations.
-pub fn attach_preconditions(repo_root: &Utf8Path, plan: &mut BuildfixPlan) -> anyhow::Result<()> {
+///
+/// Also populates `plan.run.git_head_sha` if in a git repo.
+/// If `opts.include_git_head` is true, also attaches a `GitHeadSha` precondition to each fix.
+pub fn attach_preconditions(
+    repo_root: &Utf8Path,
+    plan: &mut BuildfixPlan,
+    opts: &AttachPreconditionsOptions,
+) -> anyhow::Result<()> {
+    // Always try to populate git_head_sha in the plan's run info
+    if let Ok(sha) = get_head_sha(repo_root) {
+        plan.run.git_head_sha = Some(sha.clone());
+
+        // Optionally attach GitHeadSha precondition to each fix
+        if opts.include_git_head {
+            for fix in plan.fixes.iter_mut() {
+                fix.preconditions
+                    .push(Precondition::GitHeadSha { sha: sha.clone() });
+            }
+        }
+    }
+
     for fix in plan.fixes.iter_mut() {
         let mut files = BTreeSet::new();
         for op in &fix.operations {
@@ -56,7 +126,15 @@ pub fn attach_preconditions(repo_root: &Utf8Path, plan: &mut BuildfixPlan) -> an
                 sha256: sha,
             });
         }
+        // Prepend file preconditions (GitHeadSha was already pushed if enabled)
+        let git_pres: Vec<_> = fix
+            .preconditions
+            .iter()
+            .filter(|p| matches!(p, Precondition::GitHeadSha { .. }))
+            .cloned()
+            .collect();
         fix.preconditions = pres;
+        fix.preconditions.extend(git_pres);
     }
 
     Ok(())
@@ -509,7 +587,11 @@ fn render_patch(
     out
 }
 
-fn apply_op_to_content(contents: &str, op: &Operation) -> anyhow::Result<String> {
+/// Applies a single operation to TOML content, returning the modified content.
+///
+/// This function is exposed for testing purposes (proptests, golden fixtures).
+#[doc(hidden)]
+pub fn apply_op_to_content(contents: &str, op: &Operation) -> anyhow::Result<String> {
     let mut doc = contents
         .parse::<DocumentMut>()
         .unwrap_or_else(|_| DocumentMut::new());

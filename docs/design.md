@@ -138,10 +138,11 @@ New fixers must satisfy:
 
 ## Microcrate boundaries (internal)
 
-- buildfix-protocol: DTOs + schema ids
+- buildfix-types: DTOs + schema ids (wire format for all artifacts)
 - buildfix-receipts: receipt envelope ingestion + normalization
-- buildfix-domain: registry + policy + planner + ordering + preconditions checks
-- buildfix-edit: TOML editing + diff preview generation
-- buildfix-render: plan.md rendering
-- buildfix-cli: clap + filesystem wiring
-- xtask: schema regen, fixture management, release chores
+- buildfix-domain: registry + policy + planner + ordering + Fixer trait
+- buildfix-edit: TOML editing + diff preview generation + preconditions
+- buildfix-render: plan.md + apply.md rendering
+- buildfix-cli: clap + filesystem wiring + config loading + explain
+- buildfix-bdd: cucumber BDD tests for workflow contracts
+- xtask: schema regen, fixture management, artifact init
