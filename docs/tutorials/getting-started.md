@@ -61,12 +61,11 @@ You'll see a summary like:
 # buildfix Plan
 
 ## Summary
-- Fixes: 3
-- Safe: 2
-- Guarded: 1
-- Unsafe: 0
+- Ops total: 3
+- Ops blocked: 0
+- Files touched: 2
 
-## Planned Fixes
+## Planned Ops
 ...
 ```
 
@@ -82,7 +81,7 @@ This shows a unified diff of all planned edits.
 
 ## Understanding Safety Classes
 
-Each fix has a safety classification:
+Each op has a safety classification:
 
 | Class | Meaning | Apply behavior |
 |-------|---------|---------------|
@@ -92,6 +91,6 @@ Each fix has a safety classification:
 
 ## What's Next?
 
-- [Your First Fix](first-fix.md) — Walk through applying a fix
+- [Your First Fix](first-fix.md) — Walk through applying an op
 - [Configure buildfix](../how-to/configure.md) — Customize policy with buildfix.toml
 - [Fix Catalog](../reference/fixes.md) — See all available fixes

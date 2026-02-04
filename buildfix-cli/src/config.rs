@@ -31,11 +31,11 @@ pub struct BuildfixConfig {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct PolicyConfig {
-    /// Allowlist patterns for fix ids.
-    /// If non-empty, only allowlisted fix keys are eligible.
+    /// Allowlist patterns for policy keys.
+    /// If non-empty, only allowlisted policy keys are eligible.
     pub allow: Vec<String>,
 
-    /// Denylist patterns for fix ids.
+    /// Denylist patterns for policy keys.
     pub deny: Vec<String>,
 
     /// Allow guarded fixes to run.
@@ -175,6 +175,7 @@ impl ConfigMerger {
         cli_allow: &[String],
         cli_deny: &[String],
         no_clean_hashes: bool,
+        cli_params: &HashMap<String, String>,
     ) -> MergedConfig {
         let mut allow = self.config.policy.allow.clone();
         let mut deny = self.config.policy.deny.clone();
@@ -191,6 +192,11 @@ impl ConfigMerger {
             }
         }
 
+        let mut params = self.config.params.clone();
+        for (k, v) in cli_params {
+            params.insert(k.clone(), v.clone());
+        }
+
         MergedConfig {
             allow,
             deny,
@@ -202,17 +208,27 @@ impl ConfigMerger {
             max_files: self.config.policy.max_files,
             max_patch_bytes: self.config.policy.max_patch_bytes,
             backups: self.config.backups.clone(),
-            params: self.config.params.clone(),
+            params,
         }
     }
 
     /// Merge with apply command CLI arguments.
     ///
     /// CLI boolean flags override config file settings when explicitly set.
-    pub fn merge_apply_args(self, cli_allow_guarded: bool, cli_allow_unsafe: bool) -> MergedConfig {
+    pub fn merge_apply_args(
+        self,
+        cli_allow_guarded: bool,
+        cli_allow_unsafe: bool,
+        cli_params: &HashMap<String, String>,
+    ) -> MergedConfig {
         // CLI flags override config when set to true
         let allow_guarded = cli_allow_guarded || self.config.policy.allow_guarded;
         let allow_unsafe = cli_allow_unsafe || self.config.policy.allow_unsafe;
+
+        let mut params = self.config.params.clone();
+        for (k, v) in cli_params {
+            params.insert(k.clone(), v.clone());
+        }
 
         MergedConfig {
             allow: self.config.policy.allow.clone(),
@@ -225,9 +241,29 @@ impl ConfigMerger {
             max_files: self.config.policy.max_files,
             max_patch_bytes: self.config.policy.max_patch_bytes,
             backups: self.config.backups.clone(),
-            params: self.config.params.clone(),
+            params,
         }
     }
+}
+
+/// Parse CLI params from key=value strings.
+pub fn parse_cli_params(params: &[String]) -> anyhow::Result<HashMap<String, String>> {
+    let mut out = HashMap::new();
+    for entry in params {
+        let mut parts = entry.splitn(2, '=');
+        let key = parts
+            .next()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| anyhow::anyhow!("invalid param '{}': missing key", entry))?;
+        let value = parts
+            .next()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| anyhow::anyhow!("invalid param '{}': missing value", entry))?;
+        out.insert(key.to_string(), value.to_string());
+    }
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -307,7 +343,8 @@ allow = ["some/pattern/*"]
         let cli_allow = vec!["cli/pattern/*".to_string()];
         let cli_deny = vec!["cli/deny/*".to_string()];
 
-        let merged = ConfigMerger::new(config).merge_plan_args(&cli_allow, &cli_deny, false);
+        let merged =
+            ConfigMerger::new(config).merge_plan_args(&cli_allow, &cli_deny, false, &HashMap::new());
 
         assert_eq!(merged.allow.len(), 2);
         assert!(merged.allow.contains(&"config/pattern/*".to_string()));
@@ -321,7 +358,7 @@ allow = ["some/pattern/*"]
     #[test]
     fn test_merge_plan_args_no_clean_hashes() {
         let config = BuildfixConfig::default();
-        let merged = ConfigMerger::new(config).merge_plan_args(&[], &[], true);
+        let merged = ConfigMerger::new(config).merge_plan_args(&[], &[], true, &HashMap::new());
 
         assert!(!merged.require_clean_hashes);
     }
@@ -337,7 +374,7 @@ allow = ["some/pattern/*"]
             ..Default::default()
         };
 
-        let merged = ConfigMerger::new(config).merge_apply_args(true, true);
+        let merged = ConfigMerger::new(config).merge_apply_args(true, true, &HashMap::new());
 
         assert!(merged.allow_guarded);
         assert!(merged.allow_unsafe);
@@ -355,7 +392,7 @@ allow = ["some/pattern/*"]
         };
 
         // CLI flags are false, but config has true
-        let merged = ConfigMerger::new(config).merge_apply_args(false, false);
+        let merged = ConfigMerger::new(config).merge_apply_args(false, false, &HashMap::new());
 
         // Config values should be used
         assert!(merged.allow_guarded);
@@ -374,7 +411,7 @@ some_other = "value"
         assert_eq!(config.params.get("rust_version"), Some(&"1.75".to_string()));
         assert_eq!(config.params.get("some_other"), Some(&"value".to_string()));
 
-        let merged = ConfigMerger::new(config).merge_plan_args(&[], &[], false);
+        let merged = ConfigMerger::new(config).merge_plan_args(&[], &[], false, &HashMap::new());
 
         assert_eq!(merged.params.get("rust_version"), Some(&"1.75".to_string()));
     }

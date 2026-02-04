@@ -1,8 +1,8 @@
 use crate::fixers::{Fixer, FixerMeta};
 use crate::planner::ReceiptSet;
 use crate::ports::RepoView;
-use buildfix_types::ops::{FixId, Operation, SafetyClass};
-use buildfix_types::plan::PlannedFix;
+use buildfix_types::ops::{OpKind, OpTarget, SafetyClass};
+use buildfix_types::plan::{PlanOp, Rationale};
 use camino::Utf8PathBuf;
 use toml_edit::DocumentMut;
 
@@ -29,7 +29,7 @@ impl ResolverV2Fixer {
 
         let ws = match doc.get("workspace").and_then(|i| i.as_table()) {
             Some(t) => t,
-            None => return true,
+            None => return false, // Not a workspace; resolver-v2 is inapplicable.
         };
 
         let resolver = ws
@@ -57,7 +57,7 @@ impl Fixer for ResolverV2Fixer {
         _ctx: &crate::planner::PlanContext,
         repo: &dyn RepoView,
         receipts: &ReceiptSet,
-    ) -> anyhow::Result<Vec<PlannedFix>> {
+    ) -> anyhow::Result<Vec<PlanOp>> {
         let triggers = receipts.matching_findings(Self::SENSORS, Self::CHECK_IDS, &[]);
         if triggers.is_empty() {
             return Ok(vec![]);
@@ -68,18 +68,35 @@ impl Fixer for ResolverV2Fixer {
             return Ok(vec![]);
         }
 
-        Ok(vec![PlannedFix {
+        let fix_key = triggers
+            .first()
+            .map(fix_key_for)
+            .unwrap_or_else(|| "unknown/-/-".to_string());
+
+        Ok(vec![PlanOp {
             id: String::new(),
-            fix_id: FixId::new(Self::FIX_ID),
             safety: SafetyClass::Safe,
-            title: "Set [workspace].resolver = \"2\"".to_string(),
-            description: Some(
-                "Cargo's resolver v2 is required for correct feature unification in many modern workspaces."
-                    .to_string(),
-            ),
-            triggers,
-            operations: vec![Operation::EnsureWorkspaceResolverV2 { manifest }],
-            preconditions: vec![],
+            blocked: false,
+            blocked_reason: None,
+            target: OpTarget {
+                path: manifest.to_string(),
+            },
+            kind: OpKind::TomlTransform {
+                rule_id: "ensure_workspace_resolver_v2".to_string(),
+                args: None,
+            },
+            rationale: Rationale {
+                fix_key,
+                description: Some(Self::DESCRIPTION.to_string()),
+                findings: triggers,
+            },
+            params_required: vec![],
+            preview: None,
         }])
     }
+}
+
+fn fix_key_for(f: &buildfix_types::plan::FindingRef) -> String {
+    let check = f.check_id.clone().unwrap_or_else(|| "-".to_string());
+    format!("{}/{}/{}", f.source, check, f.code)
 }

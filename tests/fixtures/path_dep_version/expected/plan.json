@@ -1,79 +1,70 @@
 {
-  "fixes": [
+  "inputs": [
     {
-      "description": "Adds a version field so the path dependency is publishable / policy-compliant.",
-      "fix_id": "cargo.path_dep_add_version",
-      "operations": [
-        {
+      "path": "<ARTIFACTS>/depguard/report.json",
+      "schema": "depguard.report.v1",
+      "tool": "depguard"
+    }
+  ],
+  "ops": [
+    {
+      "blocked": false,
+      "id": "cca08d34-3186-5420-9b9e-56f75695ef63",
+      "kind": {
+        "args": {
           "dep": "crate-b",
           "dep_path": "../b",
-          "manifest": "crates/a/Cargo.toml",
-          "op": "ensure_path_dep_has_version",
           "toml_path": [
             "dependencies",
             "crate-b"
           ],
           "version": "0.2.0"
-        }
-      ],
-      "preconditions": [
-        {
-          "path": "crates/a/Cargo.toml",
-          "type": "file_exists"
-        }
-      ],
-      "safety": "safe",
-      "title": "Add version = \"0.2.0\" for path dependency crate-b",
-      "triggers": [
-        {
-          "data": {
-            "dep": "crate-b",
-            "dep_path": "../b",
-            "toml_path": [
-              "dependencies",
-              "crate-b"
-            ]
-          },
-          "location": {
-            "column": 1,
-            "line": 7,
-            "path": "crates/a/Cargo.toml"
-          },
-          "message": "path dependency missing version",
-          "trigger": {
+        },
+        "rule_id": "ensure_path_dep_has_version",
+        "type": "toml_transform"
+      },
+      "rationale": {
+        "description": "Adds version field to path dependencies for publishability",
+        "findings": [
+          {
             "check_id": "deps.path_requires_version",
             "code": "missing_version",
-            "tool": "depguard"
+            "line": 7,
+            "path": "crates/a/Cargo.toml",
+            "source": "depguard"
           }
-        }
-      ]
+        ],
+        "fix_key": "depguard/deps.path_requires_version/missing_version"
+      },
+      "safety": "safe",
+      "target": {
+        "path": "crates/a/Cargo.toml"
+      }
     }
   ],
-  "inputs": {
-    "artifacts_dir": "<ARTIFACTS_DIR>",
-    "repo_root": "<REPO_ROOT>"
-  },
   "policy": {
     "allow": [],
-    "deny": [],
-    "require_clean_hashes": true
+    "allow_dirty": false,
+    "allow_guarded": false,
+    "allow_unsafe": false,
+    "deny": []
   },
-  "receipts": [
-    {
-      "parse_ok": true,
-      "report_path": "<ARTIFACTS>/depguard/report.json",
-      "schema": "depguard.report.v1",
-      "sensor_id": "depguard",
-      "tool_name": "depguard"
-    }
-  ],
-  "run": {},
+  "preconditions": {
+    "files": [
+      {
+        "path": "crates/a/Cargo.toml",
+        "sha256": "<SHA256>"
+      }
+    ]
+  },
+  "repo": {
+    "root": "<REPO_ROOT>"
+  },
   "schema": "buildfix.plan.v1",
   "summary": {
-    "fixes_total": 1,
-    "guarded": 0,
-    "safe": 1,
-    "unsafe_": 0
+    "files_touched": 1,
+    "ops_blocked": 0,
+    "ops_total": 1
   },
   "tool": {
     "name": "buildfix",

@@ -1,0 +1,85 @@
+{
+  "schema": "buildfix.plan.v1",
+  "tool": {
+    "name": "buildfix",
+    "version": "0.1.0"
+  },
+  "repo": {
+    "root": "C:\\Code\\Rust\\buildfix\\tmp-bdd-debug",
+    "head_sha": "7ff8a0b6da5de6357b39e9a346f44ce60f60d4ff",
+    "dirty": true
+  },
+  "inputs": [
+    {
+      "path": "C:\\Code\\Rust\\buildfix\\tmp-bdd-debug\\artifacts\\buildfix\\report.json",
+      "schema": "buildfix.report.v1",
+      "tool": "buildfix"
+    },
+    {
+      "path": "C:\\Code\\Rust\\buildfix\\tmp-bdd-debug\\artifacts\\depguard\\report.json",
+      "schema": "depguard.report.v1",
+      "tool": "depguard"
+    }
+  ],
+  "policy": {
+    "allow": [],
+    "deny": [],
+    "allow_guarded": false,
+    "allow_unsafe": false,
+    "allow_dirty": false
+  },
+  "preconditions": {
+    "files": [
+      {
+        "path": "crates/crate-a/Cargo.toml",
+        "sha256": "c8c9b5152a08c89be0b73cd92713c63ac9e5948531fd2409abffc63b2253dbd1"
+      }
+    ],
+    "dirty": true
+  },
+  "ops": [
+    {
+      "id": "8a5a8bd3-2fda-5f9e-bbc6-e2ad4d65046c",
+      "safety": "safe",
+      "blocked": false,
+      "target": {
+        "path": "crates/crate-a/Cargo.toml"
+      },
+      "kind": {
+        "type": "toml_transform",
+        "rule_id": "use_workspace_dependency",
+        "args": {
+          "dep": "serde",
+          "preserved": {
+            "features": [
+              "derive"
+            ]
+          },
+          "toml_path": [
+            "dependencies",
+            "serde"
+          ]
+        }
+      },
+      "rationale": {
+        "fix_key": "depguard/deps.workspace_inheritance/should_use_workspace",
+        "description": "Converts dependency specs to workspace = true inheritance",
+        "findings": [
+          {
+            "source": "depguard",
+            "check_id": "deps.workspace_inheritance",
+            "code": "should_use_workspace",
+            "path": "crates/crate-a/Cargo.toml",
+            "line": 8
+          }
+        ]
+      }
+    }
+  ],
+  "summary": {
+    "ops_total": 1,
+    "ops_blocked": 0,
+    "files_touched": 1,
+    "patch_bytes": 314
+  }
+}

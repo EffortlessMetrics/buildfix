@@ -1,69 +1,64 @@
 {
-  "fixes": [
+  "inputs": [
     {
-      "description": "Normalizes per-crate MSRV declarations to the workspace canonical value.",
-      "fix_id": "cargo.normalize_rust_version",
-      "operations": [
-        {
-          "manifest": "crates/a/Cargo.toml",
-          "op": "set_package_rust_version",
+      "path": "<ARTIFACTS>/builddiag/report.json",
+      "schema": "builddiag.report.v1",
+      "tool": "builddiag"
+    }
+  ],
+  "ops": [
+    {
+      "blocked": false,
+      "id": "57fb44c4-888e-57e5-8b1b-4374618cfc32",
+      "kind": {
+        "args": {
           "rust_version": "1.70"
-        }
-      ],
-      "preconditions": [
-        {
-          "path": "crates/a/Cargo.toml",
-          "type": "file_exists"
-        }
-      ],
-      "safety": "guarded",
-      "title": "Set rust-version = \"1.70\" in crates/a/Cargo.toml",
-      "triggers": [
-        {
-          "data": {
-            "crate_msrv": "1.65",
-            "workspace_msrv": "1.70"
-          },
-          "location": {
-            "column": 1,
-            "line": 5,
-            "path": "crates/a/Cargo.toml"
-          },
-          "message": "crate MSRV does not match workspace",
-          "trigger": {
+        },
+        "rule_id": "set_package_rust_version",
+        "type": "toml_transform"
+      },
+      "rationale": {
+        "description": "Normalizes per-crate MSRV to workspace canonical rust-version",
+        "findings": [
+          {
             "check_id": "rust.msrv_consistent",
             "code": "msrv_mismatch",
-            "tool": "builddiag"
+            "line": 5,
+            "path": "crates/a/Cargo.toml",
+            "source": "builddiag"
           }
-        }
-      ]
+        ],
+        "fix_key": "builddiag/rust.msrv_consistent/msrv_mismatch"
+      },
+      "safety": "guarded",
+      "target": {
+        "path": "crates/a/Cargo.toml"
+      }
     }
   ],
-  "inputs": {
-    "artifacts_dir": "<ARTIFACTS_DIR>",
-    "repo_root": "<REPO_ROOT>"
-  },
   "policy": {
     "allow": [],
-    "deny": [],
-    "require_clean_hashes": true
+    "allow_dirty": false,
+    "allow_guarded": false,
+    "allow_unsafe": false,
+    "deny": []
   },
-  "receipts": [
-    {
-      "parse_ok": true,
-      "report_path": "<ARTIFACTS>/builddiag/report.json",
-      "schema": "builddiag.report.v1",
-      "sensor_id": "builddiag",
-      "tool_name": "builddiag"
-    }
-  ],
-  "run": {},
+  "preconditions": {
+    "files": [
+      {
+        "path": "crates/a/Cargo.toml",
+        "sha256": "<SHA256>"
+      }
+    ]
+  },
+  "repo": {
+    "root": "<REPO_ROOT>"
+  },
   "schema": "buildfix.plan.v1",
   "summary": {
-    "fixes_total": 1,
-    "guarded": 1,
-    "safe": 0,
-    "unsafe_": 0
+    "files_touched": 1,
+    "ops_blocked": 0,
+    "ops_total": 1
   },
   "tool": {
     "name": "buildfix",

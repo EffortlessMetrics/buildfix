@@ -1,4 +1,3 @@
-use camino::Utf8PathBuf;
 use serde::{Deserialize, Serialize};
 
 /// Safety class for an operation.
@@ -27,89 +26,32 @@ impl SafetyClass {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct FixId(pub String);
-
-impl FixId {
-    pub fn new<S: Into<String>>(s: S) -> Self {
-        Self(s.into())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct TriggerKey {
-    pub tool: String,
-    pub check_id: Option<String>,
-    pub code: Option<String>,
-}
-
-impl TriggerKey {
-    pub fn new(tool: impl Into<String>, check_id: Option<String>, code: Option<String>) -> Self {
-        Self {
-            tool: tool.into(),
-            check_id,
-            code,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct DepPreserve {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub package: Option<String>,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub optional: Option<bool>,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub default_features: Option<bool>,
-
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub features: Vec<String>,
-}
-
+/// Operation kind for plan ops.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "op", rename_all = "snake_case")]
-pub enum Operation {
-    EnsureWorkspaceResolverV2 {
-        manifest: Utf8PathBuf,
-    },
-
-    EnsurePathDepHasVersion {
-        manifest: Utf8PathBuf,
-
-        /// TOML path to the dependency item, e.g. ["dependencies","foo"] or
-        /// ["target","cfg(windows)","dependencies","foo"].
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OpKind {
+    TomlSet {
         toml_path: Vec<String>,
-
-        dep: String,
-        dep_path: String,
-        version: String,
+        value: serde_json::Value,
     },
-
-    UseWorkspaceDependency {
-        manifest: Utf8PathBuf,
-
-        /// TOML path to the dependency item, e.g. ["dependencies","foo"].
+    TomlRemove {
         toml_path: Vec<String>,
-
-        dep: String,
-        preserved: DepPreserve,
     },
-
-    SetPackageRustVersion {
-        manifest: Utf8PathBuf,
-        rust_version: String,
+    TomlTransform {
+        rule_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        args: Option<serde_json::Value>,
     },
 }
 
-impl Operation {
-    pub fn manifest(&self) -> &Utf8PathBuf {
-        match self {
-            Operation::EnsureWorkspaceResolverV2 { manifest }
-            | Operation::EnsurePathDepHasVersion { manifest, .. }
-            | Operation::UseWorkspaceDependency { manifest, .. }
-            | Operation::SetPackageRustVersion { manifest, .. } => manifest,
-        }
-    }
+/// Target path for an operation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpTarget {
+    pub path: String,
+}
+
+/// Optional preview fragment for an operation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpPreview {
+    pub patch_fragment: String,
 }

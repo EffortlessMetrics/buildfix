@@ -1,8 +1,8 @@
 use crate::fixers::{Fixer, FixerMeta};
 use crate::planner::ReceiptSet;
 use crate::ports::RepoView;
-use buildfix_types::ops::{FixId, Operation, SafetyClass};
-use buildfix_types::plan::PlannedFix;
+use buildfix_types::ops::{OpKind, OpTarget, SafetyClass};
+use buildfix_types::plan::{PlanOp, Rationale};
 use camino::{Utf8Path, Utf8PathBuf};
 use std::collections::{BTreeMap, BTreeSet};
 use toml_edit::DocumentMut;
@@ -56,9 +56,9 @@ impl MsrvNormalizeFixer {
     ) -> BTreeSet<Utf8PathBuf> {
         let mut out = BTreeSet::new();
         for t in triggers {
-            let Some(loc) = &t.location else { continue };
-            if loc.path.as_str().ends_with("Cargo.toml") {
-                out.insert(loc.path.clone());
+            let Some(path) = &t.path else { continue };
+            if path.ends_with("Cargo.toml") {
+                out.insert(Utf8PathBuf::from(path.clone()));
             }
         }
         out
@@ -97,22 +97,20 @@ impl Fixer for MsrvNormalizeFixer {
         _ctx: &crate::planner::PlanContext,
         repo: &dyn RepoView,
         receipts: &ReceiptSet,
-    ) -> anyhow::Result<Vec<PlannedFix>> {
+    ) -> anyhow::Result<Vec<PlanOp>> {
         let triggers = receipts.matching_findings(Self::SENSORS, Self::CHECK_IDS, &[]);
         if triggers.is_empty() {
             return Ok(vec![]);
         }
 
-        let Some(rust_version) = Self::canonical_rust_version(repo) else {
-            return Ok(vec![]);
-        };
+        let rust_version = Self::canonical_rust_version(repo);
 
         let mut triggers_by_manifest: BTreeMap<Utf8PathBuf, Vec<buildfix_types::plan::FindingRef>> =
             BTreeMap::new();
         for t in &triggers {
-            if let Some(loc) = &t.location {
+            if let Some(path) = &t.path {
                 triggers_by_manifest
-                    .entry(loc.path.clone())
+                    .entry(Utf8PathBuf::from(path.clone()))
                     .or_default()
                     .push(t.clone());
             }
@@ -124,31 +122,60 @@ impl Fixer for MsrvNormalizeFixer {
                 Ok(c) => c,
                 Err(_) => continue,
             };
-            if !Self::needs_change(&contents, &rust_version) {
-                continue;
+            if let Some(rv) = &rust_version {
+                if !Self::needs_change(&contents, rv) {
+                    continue;
+                }
             }
 
-            fixes.push(PlannedFix {
-                id: String::new(),
-                fix_id: FixId::new(Self::FIX_ID),
-                safety: SafetyClass::Guarded,
-                title: format!("Set rust-version = \"{}\" in {}", rust_version, manifest),
-                description: Some(
-                    "Normalizes per-crate MSRV declarations to the workspace canonical value."
-                        .to_string(),
+            let (safety, params_required, rust_version_value) = match &rust_version {
+                Some(rv) => (SafetyClass::Guarded, vec![], serde_json::Value::String(rv.clone())),
+                None => (
+                    SafetyClass::Unsafe,
+                    vec!["rust_version".to_string()],
+                    serde_json::Value::Null,
                 ),
-                triggers: triggers_by_manifest
-                    .get(&manifest)
-                    .cloned()
-                    .unwrap_or_else(Vec::new),
-                operations: vec![Operation::SetPackageRustVersion {
-                    manifest: manifest.clone(),
-                    rust_version: rust_version.clone(),
-                }],
-                preconditions: vec![],
+            };
+
+            let mut args = serde_json::Map::new();
+            args.insert("rust_version".to_string(), rust_version_value);
+
+            let findings = triggers_by_manifest
+                .get(&manifest)
+                .cloned()
+                .unwrap_or_else(Vec::new);
+            let fix_key = findings
+                .first()
+                .map(fix_key_for)
+                .unwrap_or_else(|| "unknown/-/-".to_string());
+
+            fixes.push(PlanOp {
+                id: String::new(),
+                safety,
+                blocked: false,
+                blocked_reason: None,
+                target: OpTarget {
+                    path: manifest.to_string(),
+                },
+                kind: OpKind::TomlTransform {
+                    rule_id: "set_package_rust_version".to_string(),
+                    args: Some(serde_json::Value::Object(args)),
+                },
+                rationale: Rationale {
+                    fix_key,
+                    description: Some(Self::DESCRIPTION.to_string()),
+                    findings,
+                },
+                params_required,
+                preview: None,
             });
         }
 
         Ok(fixes)
     }
+}
+
+fn fix_key_for(f: &buildfix_types::plan::FindingRef) -> String {
+    let check = f.check_id.clone().unwrap_or_else(|| "-".to_string());
+    format!("{}/{}/{}", f.source, check, f.code)
 }

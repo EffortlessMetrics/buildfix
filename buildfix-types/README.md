@@ -5,19 +5,18 @@ Shared DTOs and schemas for buildfix repair plans. This crate defines the wire f
 ## Key Types
 
 ### Safety Classification
-- `SafetyClass` - `Safe`, `Guarded`, `Unsafe` classification for fixes
+- `SafetyClass` - `Safe`, `Guarded`, `Unsafe` classification for ops
 
 ### Plan Types
-- `BuildfixPlan` - Complete repair plan with fixes, receipts, and policy
-- `PlannedFix` - Individual fix with operations, triggers, and safety class
-- `Precondition` - `FileExists`, `FileSha256`, `GitHeadSha` preconditions
+- `BuildfixPlan` - Complete repair plan with ops, inputs, and policy
+- `PlanOp` - Individual op with target, kind, rationale, and safety class
+- `FilePrecondition` - File SHA256 preconditions
 
 ### Operations
-- `Operation` - Tagged enum of all supported operations:
-  - `EnsureWorkspaceResolverV2`
-  - `EnsurePathDepHasVersion`
-  - `UseWorkspaceDependency`
-  - `SetPackageRustVersion`
+- `OpKind` - Tagged enum of supported operation kinds:
+  - `toml_set`
+  - `toml_remove`
+  - `toml_transform` (rule_id + args)
 
 ### Receipt Types
 - `ReceiptEnvelope` - Generic sensor receipt format
@@ -25,7 +24,7 @@ Shared DTOs and schemas for buildfix repair plans. This crate defines the wire f
 
 ### Apply Types
 - `BuildfixApply` - Results of applying a plan
-- `AppliedFixResult` - Per-fix outcome
+- `ApplyResult` - Per-op outcome
 
 ## Schema Versions
 
@@ -37,7 +36,7 @@ Shared DTOs and schemas for buildfix repair plans. This crate defines the wire f
 
 ```rust
 use buildfix_types::plan::BuildfixPlan;
-use buildfix_types::ops::{Operation, SafetyClass};
+use buildfix_types::ops::{OpKind, SafetyClass};
 ```
 
 This crate is part of the [buildfix](https://github.com/EffortlessMetrics/buildfix) workspace.

@@ -41,7 +41,7 @@ Feature: Plan and apply
     And a builddiag receipt for MSRV inconsistency
     When I run buildfix plan
     Then the plan contains an MSRV normalization fix
-    When I run buildfix apply with --apply
+    When I run buildfix apply with --apply expecting policy block
     Then the crate-a Cargo.toml still has rust-version "1.65"
 
   Scenario: Dry-run apply does not modify files
@@ -67,6 +67,26 @@ Feature: Plan and apply
     And a depguard receipt for missing path dependency version
     When I run buildfix plan with --max-ops 0
     Then the plan command fails
+
+  Scenario: Allowlist blocks unmatched fixes
+    Given a repo missing workspace resolver v2
+    And a builddiag receipt for resolver v2
+    When I run buildfix plan with allowlist "depguard/*"
+    Then the resolver v2 op is blocked by allowlist
+
+  Scenario: Unsafe fix blocked without params
+    Given a repo with a path dependency missing version and no target version
+    And a depguard receipt for missing path dependency version
+    When I run buildfix plan expecting policy block
+    Then the path dependency version op is blocked for missing params
+
+  Scenario: Precondition mismatch aborts apply
+    Given a repo missing workspace resolver v2
+    And a builddiag receipt for resolver v2
+    When I run buildfix plan
+    And I modify the root Cargo.toml after planning
+    When I run buildfix apply with --apply expecting policy block
+    Then the apply preconditions are not verified
 
   # ============================================================================
   # Multiple fixes and determinism

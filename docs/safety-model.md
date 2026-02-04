@@ -15,7 +15,7 @@ If `buildfix` becomes “helpful,” it becomes untrustworthy.
 
 ## Safety classes
 
-Each planned operation has a safety class:
+Each planned operation (op) has a safety class:
 
 ### safe
 - Inputs are fully determined from repo-local truth.
@@ -58,9 +58,10 @@ Default: refuse to apply on a dirty tree.
 - Users can override with `--allow-dirty`, but the plan/apply artifacts must record this.
 
 ### Allowlist/denylist
-- If a fix key is denied: it is never applied.
-- If allowlist is non-empty: only allowlisted fix keys may apply.
-- Denials are recorded in the plan as blocked operations with reasons.
+- Policy keys are derived from triggers as `sensor/check_id/code`.
+- If a policy key is denied: the op is blocked.
+- If allowlist is non-empty: only allowlisted policy keys are eligible.
+- Denials are recorded in the plan as blocked ops with reasons.
 
 ### Caps
 Plan MUST enforce reasonable caps by default:
@@ -82,7 +83,7 @@ Caps are policy blocks, not tool errors.
 
 ## “Never invent” rule
 
-When a fix needs a value:
+When an op needs a value:
 - It must be derived from repo-local truth **or**
 - It must be provided explicitly by the user as a parameter (unsafe)
 

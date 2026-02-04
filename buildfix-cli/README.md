@@ -20,6 +20,7 @@ buildfix plan [OPTIONS]
   --out-dir <PATH>           # Output directory (default: artifacts/buildfix/)
   --allow <PATTERN>          # Allow glob patterns
   --deny <PATTERN>           # Deny glob patterns
+  --param <KEY=VALUE>        # Params for unsafe ops (repeatable)
   --max-ops <N>              # Max operations per plan
   --max-files <N>            # Max files to modify
   --max-patch-bytes <N>      # Max patch size
@@ -39,6 +40,7 @@ buildfix apply [OPTIONS]
   --allow-guarded            # Include guarded fixes
   --allow-unsafe             # Include unsafe fixes
   --allow-dirty              # Allow dirty working tree
+  --param <KEY=VALUE>        # Params for unsafe ops (repeatable)
 ```
 
 Outputs: `apply.json`, `apply.md`, `patch.diff`
@@ -52,14 +54,29 @@ buildfix explain resolver-v2
 buildfix explain path-dep-version
 ```
 
+### `buildfix list-fixes`
+List known fixes and policy keys.
+
+```bash
+buildfix list-fixes
+buildfix list-fixes --format json
+```
+
+### `buildfix validate`
+Validate receipts and buildfix artifacts against embedded schemas.
+
+```bash
+buildfix validate
+```
+
 ## Configuration
 
 Optional `buildfix.toml` in repo root:
 
 ```toml
 [policy]
-allow = ["Cargo.toml", "crates/*/Cargo.toml"]
-deny = ["vendor/*"]
+allow = ["builddiag/workspace.resolver_v2/*"]
+deny = ["builddiag/rust.msrv_consistent/*"]
 max_ops = 50
 
 [backups]

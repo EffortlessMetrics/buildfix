@@ -16,6 +16,16 @@ fn repo_root(world: &BuildfixWorld) -> &Utf8PathBuf {
     world.repo_root.as_ref().expect("repo_root set")
 }
 
+fn plan_ops(plan: &serde_json::Value) -> &Vec<serde_json::Value> {
+    plan["ops"].as_array().expect("ops array")
+}
+
+fn plan_has_rule(plan: &serde_json::Value, rule_id: &str) -> bool {
+    plan_ops(plan).iter().any(|op| {
+        op["kind"]["type"] == "toml_transform" && op["kind"]["rule_id"] == rule_id
+    })
+}
+
 #[given("a repo missing workspace resolver v2")]
 async fn repo_missing_resolver(world: &mut BuildfixWorld) {
     let td = tempfile::tempdir().expect("tempdir");
@@ -83,6 +93,16 @@ async fn run_plan(world: &mut BuildfixWorld) {
         .success();
 }
 
+#[when("I run buildfix plan expecting policy block")]
+async fn run_plan_expect_policy_block(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let mut cmd = Command::cargo_bin("buildfix").expect("buildfix binary");
+    cmd.current_dir(root.as_str())
+        .arg("plan")
+        .assert()
+        .code(2);
+}
+
 #[then("the plan contains a resolver v2 fix")]
 async fn assert_plan_contains_fix(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
@@ -90,12 +110,9 @@ async fn assert_plan_contains_fix(world: &mut BuildfixWorld) {
     let plan_str = fs::read_to_string(&plan_path).unwrap();
     let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
 
-    let fixes = v["fixes"].as_array().unwrap();
     assert!(
-        fixes
-            .iter()
-            .any(|f| f["fix_id"] == "cargo.workspace_resolver_v2"),
-        "expected a resolver v2 fix"
+        plan_has_rule(&v, "ensure_workspace_resolver_v2"),
+        "expected a resolver v2 op"
     );
 }
 
@@ -179,6 +196,56 @@ crate-b = { path = "../crate-b" }
     world.repo_root = Some(root);
 }
 
+#[given("a repo with a path dependency missing version and no target version")]
+async fn repo_with_path_dep_missing_version_no_target_version(world: &mut BuildfixWorld) {
+    let td = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(td.path().to_path_buf()).unwrap();
+
+    // Create workspace with two crates
+    fs::create_dir_all(root.join("crates").join("crate-a")).unwrap();
+    fs::create_dir_all(root.join("crates").join("crate-b")).unwrap();
+
+    // Root workspace manifest (no workspace.package.version)
+    fs::write(
+        root.join("Cargo.toml"),
+        r#"
+[workspace]
+members = ["crates/crate-a", "crates/crate-b"]
+resolver = "2"
+"#,
+    )
+    .unwrap();
+
+    // crate-b without a version
+    fs::write(
+        root.join("crates").join("crate-b").join("Cargo.toml"),
+        r#"
+[package]
+name = "crate-b"
+edition = "2021"
+"#,
+    )
+    .unwrap();
+
+    // crate-a depends on crate-b via path WITHOUT version
+    fs::write(
+        root.join("crates").join("crate-a").join("Cargo.toml"),
+        r#"
+[package]
+name = "crate-a"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+crate-b = { path = "../crate-b" }
+"#,
+    )
+    .unwrap();
+
+    world.temp = Some(td);
+    world.repo_root = Some(root);
+}
+
 #[given("a depguard receipt for missing path dependency version")]
 async fn depguard_receipt_path_dep(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
@@ -217,13 +284,9 @@ async fn assert_plan_contains_path_dep_fix(world: &mut BuildfixWorld) {
     let plan_str = fs::read_to_string(&plan_path).unwrap();
     let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
 
-    let fixes = v["fixes"].as_array().unwrap();
     assert!(
-        fixes
-            .iter()
-            .any(|f| f["fix_id"] == "cargo.path_dep_add_version"),
-        "expected a path dep version fix, got fixes: {:?}",
-        fixes.iter().map(|f| &f["fix_id"]).collect::<Vec<_>>()
+        plan_has_rule(&v, "ensure_path_dep_has_version"),
+        "expected a path dep version op"
     );
 }
 
@@ -322,13 +385,9 @@ async fn assert_plan_contains_workspace_inheritance_fix(world: &mut BuildfixWorl
     let plan_str = fs::read_to_string(&plan_path).unwrap();
     let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
 
-    let fixes = v["fixes"].as_array().unwrap();
     assert!(
-        fixes
-            .iter()
-            .any(|f| f["fix_id"] == "cargo.use_workspace_dependency"),
-        "expected a workspace inheritance fix, got fixes: {:?}",
-        fixes.iter().map(|f| &f["fix_id"]).collect::<Vec<_>>()
+        plan_has_rule(&v, "use_workspace_dependency"),
+        "expected a workspace inheritance op"
     );
 }
 
@@ -425,13 +484,9 @@ async fn assert_plan_contains_msrv_fix(world: &mut BuildfixWorld) {
     let plan_str = fs::read_to_string(&plan_path).unwrap();
     let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
 
-    let fixes = v["fixes"].as_array().unwrap();
     assert!(
-        fixes
-            .iter()
-            .any(|f| f["fix_id"] == "cargo.normalize_rust_version"),
-        "expected an MSRV normalization fix, got fixes: {:?}",
-        fixes.iter().map(|f| &f["fix_id"]).collect::<Vec<_>>()
+        plan_has_rule(&v, "set_package_rust_version"),
+        "expected an MSRV normalization op"
     );
 }
 
@@ -527,12 +582,8 @@ async fn assert_plan_empty(world: &mut BuildfixWorld) {
     let plan_str = fs::read_to_string(&plan_path).unwrap();
     let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
 
-    let fixes = v["fixes"].as_array().unwrap();
-    assert!(
-        fixes.is_empty(),
-        "expected empty plan, got {} fixes",
-        fixes.len()
-    );
+    let ops = plan_ops(&v);
+    assert!(ops.is_empty(), "expected empty plan, got {} ops", ops.len());
 }
 
 // ============================================================================
@@ -549,6 +600,101 @@ async fn run_plan_with_max_ops_zero(world: &mut BuildfixWorld) {
         .arg("0")
         .assert()
         .failure();
+}
+
+#[when(expr = "I run buildfix plan with allowlist {string}")]
+async fn run_plan_with_allowlist(world: &mut BuildfixWorld, pattern: String) {
+    let root = repo_root(world).clone();
+    let mut cmd = Command::cargo_bin("buildfix").expect("buildfix binary");
+    cmd.current_dir(root.as_str())
+        .arg("plan")
+        .arg("--allow")
+        .arg(pattern)
+        .assert()
+        .code(2);
+}
+
+#[then("the resolver v2 op is blocked by allowlist")]
+async fn assert_resolver_op_blocked_by_allowlist(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    let op = plan_ops(&v)
+        .iter()
+        .find(|op| op["kind"]["type"] == "toml_transform" && op["kind"]["rule_id"] == "ensure_workspace_resolver_v2")
+        .expect("resolver v2 op");
+
+    assert_eq!(op["blocked"].as_bool(), Some(true));
+    let reason = op["blocked_reason"].as_str().unwrap_or("");
+    assert!(
+        reason.contains("allowlist"),
+        "expected allowlist block reason, got: {}",
+        reason
+    );
+}
+
+#[then("the path dependency version op is blocked for missing params")]
+async fn assert_path_dep_blocked_missing_params(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    let op = plan_ops(&v)
+        .iter()
+        .find(|op| op["kind"]["type"] == "toml_transform" && op["kind"]["rule_id"] == "ensure_path_dep_has_version")
+        .expect("path dep op");
+
+    assert_eq!(op["blocked"].as_bool(), Some(true));
+    assert_eq!(op["safety"].as_str(), Some("unsafe"));
+    let reason = op["blocked_reason"].as_str().unwrap_or("");
+    assert!(
+        reason.contains("missing params"),
+        "expected missing params reason, got: {}",
+        reason
+    );
+    let params = op["params_required"].as_array().cloned().unwrap_or_default();
+    assert!(
+        params.iter().any(|v| v.as_str() == Some("version")),
+        "expected params_required to contain version"
+    );
+}
+
+#[when("I modify the root Cargo.toml after planning")]
+async fn modify_root_manifest_after_plan(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let path = root.join("Cargo.toml");
+    let mut contents = fs::read_to_string(&path).unwrap_or_default();
+    contents.push_str("\n# modified after plan\n");
+    fs::write(&path, contents).unwrap();
+}
+
+#[when("I run buildfix apply with --apply expecting policy block")]
+async fn run_apply_expect_policy_block(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let mut cmd = Command::cargo_bin("buildfix").expect("buildfix binary");
+    cmd.current_dir(root.as_str())
+        .arg("apply")
+        .arg("--apply")
+        .assert()
+        .code(2);
+}
+
+#[then("the apply preconditions are not verified")]
+async fn assert_apply_preconditions_not_verified(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let apply_path = root.join("artifacts").join("buildfix").join("apply.json");
+    let apply_str = fs::read_to_string(&apply_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&apply_str).unwrap();
+
+    assert_eq!(v["preconditions"]["verified"].as_bool(), Some(false));
+    let mismatches = v["preconditions"]["mismatches"].as_array().cloned().unwrap_or_default();
+    assert!(
+        !mismatches.is_empty(),
+        "expected at least one precondition mismatch"
+    );
 }
 
 #[then("the plan command fails")]
@@ -685,12 +831,8 @@ async fn assert_plan_contains_multiple_fixes(world: &mut BuildfixWorld) {
     let plan_str = fs::read_to_string(&plan_path).unwrap();
     let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
 
-    let fixes = v["fixes"].as_array().unwrap();
-    assert!(
-        fixes.len() >= 2,
-        "expected multiple fixes, got {}",
-        fixes.len()
-    );
+    let ops = plan_ops(&v);
+    assert!(ops.len() >= 2, "expected multiple ops, got {}", ops.len());
 }
 
 #[then("the fixes are sorted deterministically")]
@@ -714,17 +856,17 @@ async fn assert_fixes_sorted_deterministically(world: &mut BuildfixWorld) {
     let v1: serde_json::Value = serde_json::from_str(&plan_str1).unwrap();
     let v2: serde_json::Value = serde_json::from_str(&plan_str2).unwrap();
 
-    let fixes1: Vec<&str> = v1["fixes"]
+    let fixes1: Vec<&str> = v1["ops"]
         .as_array()
         .unwrap()
         .iter()
-        .map(|f| f["fix_id"].as_str().unwrap())
+        .map(|f| f["id"].as_str().unwrap())
         .collect();
-    let fixes2: Vec<&str> = v2["fixes"]
+    let fixes2: Vec<&str> = v2["ops"]
         .as_array()
         .unwrap()
         .iter()
-        .map(|f| f["fix_id"].as_str().unwrap())
+        .map(|f| f["id"].as_str().unwrap())
         .collect();
 
     assert_eq!(

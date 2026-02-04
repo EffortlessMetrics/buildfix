@@ -282,6 +282,16 @@ pub fn list_fix_keys() -> Vec<&'static str> {
     FIX_REGISTRY.iter().map(|f| f.key).collect()
 }
 
+/// Derive policy keys (sensor/check_id/code) from triggers.
+pub fn policy_keys(fix: &FixExplanation) -> Vec<String> {
+    let mut keys = std::collections::BTreeSet::new();
+    for trigger in fix.triggers {
+        let code = trigger.code.unwrap_or("*");
+        keys.insert(format!("{}/{}/{}", trigger.sensor, trigger.check_id, code));
+    }
+    keys.into_iter().collect()
+}
+
 /// Format a safety class for display.
 pub fn format_safety_class(safety: SafetyClass) -> &'static str {
     match safety {

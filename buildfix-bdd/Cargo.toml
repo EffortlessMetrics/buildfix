@@ -1,9 +1,9 @@
 [package]
 name = "buildfix-bdd"
 version = "0.1.0"
+publish = false
 edition.workspace = true
 license.workspace = true
-publish = false
 
 [[test]]
 name = "cucumber"

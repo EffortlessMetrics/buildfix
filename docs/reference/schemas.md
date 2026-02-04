@@ -15,7 +15,7 @@ buildfix produces these artifacts:
 | `apply.md` | — | Human-readable apply result |
 | `patch.diff` | — | Unified diff |
 
-JSON schemas are in the `schemas/` directory.
+JSON schemas are in the `schemas/` directory and embedded in the CLI.
 
 ## plan.json
 
@@ -26,108 +26,103 @@ Schema: `buildfix.plan.v1`
 ```json
 {
   "schema": "buildfix.plan.v1",
-  "plan_id": "uuid-v4",
-  "tool": {
-    "name": "buildfix",
-    "version": "0.1.0",
-    "repo": null,
-    "commit": null
-  },
-  "created_at": "2024-01-15T10:30:00Z",
-  "config": {
-    "allow": [],
-    "deny": [],
-    "require_clean_hashes": true
-  },
-  "receipts_consumed": [
+  "tool": { "name": "buildfix", "version": "0.1.0" },
+  "repo": { "root": "/repo", "head_sha": "...", "dirty": false },
+  "inputs": [
     {
       "path": "artifacts/builddiag/report.json",
-      "tool": "builddiag",
-      "findings_count": 2
+      "schema": "builddiag.report.v1",
+      "tool": "builddiag"
     }
   ],
+  "policy": {
+    "allow": [],
+    "deny": [],
+    "allow_guarded": false,
+    "allow_unsafe": false,
+    "allow_dirty": false,
+    "max_ops": 50,
+    "max_files": 25,
+    "max_patch_bytes": 250000
+  },
   "preconditions": {
-    "files": {
-      "Cargo.toml": "sha256:abc123..."
-    },
-    "git_head": "def456...",
+    "files": [
+      { "path": "Cargo.toml", "sha256": "<sha256>" }
+    ],
+    "head_sha": "...",
     "dirty": false
   },
-  "fixes": [
+  "ops": [
     {
-      "fix_id": "cargo.workspace_resolver_v2",
-      "trigger": {
-        "sensor": "builddiag",
-        "check_id": "workspace.resolver_v2",
-        "code": null
-      },
-      "target_file": "Cargo.toml",
-      "operation": {
-        "type": "EnsureWorkspaceResolverV2",
-        "file": "Cargo.toml"
-      },
+      "id": "<uuid-v5>",
       "safety": "safe",
-      "rationale": "...",
       "blocked": false,
-      "block_reason": null
+      "target": { "path": "Cargo.toml" },
+      "kind": {
+        "type": "toml_transform",
+        "rule_id": "ensure_workspace_resolver_v2",
+        "args": null
+      },
+      "rationale": {
+        "fix_key": "builddiag/workspace.resolver_v2/not_v2",
+        "description": "Adds resolver = \"2\" to workspace",
+        "findings": [
+          {
+            "source": "builddiag",
+            "check_id": "workspace.resolver_v2",
+            "code": "not_v2",
+            "path": "Cargo.toml",
+            "line": 1
+          }
+        ]
+      },
+      "params_required": [],
+      "preview": { "patch_fragment": "@@ ..." }
     }
   ],
   "summary": {
-    "fixes_total": 1,
-    "safe": 1,
-    "guarded": 0,
-    "unsafe_": 0,
-    "blocked": 0
+    "ops_total": 1,
+    "ops_blocked": 0,
+    "files_touched": 1,
+    "patch_bytes": 42
   }
 }
 ```
 
 ### Fields
 
-#### Root
+| Field | Type | Description |
+|-------|------|-------------|
+| `schema` | string | Schema identifier (`buildfix.plan.v1`) |
+| `tool` | object | Tool metadata (`name`, `version`, optional `commit`) |
+| `repo` | object | Repository info (`root`, optional `head_sha`, `dirty`) |
+| `inputs` | array | Receipt inputs used to plan |
+| `policy` | object | Policy snapshot (allow/deny, safety flags, caps) |
+| `preconditions` | object | File SHA256 and optional git state checks |
+| `ops` | array | Planned operations (op-level) |
+| `summary` | object | Counts and patch size |
+
+### op
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `schema` | string | Schema identifier |
-| `plan_id` | string | Unique plan identifier (UUID v4) |
-| `tool` | ToolInfo | Tool metadata |
-| `created_at` | string | ISO 8601 timestamp |
-| `config` | Config | Policy snapshot |
-| `receipts_consumed` | ReceiptRef[] | Input receipts |
-| `preconditions` | Preconditions | File hashes and git state |
-| `fixes` | PlannedFix[] | Planned operations |
-| `summary` | Summary | Counts by safety class |
-
-#### PlannedFix
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `fix_id` | string | Fix identifier |
-| `trigger` | TriggerKey | Sensor finding that triggered fix |
-| `target_file` | string | File to modify |
-| `operation` | Operation | Edit operation |
+| `id` | string | Deterministic op ID (UUID v5) |
 | `safety` | string | `safe`, `guarded`, or `unsafe` |
-| `rationale` | string | Explanation |
-| `blocked` | bool | Whether fix is blocked |
-| `block_reason` | string? | Why blocked |
+| `blocked` | bool | Whether this op is blocked by policy |
+| `blocked_reason` | string? | Why blocked (allow/deny, caps, missing params) |
+| `target` | object | Target file path (`path`) |
+| `kind` | object | Operation kind (see below) |
+| `rationale` | object | `fix_key`, description, and findings |
+| `params_required` | string[] | Required parameters for unsafe ops |
+| `preview` | object? | Optional patch fragment preview |
 
-#### Operation
+### op.kind
 
-Tagged union by `type`:
+`op.kind` is a tagged object with `type`:
 
-```json
-// EnsureWorkspaceResolverV2
-{"type": "EnsureWorkspaceResolverV2", "file": "Cargo.toml"}
-
-// EnsurePathDepHasVersion
-{"type": "EnsurePathDepHasVersion", "file": "Cargo.toml", "dep_name": "foo", "version": "1.0.0"}
-
-// UseWorkspaceDependency
-{"type": "UseWorkspaceDependency", "file": "crates/bar/Cargo.toml", "dep_name": "serde", "preserve_keys": ["features"]}
-
-// NormalizeRustVersion
-{"type": "NormalizeRustVersion", "file": "crates/bar/Cargo.toml", "rust_version": "1.70"}
-```
+- `toml_set` with `toml_path` and `value`
+- `toml_remove` with `toml_path`
+- `toml_transform` with `rule_id` and optional `args`
 
 ## apply.json
 
@@ -138,60 +133,66 @@ Schema: `buildfix.apply.v1`
 ```json
 {
   "schema": "buildfix.apply.v1",
-  "plan_id": "uuid-v4",
-  "tool": {
-    "name": "buildfix",
-    "version": "0.1.0"
+  "tool": { "name": "buildfix", "version": "0.1.0" },
+  "repo": {
+    "root": "/repo",
+    "head_sha_before": "...",
+    "head_sha_after": "...",
+    "dirty_before": false,
+    "dirty_after": false
   },
-  "applied_at": "2024-01-15T10:35:00Z",
-  "dry_run": false,
-  "preconditions_verified": true,
+  "plan_ref": { "path": "artifacts/buildfix/plan.json", "sha256": "..." },
+  "preconditions": {
+    "verified": true,
+    "mismatches": []
+  },
   "results": [
     {
-      "fix_id": "cargo.workspace_resolver_v2",
+      "op_id": "<uuid-v5>",
       "status": "applied",
-      "file": "Cargo.toml",
-      "before_hash": "sha256:abc123...",
-      "after_hash": "sha256:def456...",
-      "backup_path": "artifacts/buildfix/backups/Cargo.toml.buildfix.bak",
-      "error": null
+      "message": null,
+      "blocked_reason": null,
+      "files": [
+        {
+          "path": "Cargo.toml",
+          "sha256_before": "...",
+          "sha256_after": "...",
+          "backup_path": "artifacts/buildfix/backups/Cargo.toml.buildfix.bak"
+        }
+      ]
     }
   ],
   "summary": {
     "attempted": 1,
     "applied": 1,
-    "skipped": 0,
-    "failed": 0
+    "blocked": 0,
+    "failed": 0,
+    "files_modified": 1
   }
 }
 ```
 
 ### Fields
 
-#### Root
+| Field | Type | Description |
+|-------|------|-------------|
+| `schema` | string | Schema identifier (`buildfix.apply.v1`) |
+| `tool` | object | Tool metadata (`name`, `version`, optional `commit`) |
+| `repo` | object | Repo state before/after apply |
+| `plan_ref` | object | Path and optional SHA256 of plan.json |
+| `preconditions` | object | `verified` and any mismatches |
+| `results` | array | Per-op results |
+| `summary` | object | Apply counts |
+
+### result
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `schema` | string | Schema identifier |
-| `plan_id` | string | Plan this apply executed |
-| `tool` | ToolInfo | Tool metadata |
-| `applied_at` | string | ISO 8601 timestamp |
-| `dry_run` | bool | Whether this was a dry run |
-| `preconditions_verified` | bool | All hashes matched |
-| `results` | ApplyResult[] | Per-fix results |
-| `summary` | ApplySummary | Counts |
-
-#### ApplyResult
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `fix_id` | string | Fix identifier |
-| `status` | string | `applied`, `skipped`, or `failed` |
-| `file` | string | Target file |
-| `before_hash` | string? | SHA256 before edit |
-| `after_hash` | string? | SHA256 after edit |
-| `backup_path` | string? | Backup file location |
-| `error` | string? | Error message if failed |
+| `op_id` | string | Plan op ID |
+| `status` | string | `applied`, `blocked`, `failed`, or `skipped` |
+| `message` | string? | Optional message |
+| `blocked_reason` | string? | Policy block reason |
+| `files` | array | File-level hashes and backups |
 
 ## report.json
 
@@ -204,31 +205,21 @@ Cockpit-compatible receipt envelope for integration with the director system.
 ```json
 {
   "schema": "buildfix.report.v1",
-  "tool": {
-    "name": "buildfix",
-    "version": "0.1.0"
-  },
+  "tool": { "name": "buildfix", "version": "0.1.0" },
   "run": {
     "started_at": "2024-01-15T10:30:00Z",
     "ended_at": "2024-01-15T10:30:05Z",
-    "git_head_sha": null
+    "duration_ms": 5000
   },
   "verdict": {
-    "status": "pass",
-    "counts": {
-      "findings": 1,
-      "errors": 0,
-      "warnings": 0
-    },
+    "status": "warn",
+    "counts": { "info": 0, "warn": 1, "error": 0 },
     "reasons": []
   },
   "findings": [],
   "data": {
-    "plan_id": "uuid-v4",
-    "fixes_total": 1,
-    "safe": 1,
-    "guarded": 0,
-    "unsafe": 0
+    "ops_total": 1,
+    "ops_blocked": 0
   }
 }
 ```
@@ -238,89 +229,22 @@ Cockpit-compatible receipt envelope for integration with the director system.
 | Status | Meaning |
 |--------|---------|
 | `pass` | Plan created or apply succeeded |
-| `warn` | Fixes available but not applied |
+| `warn` | Ops available but not applied or blocked |
 | `fail` | Apply failed |
 
 ## Markdown Files
 
 ### plan.md
 
-Human-readable plan summary:
-
-```markdown
-# buildfix Plan
-
-**Plan ID**: abc123...
-**Created**: 2024-01-15T10:30:00Z
-
-## Summary
-
-| Category | Count |
-|----------|-------|
-| Total fixes | 2 |
-| Safe | 1 |
-| Guarded | 1 |
-| Unsafe | 0 |
-| Blocked | 0 |
-
-## Planned Fixes
-
-### 1. cargo.workspace_resolver_v2 (Safe)
-
-**File**: Cargo.toml
-**Operation**: EnsureWorkspaceResolverV2
-
-Triggered by: builddiag / workspace.resolver_v2
-
----
-...
-```
+Human-readable plan summary with ops, safety, blocked reasons, and findings.
 
 ### apply.md
 
-Human-readable apply result:
-
-```markdown
-# buildfix Apply
-
-**Plan ID**: abc123...
-**Applied**: 2024-01-15T10:35:00Z
-**Mode**: Live (not dry-run)
-
-## Summary
-
-| Status | Count |
-|--------|-------|
-| Applied | 1 |
-| Skipped | 0 |
-| Failed | 0 |
-
-## Results
-
-### cargo.workspace_resolver_v2: Applied
-
-**File**: Cargo.toml
-**Backup**: artifacts/buildfix/backups/Cargo.toml.buildfix.bak
-
----
-...
-```
+Human-readable apply result with per-op status and file hashes.
 
 ## patch.diff
 
-Standard unified diff format:
-
-```diff
---- a/Cargo.toml
-+++ b/Cargo.toml
-@@ -1,5 +1,6 @@
- [workspace]
- members = ["crates/*"]
-+resolver = "2"
-
- [workspace.package]
- version = "0.1.0"
-```
+Standard unified diff format.
 
 ## See Also
 

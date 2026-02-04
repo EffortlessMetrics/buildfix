@@ -18,8 +18,8 @@ trait RepoView {
 ### Fixer Trait
 ```rust
 trait Fixer {
-    fn fix_key(&self) -> &'static str;
-    fn plan(&self, ctx: &PlanContext, repo: &dyn RepoView, receipts: &ReceiptSet) -> Vec<PlannedFix>;
+    fn meta(&self) -> FixerMeta;
+    fn plan(&self, ctx: &PlanContext, repo: &dyn RepoView, receipts: &ReceiptSet) -> Vec<PlanOp>;
 }
 ```
 
@@ -27,22 +27,22 @@ trait Fixer {
 
 | Fixer | Fix Key | Safety | Description |
 |-------|---------|--------|-------------|
-| `ResolverV2Fixer` | `resolver-v2` | Safe | Sets workspace resolver = "2" |
-| `PathDepVersionFixer` | `path-dep-version` | Safe | Adds version to path deps |
-| `WorkspaceInheritanceFixer` | `workspace-inheritance` | Safe | Converts to workspace = true |
-| `MsrvNormalizeFixer` | `msrv-normalize` | Guarded | Normalizes MSRV to workspace |
+| `ResolverV2Fixer` | `cargo.workspace_resolver_v2` | Safe | Sets workspace resolver = "2" |
+| `PathDepVersionFixer` | `cargo.path_dep_add_version` | Safe | Adds version to path deps |
+| `WorkspaceInheritanceFixer` | `cargo.use_workspace_dependency` | Safe | Converts to workspace = true |
+| `MsrvNormalizeFixer` | `cargo.normalize_rust_version` | Guarded | Normalizes MSRV to workspace |
 
 ## Key Types
 
 - `Planner` - Orchestrates all fixers to produce a `BuildfixPlan`
 - `PlanContext` - Contains repo_root, artifacts_dir, and config
-- `PlannerConfig` - Allow/deny lists, policy caps, clean_hashes flag
+- `PlannerConfig` - Allow/deny lists, policy caps, params
 - `ReceiptSet` - Helper for accessing receipts by tool/check_id
 - `FsRepoView` - Filesystem implementation of `RepoView`
 
 ## Determinism
 
-- Fixes sorted by `stable_fix_sort_key()` (manifest path + operation type)
+- Ops sorted by a stable op sort key (manifest path + rule id + args)
 - Deterministic UUIDs via `Uuid::new_v5` hashing
 - All collections sorted for byte-stable output
 

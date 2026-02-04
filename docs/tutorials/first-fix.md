@@ -1,6 +1,6 @@
 # Your First Fix
 
-This tutorial walks through the complete plan → apply workflow, applying a fix to your workspace.
+This tutorial walks through the complete plan → apply workflow, applying an op to your workspace.
 
 ## Scenario
 
@@ -18,14 +18,14 @@ Check what buildfix found:
 cat artifacts/buildfix/plan.md
 ```
 
-You should see the resolver-v2 fix:
+You should see the resolver-v2 op:
 
 ```
-## Planned Fixes
+## Planned Ops
 
-### 1. cargo.workspace_resolver_v2 (Safe)
+### 1. builddiag/workspace.resolver_v2/not_v2 (Safe)
 File: Cargo.toml
-Operation: EnsureWorkspaceResolverV2
+Operation: toml_transform (ensure_workspace_resolver_v2)
 ```
 
 ## Step 2: Review the Patch
@@ -57,7 +57,7 @@ This validates preconditions and generates apply artifacts but doesn't modify fi
 
 ## Step 4: Apply for Real
 
-When you're ready, apply the safe fixes:
+When you're ready, apply the safe ops:
 
 ```bash
 buildfix apply --apply
@@ -85,9 +85,9 @@ resolver = "2"
 
 ## Applying Guarded Fixes
 
-Some fixes require explicit approval. For example, MSRV normalization is guarded because changing rust-version affects compatibility.
+Some ops require explicit approval. For example, MSRV normalization is guarded because changing rust-version affects compatibility.
 
-To include guarded fixes:
+To include guarded ops:
 
 ```bash
 buildfix apply --apply --allow-guarded
@@ -99,10 +99,10 @@ If apply fails (exit code 2), check `artifacts/buildfix/apply.md` for details:
 
 - **Precondition mismatch**: Files changed since plan was generated. Re-run `buildfix plan`.
 - **Dirty working tree**: Commit or stash changes, or use `--allow-dirty`.
-- **Policy block**: A fix was denied by your buildfix.toml policy.
+- **Policy block**: An op was denied by your buildfix.toml policy.
 
 ## What's Next?
 
-- [Troubleshoot Blocked Fixes](../how-to/troubleshoot.md) — Debug why fixes aren't applying
+- [Troubleshoot Blocked Fixes](../how-to/troubleshoot.md) — Debug why ops aren't applying
 - [CLI Reference](../reference/cli.md) — All commands and options
 - [Safety Model](../safety-model.md) — Understand safe/guarded/unsafe

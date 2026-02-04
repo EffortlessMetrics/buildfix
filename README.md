@@ -32,11 +32,17 @@ cargo run -p buildfix -- plan
 # Dry-run apply (generates apply.json/apply.md + patch.diff but does not write)
 cargo run -p buildfix -- apply
 
-# Apply changes (safe fixes only by default)
+# Apply changes (safe ops only by default)
 cargo run -p buildfix -- apply --apply
 
-# Allow guarded fixes (e.g., MSRV normalization)
+# Allow guarded ops (e.g., MSRV normalization)
 cargo run -p buildfix -- apply --apply --allow-guarded
+
+# Provide params for unsafe ops
+cargo run -p buildfix -- apply --apply --allow-unsafe --param rust_version=1.75
+
+# Validate receipts and artifacts
+cargo run -p buildfix -- validate
 ```
 
 ## Documentation

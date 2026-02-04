@@ -1,6 +1,6 @@
 # How to Configure buildfix
 
-This guide explains how to set up `buildfix.toml` to control which fixes are allowed, safety gates, and operational limits.
+This guide explains how to set up `buildfix.toml` to control which ops are allowed, safety gates, and operational limits.
 
 ## Configuration File Location
 
@@ -29,14 +29,14 @@ enabled = true
 suffix = ".buildfix.bak"
 
 [params]
-# Parameters for unsafe fixes
+# Parameters for unsafe ops
 ```
 
 ## Allow and Deny Lists
 
-### Deny Specific Fixes
+### Deny Specific Ops
 
-Block a fix from ever being planned:
+Block an op from ever being planned:
 
 ```toml
 [policy]
@@ -45,9 +45,9 @@ deny = [
 ]
 ```
 
-### Allow Only Specific Fixes
+### Allow Only Specific Ops
 
-If `allow` is non-empty, only listed fixes are eligible:
+If `allow` is non-empty, only listed policy keys are eligible:
 
 ```toml
 [policy]
@@ -63,7 +63,7 @@ Patterns support wildcards:
 
 | Pattern | Matches |
 |---------|---------|
-| `sensor/*` | All fixes from that sensor |
+| `sensor/*` | All findings from that sensor |
 | `sensor/check_id/*` | All codes for that check |
 | `sensor/check_id/code` | Exact match |
 
@@ -71,21 +71,21 @@ Examples:
 
 ```toml
 [policy]
-# All depguard fixes
+# All depguard findings
 allow = ["depguard/*"]
 
 # Specific check, any code
 allow = ["builddiag/workspace.resolver_v2/*"]
 
-# Exact fix
+# Exact match
 deny = ["depguard/deps.workspace_inheritance/not_inherited"]
 ```
 
 ## Safety Gates
 
-### Allow Guarded Fixes
+### Allow Guarded Ops
 
-Guarded fixes are blocked by default. Enable them:
+Guarded ops are blocked by default. Enable them:
 
 ```toml
 [policy]
@@ -98,9 +98,9 @@ Or use the CLI flag:
 buildfix apply --apply --allow-guarded
 ```
 
-### Allow Unsafe Fixes
+### Allow Unsafe Ops
 
-Unsafe fixes require parameters. Enable with caution:
+Unsafe ops require parameters. Enable with caution:
 
 ```toml
 [policy]
@@ -120,7 +120,7 @@ allow_dirty = true
 
 ## Operational Caps
 
-Prevent runaway fixes with limits:
+Prevent runaway ops with limits:
 
 ```toml
 [policy]
@@ -143,13 +143,13 @@ suffix = ".buildfix.bak"  # Backup file suffix
 
 Backups are stored in `artifacts/buildfix/backups/`.
 
-## Parameters for Unsafe Fixes
+## Parameters for Unsafe Ops
 
-Some fixes need explicit values. Provide them in config:
+Some ops need explicit values. Provide them in config:
 
 ```toml
 [params]
-rust_version = "1.75"  # For MSRV fixes without a workspace standard
+rust_version = "1.75"  # For MSRV ops without a workspace standard
 ```
 
 Or via CLI:
@@ -172,7 +172,7 @@ buildfix plan --no-clean-hashes
 
 ## Example: Conservative Policy
 
-Only allow resolver-v2 and path-dep-version fixes:
+Only allow resolver-v2 and path-dep-version policy keys:
 
 ```toml
 [policy]
@@ -195,7 +195,7 @@ enabled = true
 
 ## Example: Aggressive Policy
 
-Allow all fixes including guarded:
+Allow all ops including guarded:
 
 ```toml
 [policy]

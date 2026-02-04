@@ -1,140 +1,119 @@
-use crate::ops::{FixId, SafetyClass};
-use crate::plan::Precondition;
-use crate::receipt::{RunInfo, ToolInfo};
-use chrono::{DateTime, Utc};
+use crate::receipt::ToolInfo;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BuildfixApply {
     pub schema: String,
     pub tool: ToolInfo,
-    pub run: RunInfo,
-
-    pub plan_id: String,
-
-    /// Whether changes were actually applied to disk.
-    pub applied: bool,
-
+    pub repo: ApplyRepoInfo,
+    pub plan_ref: PlanRef,
+    pub preconditions: ApplyPreconditions,
     #[serde(default)]
+    pub results: Vec<ApplyResult>,
     pub summary: ApplySummary,
 
-    #[serde(default)]
-    pub results: Vec<AppliedFixResult>,
-
-    /// Information about backups created during apply.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub backup_info: Option<BackupInfo>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub errors: Vec<String>,
 }
 
 impl BuildfixApply {
-    pub fn new(tool: ToolInfo, plan_id: String) -> Self {
+    pub fn new(tool: ToolInfo, repo: ApplyRepoInfo, plan_ref: PlanRef) -> Self {
         Self {
             schema: crate::schema::BUILDFIX_APPLY_V1.to_string(),
             tool,
-            run: RunInfo {
-                started_at: Some(Utc::now()),
-                ended_at: None,
-                git_head_sha: None,
-            },
-            plan_id,
-            applied: false,
-            summary: ApplySummary::default(),
+            repo,
+            plan_ref,
+            preconditions: ApplyPreconditions::default(),
             results: vec![],
-            backup_info: None,
+            summary: ApplySummary::default(),
+            errors: vec![],
         }
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ApplySummary {
-    pub attempted: u64,
-    pub applied: u64,
-    pub skipped: u64,
-    pub failed: u64,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApplyRepoInfo {
+    pub root: String,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head_sha_before: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head_sha_after: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dirty_before: Option<bool>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dirty_after: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AppliedFixResult {
-    pub fix_id: FixId,
-    pub fix_instance_id: String,
-    pub safety: SafetyClass,
+pub struct PlanRef {
+    pub path: String,
 
-    pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
+}
 
-    /// Preconditions evaluated before applying.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ApplyPreconditions {
+    pub verified: bool,
+
     #[serde(default)]
-    pub preconditions: Vec<PreconditionResult>,
+    pub mismatches: Vec<PreconditionMismatch>,
+}
 
-    /// Whether this fix was applied, skipped, or failed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PreconditionMismatch {
+    pub path: String,
+    pub expected: String,
+    pub actual: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApplyResult {
+    pub op_id: String,
     pub status: ApplyStatus,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 
-    #[serde(default)]
-    pub files_changed: Vec<FileChange>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocked_reason: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<ApplyFile>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ApplyStatus {
     Applied,
-    Skipped,
+    Blocked,
     Failed,
+    Skipped,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PreconditionResult {
-    pub precondition: Precondition,
-    pub ok: bool,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub message: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FileChange {
+pub struct ApplyFile {
     pub path: String,
-    pub before_sha256: String,
-    pub after_sha256: String,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub before_bytes: Option<u64>,
+    pub sha256_before: Option<String>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub after_bytes: Option<u64>,
+    pub sha256_after: Option<String>,
 
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub applied_at: Option<DateTime<Utc>>,
-
-    /// Path to backup file created before modification.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub backup_path: Option<String>,
 }
 
-/// Information about all backups created during apply.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct BackupInfo {
-    /// Directory where backups are stored.
-    pub backup_dir: String,
-
-    /// Mapping from original file path to backup file path.
-    #[serde(default)]
-    pub backups: Vec<BackupEntry>,
-}
-
-/// A single backup entry mapping original to backup path.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BackupEntry {
-    /// Original file path (relative to repo root).
-    pub original_path: String,
-
-    /// Backup file path (absolute).
-    pub backup_path: String,
-
-    /// SHA256 of the backed up content.
-    pub sha256: String,
-
-    /// Timestamp when backup was created.
-    pub created_at: DateTime<Utc>,
+pub struct ApplySummary {
+    pub attempted: u64,
+    pub applied: u64,
+    pub blocked: u64,
+    pub failed: u64,
+    pub files_modified: u64,
 }

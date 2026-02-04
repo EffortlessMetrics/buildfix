@@ -5,17 +5,14 @@
 //! This fuzzes the entire pipeline with structured arbitrary input to ensure
 //! all components work together gracefully with malformed data.
 
-use libfuzzer_sys::fuzz_target;
-use buildfix_types::ops::{DepPreserve, FixId, Operation, SafetyClass, TriggerKey};
-use buildfix_types::plan::{
-    BuildfixPlan, FindingRef, PlanInputs, PlanPolicySnapshot, PlanReceiptRef, PlanSummary,
-    PlannedFix, Precondition,
-};
+use buildfix_edit::apply_op_to_content;
+use buildfix_types::ops::{OpKind, OpTarget, SafetyClass};
+use buildfix_types::plan::{BuildfixPlan, FindingRef, PlanOp, PlanPolicy, PlanSummary, Rationale, RepoInfo};
 use buildfix_types::receipt::{
-    Counts, Finding, Location, ReceiptEnvelope, RunInfo, Severity, ToolInfo, Verdict,
-    VerdictStatus,
+    Counts, Finding, Location, ReceiptEnvelope, RunInfo, Severity, ToolInfo, Verdict, VerdictStatus,
 };
 use camino::Utf8PathBuf;
+use libfuzzer_sys::fuzz_target;
 
 /// Structured fuzzing input for the full pipeline.
 #[derive(Debug, arbitrary::Arbitrary)]
@@ -63,15 +60,11 @@ enum SeverityChoice {
 
 #[derive(Debug, arbitrary::Arbitrary)]
 struct StructuredPlan {
-    plan_id: String,
-    fixes_count: u8,
-    fix_id: String,
-    fix_title: String,
+    ops_count: u8,
+    fix_key: String,
+    rule_id: String,
+    target_path: String,
     safety: SafetyChoice,
-    op_type: OpChoice,
-    manifest: String,
-    dep_name: String,
-    version: String,
 }
 
 #[derive(Debug, arbitrary::Arbitrary)]
@@ -82,18 +75,9 @@ enum SafetyChoice {
 }
 
 #[derive(Debug, arbitrary::Arbitrary)]
-enum OpChoice {
-    EnsureWorkspaceResolverV2,
-    SetPackageRustVersion,
-    EnsurePathDepHasVersion,
-    UseWorkspaceDependency,
-}
-
-#[derive(Debug, arbitrary::Arbitrary)]
 struct PolicyConfig {
     allow_patterns: Vec<String>,
     deny_patterns: Vec<String>,
-    require_clean_hashes: bool,
 }
 
 fuzz_target!(|input: PipelineInput| {
@@ -121,22 +105,21 @@ fuzz_target!(|input: PipelineInput| {
 
     // Phase 5: Try to apply operations to TOML content.
     if let Ok(toml_str) = std::str::from_utf8(&input.toml_contents) {
-        if let Ok(mut doc) = toml_str.parse::<toml_edit::DocumentMut>() {
-            for fix in &plan.fixes {
-                for op in &fix.operations {
-                    apply_operation_to_doc(&mut doc, op);
-                }
+        let mut current = toml_str.to_string();
+        for op in &plan.ops {
+            if let Ok(next) = apply_op_to_content(&current, &op.kind) {
+                current = next;
             }
-            let _ = doc.to_string();
         }
+        let _ = current;
     }
 
     // Phase 6: Test policy matching with glob patterns.
     for pattern in &input.policy.allow_patterns {
-        let _ = glob_match(pattern, &input.structured_plan.fix_id);
+        let _ = glob_match(pattern, &input.structured_plan.fix_key);
     }
     for pattern in &input.policy.deny_patterns {
-        let _ = glob_match(pattern, &input.structured_plan.fix_id);
+        let _ = glob_match(pattern, &input.structured_plan.fix_key);
     }
 });
 
@@ -191,36 +174,31 @@ fn build_receipt(sr: &StructuredReceipt) -> ReceiptEnvelope {
 }
 
 fn build_plan(sp: &StructuredPlan, policy: &PolicyConfig) -> BuildfixPlan {
-    let manifest = Utf8PathBuf::from(&sp.manifest);
-
-    let operation = match sp.op_type {
-        OpChoice::EnsureWorkspaceResolverV2 => {
-            Operation::EnsureWorkspaceResolverV2 { manifest }
-        }
-        OpChoice::SetPackageRustVersion => {
-            Operation::SetPackageRustVersion {
-                manifest,
-                rust_version: sp.version.clone(),
-            }
-        }
-        OpChoice::EnsurePathDepHasVersion => {
-            Operation::EnsurePathDepHasVersion {
-                manifest,
-                toml_path: vec!["dependencies".to_string(), sp.dep_name.clone()],
-                dep: sp.dep_name.clone(),
-                dep_path: "../some-crate".to_string(),
-                version: sp.version.clone(),
-            }
-        }
-        OpChoice::UseWorkspaceDependency => {
-            Operation::UseWorkspaceDependency {
-                manifest,
-                toml_path: vec!["dependencies".to_string(), sp.dep_name.clone()],
-                dep: sp.dep_name.clone(),
-                preserved: DepPreserve::default(),
-            }
-        }
+    let policy = PlanPolicy {
+        allow: policy.allow_patterns.clone(),
+        deny: policy.deny_patterns.clone(),
+        allow_guarded: false,
+        allow_unsafe: false,
+        allow_dirty: false,
+        max_ops: None,
+        max_files: None,
+        max_patch_bytes: None,
     };
+
+    let repo = RepoInfo {
+        root: ".".to_string(),
+        head_sha: None,
+        dirty: None,
+    };
+
+    let tool = ToolInfo {
+        name: "buildfix-fuzz".to_string(),
+        version: Some("0.0.0".to_string()),
+        repo: None,
+        commit: None,
+    };
+
+    let mut plan = BuildfixPlan::new(tool, repo, policy);
 
     let safety = match sp.safety {
         SafetyChoice::Safe => SafetyClass::Safe,
@@ -228,71 +206,56 @@ fn build_plan(sp: &StructuredPlan, policy: &PolicyConfig) -> BuildfixPlan {
         SafetyChoice::Unsafe => SafetyClass::Unsafe,
     };
 
-    let mut fixes = Vec::new();
-    for i in 0..sp.fixes_count.min(5) {
-        fixes.push(PlannedFix {
-            id: format!("{}-{}", sp.plan_id, i),
-            fix_id: FixId::new(&sp.fix_id),
+    let count = sp.ops_count.min(5) as u64;
+    for i in 0..count {
+        plan.ops.push(PlanOp {
+            id: format!("op-{}", i),
             safety,
-            title: sp.fix_title.clone(),
-            description: None,
-            triggers: vec![FindingRef {
-                trigger: TriggerKey::new("test-tool", None, None),
-                message: None,
-                location: None,
-                fingerprint: None,
-                data: None,
-            }],
-            operations: vec![operation.clone()],
-            preconditions: vec![],
+            blocked: false,
+            blocked_reason: None,
+            target: OpTarget {
+                path: sp.target_path.clone(),
+            },
+            kind: OpKind::TomlTransform {
+                rule_id: sp.rule_id.clone(),
+                args: None,
+            },
+            rationale: Rationale {
+                fix_key: sp.fix_key.clone(),
+                description: None,
+                findings: vec![FindingRef {
+                    source: "fuzz".to_string(),
+                    check_id: None,
+                    code: "-".to_string(),
+                    path: None,
+                    line: None,
+                }],
+            },
+            params_required: vec![],
+            preview: None,
         });
     }
 
-    BuildfixPlan {
-        schema: "buildfix.plan.v1".to_string(),
-        tool: ToolInfo {
-            name: "buildfix-fuzz".to_string(),
-            version: Some("0.0.0".to_string()),
-            repo: None,
-            commit: None,
-        },
-        run: RunInfo::default(),
-        plan_id: sp.plan_id.clone(),
-        policy: PlanPolicySnapshot {
-            allow: policy.allow_patterns.clone(),
-            deny: policy.deny_patterns.clone(),
-            require_clean_hashes: policy.require_clean_hashes,
-            caps: Default::default(),
-        },
-        inputs: PlanInputs {
-            repo_root: Utf8PathBuf::from("."),
-            artifacts_dir: Utf8PathBuf::from("artifacts"),
-        },
-        receipts: vec![PlanReceiptRef {
-            sensor_id: "test-sensor".to_string(),
-            report_path: Utf8PathBuf::from("artifacts/test-sensor/report.json"),
-            schema: Some("test.v1".to_string()),
-            tool_name: Some("test-tool".to_string()),
-            parse_ok: true,
-            error: None,
-        }],
-        summary: PlanSummary {
-            fixes_total: fixes.len() as u64,
-            safe: if safety == SafetyClass::Safe { fixes.len() as u64 } else { 0 },
-            guarded: if safety == SafetyClass::Guarded { fixes.len() as u64 } else { 0 },
-            unsafe_: if safety == SafetyClass::Unsafe { fixes.len() as u64 } else { 0 },
-        },
-        fixes,
-        notes: vec![],
-    }
+    plan.summary = PlanSummary {
+        ops_total: plan.ops.len() as u64,
+        ops_blocked: 0,
+        files_touched: plan
+            .ops
+            .iter()
+            .map(|o| o.target.path.as_str())
+            .collect::<std::collections::BTreeSet<_>>()
+            .len() as u64,
+        patch_bytes: None,
+    };
+
+    plan
 }
 
-/// Simple glob matching (mirrors buildfix-edit logic).
+/// Simple glob matching (mirrors buildfix-domain logic).
 fn glob_match(pat: &str, text: &str) -> bool {
     let p = pat.as_bytes();
     let t = text.as_bytes();
 
-    // Avoid excessive allocations for very long patterns.
     if p.len() > 1000 || t.len() > 1000 {
         return false;
     }
@@ -317,116 +280,4 @@ fn glob_match(pat: &str, text: &str) -> bool {
     }
 
     dp[p.len()][t.len()]
-}
-
-/// Apply an operation to a TOML document.
-fn apply_operation_to_doc(doc: &mut toml_edit::DocumentMut, op: &Operation) {
-    use toml_edit::{value, InlineTable};
-
-    match op {
-        Operation::EnsureWorkspaceResolverV2 { .. } => {
-            doc["workspace"]["resolver"] = value("2");
-        }
-
-        Operation::SetPackageRustVersion { rust_version, .. } => {
-            doc["package"]["rust-version"] = value(rust_version.as_str());
-        }
-
-        Operation::EnsurePathDepHasVersion {
-            toml_path,
-            dep_path,
-            version,
-            ..
-        } => {
-            if let Some(dep_item) = get_dep_item_mut(doc, toml_path) {
-                if let Some(inline) = dep_item.as_inline_table_mut() {
-                    let current_path = inline.get("path").and_then(|v| v.as_str());
-                    if current_path == Some(dep_path.as_str()) {
-                        if inline.get("version").and_then(|v| v.as_str()).is_none() {
-                            inline.insert("version", str_value(version));
-                        }
-                    }
-                } else if let Some(tbl) = dep_item.as_table_mut() {
-                    let current_path = tbl
-                        .get("path")
-                        .and_then(|i| i.as_value())
-                        .and_then(|v| v.as_str());
-                    if current_path == Some(dep_path.as_str()) {
-                        if tbl
-                            .get("version")
-                            .and_then(|i| i.as_value())
-                            .and_then(|v| v.as_str())
-                            .is_none()
-                        {
-                            tbl["version"] = value(version.as_str());
-                        }
-                    }
-                }
-            }
-        }
-
-        Operation::UseWorkspaceDependency {
-            toml_path,
-            preserved,
-            ..
-        } => {
-            if let Some(dep_item) = get_dep_item_mut(doc, toml_path) {
-                let mut inline = InlineTable::new();
-                inline.insert("workspace", bool_value(true));
-                if let Some(pkg) = &preserved.package {
-                    inline.insert("package", str_value(pkg));
-                }
-                if let Some(opt) = preserved.optional {
-                    inline.insert("optional", bool_value(opt));
-                }
-                if let Some(df) = preserved.default_features {
-                    inline.insert("default-features", bool_value(df));
-                }
-                if !preserved.features.is_empty() {
-                    let mut arr = toml_edit::Array::new();
-                    for f in &preserved.features {
-                        arr.push(f.as_str());
-                    }
-                    inline.insert("features", value(arr).as_value().unwrap().clone());
-                }
-                *dep_item = value(inline);
-            }
-        }
-    }
-}
-
-fn str_value(s: &str) -> toml_edit::Value {
-    toml_edit::value(s).as_value().unwrap().clone()
-}
-
-fn bool_value(b: bool) -> toml_edit::Value {
-    toml_edit::value(b).as_value().unwrap().clone()
-}
-
-fn get_dep_item_mut<'a>(
-    doc: &'a mut toml_edit::DocumentMut,
-    toml_path: &[String],
-) -> Option<&'a mut toml_edit::Item> {
-    if toml_path.len() < 2 {
-        return None;
-    }
-
-    if toml_path[0] == "target" {
-        if toml_path.len() < 4 {
-            return None;
-        }
-        let cfg = &toml_path[1];
-        let table_name = &toml_path[2];
-        let dep = &toml_path[3];
-
-        let target = doc.get_mut("target")?.as_table_mut()?;
-        let cfg_tbl = target.get_mut(cfg)?.as_table_mut()?;
-        let deps = cfg_tbl.get_mut(table_name)?.as_table_mut()?;
-        return deps.get_mut(dep);
-    }
-
-    let table_name = &toml_path[0];
-    let dep = &toml_path[1];
-    let deps = doc.get_mut(table_name)?.as_table_mut()?;
-    deps.get_mut(dep)
 }

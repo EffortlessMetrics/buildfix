@@ -43,10 +43,11 @@ Cargo's resolver v2 is the modern feature resolver that provides correct feature
 - File must be a workspace (has `[workspace]` table)
 - File must be valid TOML
 
-### Policy Key
+### Policy Keys
 
 ```
 builddiag/workspace.resolver_v2/*
+cargo/cargo.workspace_resolver_v2/*
 ```
 
 ---
@@ -88,10 +89,11 @@ Path dependencies without a version field cannot be published to crates.io. This
 
 If the version cannot be determined (target missing or ambiguous), the fix is skipped to maintain safety.
 
-### Policy Key
+### Policy Keys
 
 ```
 depguard/deps.path_requires_version/missing_version
+depguard/cargo.path_requires_version/missing_version
 ```
 
 ---
@@ -146,10 +148,11 @@ The fix preserves these per-crate overrides:
 - Not already using `workspace = true`
 - Not a path or git dependency
 
-### Policy Key
+### Policy Keys
 
 ```
 depguard/deps.workspace_inheritance/*
+depguard/cargo.workspace_inheritance/*
 ```
 
 ---
@@ -213,21 +216,23 @@ Fix is skipped when:
 - No canonical workspace rust-version exists
 - Crate already has the correct rust-version
 
-### Policy Key
+### Policy Keys
 
 ```
 builddiag/rust.msrv_consistent/*
+cargo/cargo.msrv_consistent/*
+cargo/msrv.consistent/*
 ```
 
 ---
 
-## Fix Key Patterns
+## Policy Key Patterns
 
 Policy matching supports patterns:
 
 | Pattern | Matches |
 |---------|---------|
-| `sensor/*` | All fixes from sensor |
+| `sensor/*` | All findings from sensor |
 | `sensor/check_id/*` | All codes for check |
 | `sensor/check_id/code` | Exact match |
 
@@ -235,10 +240,10 @@ Policy matching supports patterns:
 
 ```toml
 [policy]
-# Allow all depguard fixes
+# Allow all depguard findings
 allow = ["depguard/*"]
 
-# Deny MSRV fixes
+# Deny MSRV findings
 deny = ["builddiag/rust.msrv_consistent/*"]
 
 # Allow specific fix

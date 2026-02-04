@@ -1,6 +1,6 @@
 # How to Troubleshoot Blocked Fixes
 
-This guide helps you debug why buildfix fixes aren't being applied.
+This guide helps you debug why buildfix ops aren't being applied.
 
 ## Check the Apply Report
 
@@ -10,9 +10,10 @@ First, read the apply output:
 cat artifacts/buildfix/apply.md
 ```
 
-This shows which fixes were:
+This shows which ops were:
 - **Applied**: Successfully written
-- **Skipped**: Blocked by policy or preconditions
+- **Blocked**: Denied by policy or preconditions
+- **Skipped**: Dry-run only (not written)
 - **Failed**: Error during apply
 
 ## Common Issues
@@ -56,13 +57,13 @@ git stash
 buildfix apply --apply --allow-dirty
 ```
 
-#### Guarded Fix Blocked
+#### Guarded Op Blocked
 
 A guarded fix requires explicit approval.
 
 **Symptoms**:
 ```
-Fix msrv blocked: guarded (use --allow-guarded)
+Op blocked: guarded (use --allow-guarded)
 ```
 
 **Solution**:
@@ -76,13 +77,13 @@ Or enable in config:
 allow_guarded = true
 ```
 
-#### Unsafe Fix Blocked
+#### Unsafe Op Blocked
 
 An unsafe fix needs parameters.
 
 **Symptoms**:
 ```
-Fix blocked: unsafe (requires --allow-unsafe and parameters)
+Op blocked: unsafe (requires --allow-unsafe and parameters)
 ```
 
 **Solution**: Provide required parameters:
@@ -99,13 +100,13 @@ allow_unsafe = true
 rust_version = "1.75"
 ```
 
-#### Fix Denied by Policy
+#### Op Denied by Policy
 
-The fix is in your deny list or not in your allow list.
+The op is in your deny list or not in your allow list.
 
 **Symptoms**:
 ```
-Fix depguard/deps.path_requires_version/missing_version denied by policy
+Op depguard/deps.path_requires_version/missing_version denied by policy
 ```
 
 **Solution**: Check `buildfix.toml`:
@@ -222,7 +223,7 @@ Check what buildfix planned to do:
 cat artifacts/buildfix/plan.md
 
 # Machine-readable details
-cat artifacts/buildfix/plan.json | jq '.fixes'
+cat artifacts/buildfix/plan.json | jq '.ops'
 
 # Patch preview
 cat artifacts/buildfix/patch.diff

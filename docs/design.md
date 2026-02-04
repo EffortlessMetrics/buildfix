@@ -44,10 +44,10 @@ Output of `probe`:
 ### Operation (Op)
 The smallest reversible action.
 
-v0 Op vocabulary:
-- TomlSet(file, toml_path, value)
-- TomlRemove(file, toml_path)
-- TomlTransform(file, rule_id, args)
+Op vocabulary:
+- `OpTarget { path }` + `OpKind::TomlSet { toml_path, value }`
+- `OpTarget { path }` + `OpKind::TomlRemove { toml_path }`
+- `OpTarget { path }` + `OpKind::TomlTransform { rule_id, args }`
 
 Op invariants:
 - deterministic: same inputs → same op list
@@ -82,12 +82,12 @@ Evidence of execution:
 2. Parse receipts and normalize findings.
 3. Route normalized findings to fixers by fix key.
 4. Each fixer probes applicability and produces candidates.
-5. Apply policy:
+5. Apply policy in plan:
    - denylist
    - allowlist
-   - safety gates
    - caps
-6. For eligible candidates, produce ops (pure).
+   - missing params (block unsafe ops)
+6. For eligible candidates, produce ops (pure). Safety gating is enforced at apply time.
 7. Sort ops deterministically.
 8. Compute patch preview (read-only, via editor + diff renderer).
 9. Emit plan.json + plan.md + patch.diff.

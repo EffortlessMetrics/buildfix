@@ -23,21 +23,20 @@ fuzz_target!(|data: &[u8]| {
     }
 
     // Also try parsing individual plan components.
-    let _ = serde_json::from_str::<buildfix_types::plan::PlanPolicySnapshot>(s);
-    let _ = serde_json::from_str::<buildfix_types::plan::PlanInputs>(s);
-    let _ = serde_json::from_str::<buildfix_types::plan::PlanReceiptRef>(s);
+    let _ = serde_json::from_str::<buildfix_types::plan::PlanPolicy>(s);
+    let _ = serde_json::from_str::<buildfix_types::plan::PlanInput>(s);
     let _ = serde_json::from_str::<buildfix_types::plan::PlanSummary>(s);
-    let _ = serde_json::from_str::<buildfix_types::plan::PlannedFix>(s);
+    let _ = serde_json::from_str::<buildfix_types::plan::PlanOp>(s);
     let _ = serde_json::from_str::<buildfix_types::plan::FindingRef>(s);
-    let _ = serde_json::from_str::<buildfix_types::plan::Precondition>(s);
+    let _ = serde_json::from_str::<buildfix_types::plan::FilePrecondition>(s);
 
     // Also try parsing operations.
-    let _ = serde_json::from_str::<buildfix_types::ops::Operation>(s);
-    let _ = serde_json::from_str::<Vec<buildfix_types::ops::Operation>>(s);
+    let _ = serde_json::from_str::<buildfix_types::ops::OpKind>(s);
+    let _ = serde_json::from_str::<Vec<buildfix_types::ops::OpKind>>(s);
 
     // Try parsing as generic JSON first, then attempting typed deserialization.
     if let Ok(val) = serde_json::from_str::<serde_json::Value>(s) {
         let _ = serde_json::from_value::<buildfix_types::plan::BuildfixPlan>(val.clone());
-        let _ = serde_json::from_value::<Vec<buildfix_types::plan::PlannedFix>>(val);
+        let _ = serde_json::from_value::<Vec<buildfix_types::plan::PlanOp>>(val);
     }
 });

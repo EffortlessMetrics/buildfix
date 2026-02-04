@@ -24,11 +24,11 @@ buildfix-cli        CLI entry point
 Wire format definitions for all buildfix artifacts. Intentionally conservative with schema changes.
 
 **Key types:**
-- `BuildfixPlan`, `PlannedFix`, `Precondition` - Plan structure
-- `Operation` - Tagged enum of edit operations
+- `BuildfixPlan`, `PlanOp`, `FilePrecondition` - Plan structure
+- `OpKind` - Tagged enum of edit operations
 - `SafetyClass` - Safe/Guarded/Unsafe classification
 - `ReceiptEnvelope`, `Finding` - Receipt format
-- `BuildfixApply`, `AppliedFixResult` - Apply results
+- `BuildfixApply`, `ApplyResult` - Apply results
 
 ### buildfix-receipts
 Tolerant loader that reads `artifacts/*/report.json`. Collects errors without failing, sorts results deterministically.
@@ -59,7 +59,7 @@ TOML editing engine using `toml_edit`. Decides *how* to modify files.
 Markdown rendering for `plan.md` and `apply.md` artifacts.
 
 ### buildfix-cli
-CLI entry point wiring clap + all modules. Three subcommands: `plan`, `apply`, `explain`.
+CLI entry point wiring clap + all modules. Subcommands: `plan`, `apply`, `explain`, `list-fixes`, `validate`.
 
 ### buildfix-bdd
 Cucumber BDD tests for end-to-end workflow contracts.
@@ -76,7 +76,7 @@ Build helpers: `print-schemas`, `init-artifacts`.
          ↓
 3. Route to fixers       Fixer.plan() for each
          ↓
-4. Collect fixes         Vec<PlannedFix> (sorted, deduped)
+4. Collect ops           Vec<PlanOp> (sorted, deduped)
          ↓
 5. Add preconditions     SHA256 hashes, git HEAD
          ↓
@@ -91,7 +91,7 @@ Build helpers: `print-schemas`, `init-artifacts`.
 
 ## Safety Model
 
-Every planned fix has a safety class:
+Every planned op has a safety class:
 
 | Class | Auto-apply | Description |
 |-------|------------|-------------|
@@ -104,14 +104,14 @@ Every planned fix has a safety class:
 Plans include SHA256 preconditions for each touched file. Apply refuses to run when the repo has drifted (unless explicitly overridden).
 
 Precondition types:
-- `FileExists` - File must exist
-- `FileSha256` - File content hash must match
-- `GitHeadSha` - Git HEAD must match (optional)
+- File SHA256 for each touched file
+- Optional git HEAD SHA
+- Optional dirty flag
 
 ## Determinism Guarantees
 
 Same inputs always produce byte-identical outputs:
-- Fixes sorted by `stable_fix_sort_key()` (manifest + operation type)
+- Ops sorted by a stable op sort key (manifest + rule id + args fingerprint)
 - Deterministic UUIDs via `Uuid::new_v5` hashing
 - Receipts sorted by path
 - Findings sorted by location/tool/check_id

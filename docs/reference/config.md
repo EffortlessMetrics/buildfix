@@ -10,11 +10,11 @@ buildfix reads configuration from `buildfix.toml` in the repository root.
 
 ```toml
 [policy]
-allow = []                    # Allowlist patterns for fix IDs
-deny = []                     # Denylist patterns for fix IDs
-allow_guarded = false         # Allow guarded fixes to apply
-allow_unsafe = false          # Allow unsafe fixes to apply
+allow = []                    # Allowlist patterns for policy keys
+allow_guarded = false         # Allow guarded ops to apply
+allow_unsafe = false          # Allow unsafe ops to apply
 allow_dirty = false           # Allow apply on dirty working tree
+deny = []                     # Denylist patterns for policy keys
 max_ops = 50                  # Maximum operations in a plan
 max_files = 25                # Maximum files touched
 max_patch_bytes = 250000      # Maximum patch size in bytes
@@ -24,7 +24,7 @@ enabled = true                # Create backups before editing
 suffix = ".buildfix.bak"      # Backup file suffix
 
 [params]
-# key = "value"               # Parameters for unsafe fixes
+# key = "value"               # Parameters for unsafe ops
 ```
 
 ## [policy] Section
@@ -32,15 +32,15 @@ suffix = ".buildfix.bak"      # Backup file suffix
 ### allow
 
 Type: `string[]`
-Default: `[]` (all fixes allowed)
+Default: `[]` (all ops allowed)
 
-Allowlist patterns for fix IDs. If non-empty, only matching fixes are eligible.
+Allowlist patterns for policy keys. Policy keys are derived from receipt triggers as `sensor/check_id/code`.
 
 ```toml
 [policy]
 allow = [
   "builddiag/workspace.resolver_v2/*",
-  "depguard/deps.path_requires_version/*",
+  "depguard/deps.path_requires_version/missing_version",
 ]
 ```
 
@@ -49,7 +49,7 @@ allow = [
 Type: `string[]`
 Default: `[]`
 
-Denylist patterns for fix IDs. Matching fixes are never planned or applied.
+Denylist patterns for policy keys. Matching ops are blocked.
 
 ```toml
 [policy]
@@ -62,14 +62,14 @@ deny = [
 
 | Pattern | Description | Example |
 |---------|-------------|---------|
-| `sensor/*` | All fixes from sensor | `depguard/*` |
-| `sensor/check_id/*` | All codes for check | `builddiag/workspace.resolver_v2/*` |
+| `sensor/*` | All findings from a sensor | `depguard/*` |
+| `sensor/check_id/*` | All codes for a check | `builddiag/workspace.resolver_v2/*` |
 | `sensor/check_id/code` | Exact match | `depguard/deps.path_requires_version/missing_version` |
 
 ### Evaluation Order
 
 1. Explicit deny wins (if in deny list, blocked)
-2. If allow list non-empty, must be in allow list
+2. If allow list non-empty, must match allow list
 3. Otherwise, eligible by default
 
 ### allow_guarded
@@ -77,7 +77,7 @@ deny = [
 Type: `bool`
 Default: `false`
 
-Allow guarded fixes to apply. Guarded fixes are deterministic but higher impact.
+Allow guarded ops to apply. Guarded ops are deterministic but higher impact.
 
 ```toml
 [policy]
@@ -91,7 +91,7 @@ Equivalent CLI: `--allow-guarded`
 Type: `bool`
 Default: `false`
 
-Allow unsafe fixes to apply. Unsafe fixes require parameters.
+Allow unsafe ops to apply. Unsafe ops require parameters.
 
 ```toml
 [policy]
@@ -182,11 +182,12 @@ Example: `Cargo.toml` → `Cargo.toml.buildfix.bak`
 
 ## [params] Section
 
-Parameters for unsafe fixes. Keys match parameter names expected by specific fixes.
+Parameters for unsafe ops. Keys match parameter names expected by specific ops.
 
 ```toml
 [params]
 rust_version = "1.75"
+version = "1.2.3"
 ```
 
 These can also be provided via CLI: `--param rust_version=1.75`
@@ -196,6 +197,7 @@ These can also be provided via CLI: `--param rust_version=1.75`
 | Parameter | Used By | Description |
 |-----------|---------|-------------|
 | `rust_version` | MSRV normalization | Target rust-version when no workspace standard |
+| `version` | Path dependency version | Version to add when missing |
 
 ## CLI Overrides
 
@@ -207,11 +209,14 @@ CLI arguments take precedence over config file values:
 | `deny` | `--deny` |
 | `allow_guarded` | `--allow-guarded` |
 | `allow_unsafe` | `--allow-unsafe` |
-| `require_clean_hashes` | `--no-clean-hashes` |
+| `allow_dirty` | `--allow-dirty` |
+| `params` | `--param` |
+
+Plan-only: use `--no-clean-hashes` to disable precondition hashes.
 
 ## Example Configurations
 
-### Conservative (Minimal Fixes)
+### Conservative (Minimal Ops)
 
 ```toml
 [policy]
@@ -255,7 +260,7 @@ suffix = ".buildfix.bak"
 allow = []
 deny = []
 allow_guarded = true
-allow_unsafe = false
+allow_unsafe = true
 allow_dirty = false
 max_ops = 200
 max_files = 100
@@ -268,5 +273,5 @@ enabled = true
 ## See Also
 
 - [How to Configure buildfix](../how-to/configure.md)
-- [Fix Catalog](fixes.md) — Fix keys for allow/deny
+- [Fix Catalog](fixes.md) — Policy keys for allow/deny
 - [CLI Reference](cli.md) — Command-line options

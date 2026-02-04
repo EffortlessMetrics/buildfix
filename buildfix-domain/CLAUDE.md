@@ -29,8 +29,8 @@ trait RepoView {
 
 ```rust
 trait Fixer {
-    fn fix_key(&self) -> &'static str;
-    fn plan(&self, ctx: &PlanContext, repo: &dyn RepoView, receipts: &ReceiptSet) -> Vec<PlannedFix>;
+    fn meta(&self) -> FixerMeta;
+    fn plan(&self, ctx: &PlanContext, repo: &dyn RepoView, receipts: &ReceiptSet) -> Vec<PlanOp>;
 }
 ```
 
@@ -38,10 +38,10 @@ trait Fixer {
 
 | Fixer | Fix Key | Safety | Description |
 |-------|---------|--------|-------------|
-| `ResolverV2Fixer` | `resolver-v2` | Safe | Sets `[workspace].resolver = "2"` |
-| `PathDepVersionFixer` | `path-dep-version` | Safe | Adds version to path dependencies |
-| `WorkspaceInheritanceFixer` | `workspace-inheritance` | Safe | Converts deps to `{ workspace = true }` |
-| `MsrvNormalizeFixer` | `msrv-normalize` | Guarded | Normalizes crate MSRV to workspace value |
+| `ResolverV2Fixer` | `cargo.workspace_resolver_v2` | Safe | Sets `[workspace].resolver = "2"` |
+| `PathDepVersionFixer` | `cargo.path_dep_add_version` | Safe | Adds version to path dependencies |
+| `WorkspaceInheritanceFixer` | `cargo.use_workspace_dependency` | Safe | Converts deps to `{ workspace = true }` |
+| `MsrvNormalizeFixer` | `cargo.normalize_rust_version` | Guarded | Normalizes crate MSRV to workspace value |
 
 ## Key Types
 
@@ -59,15 +59,15 @@ struct PlanContext {
 
 ### `PlannerConfig`
 - `allow` / `deny` - Glob patterns for policy filtering
-- `clean_hashes` - Strip hashes from output for testing
-- `policy_caps` - Max operations/files/patch size
+- `params` - Unsafe op params
+- `max_ops` / `max_files` / `max_patch_bytes` - Policy caps
 
 ### `ReceiptSet`
 Helper for accessing receipts filtered by tool/check_id.
 
 ## Determinism Mechanisms
 
-- Fixes sorted by `stable_fix_sort_key()` (manifest path + operation type)
+- Ops sorted by a stable op sort key (manifest path + rule id + args)
 - Deterministic UUIDs via `Uuid::new_v5` hashing
 - Receipts sorted by path
 - Findings sorted by location/tool/check_id

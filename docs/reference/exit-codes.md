@@ -20,7 +20,7 @@ The operation completed successfully.
 - Plan was generated
 - Artifacts were written
 
-This includes cases where the plan is empty (no applicable fixes).
+This includes cases where the plan is empty (no applicable ops).
 
 ### Apply
 
@@ -39,7 +39,7 @@ A tool or runtime error occurred. This indicates a problem with buildfix itself 
 |-------|-----------------|
 | Missing receipts | `No receipts found in artifacts/` |
 | Invalid TOML | `Failed to parse Cargo.toml: TOML parse error` |
-| Invalid plan | `Failed to parse plan.json: expected field 'fixes'` |
+| Invalid plan | `Failed to parse plan.json: expected field 'ops'` |
 | I/O error | `Failed to write plan.json: permission denied` |
 | Missing plan | `File not found: artifacts/buildfix/plan.json` |
 
@@ -81,32 +81,32 @@ Working tree is dirty. Use --allow-dirty to override.
 - Commit or stash changes, or
 - Use `--allow-dirty` (not recommended)
 
-#### Guarded Fix Blocked
+#### Guarded Op Blocked
 
 A guarded fix requires explicit approval.
 
 ```
-Fix msrv blocked: guarded fixes require --allow-guarded
+Op blocked: guarded ops require --allow-guarded
 ```
 
 **Resolution**: Add `--allow-guarded` to the apply command.
 
-#### Unsafe Fix Blocked
+#### Unsafe Op Blocked
 
 An unsafe fix needs parameters or explicit approval.
 
 ```
-Fix blocked: unsafe fixes require --allow-unsafe and parameters
+Op blocked: unsafe ops require --allow-unsafe and parameters
 ```
 
 **Resolution**: Provide required parameters via CLI or config.
 
-#### Fix Denied by Policy
+#### Op Denied by Policy
 
 The fix matches a deny pattern or isn't in the allow list.
 
 ```
-Fix depguard/deps.path_requires_version/missing_version denied by policy
+Op depguard/deps.path_requires_version/missing_version denied by policy
 ```
 
 **Resolution**: Update `buildfix.toml` allow/deny lists.
@@ -168,13 +168,13 @@ Even when exiting with code 2, buildfix writes artifacts:
 
 ### Plan (exit 2)
 
-- `plan.json` with blocked fixes marked
+- `plan.json` with blocked ops marked
 - `plan.md` explaining blocks
 - `report.json` with `warn` status
 
 ### Apply (exit 2)
 
-- `apply.json` with `skipped` or `failed` results
+- `apply.json` with `blocked` or `failed` results
 - `apply.md` explaining what happened
 - `report.json` with `warn` or `fail` status
 

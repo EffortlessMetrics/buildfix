@@ -1,6 +1,7 @@
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 use fs_err as fs;
+use std::process::Command as ProcessCommand;
 
 #[derive(Debug, Parser)]
 #[command(name = "xtask", about = "Workspace helper tasks")]
@@ -18,6 +19,10 @@ enum Command {
         #[arg(long, default_value = "artifacts")]
         dir: String,
     },
+    /// Bless golden fixtures (overwrite expected outputs).
+    BlessFixtures,
+    /// Validate receipts and buildfix artifacts against schemas.
+    Validate,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -34,6 +39,25 @@ fn main() -> anyhow::Result<()> {
                 fs::create_dir_all(format!("{dir}/{s}"))?;
             }
             println!("initialized {dir}/{{buildscan,builddiag,depguard,buildfix}}");
+        }
+        Command::BlessFixtures => {
+            let status = ProcessCommand::new("cargo")
+                .args(["test", "-p", "buildfix-domain", "--test", "golden_fixtures"])
+                .env("BUILDFIX_BLESS", "1")
+                .status()
+                .context("run golden fixture blessing")?;
+            if !status.success() {
+                anyhow::bail!("bless-fixtures failed");
+            }
+        }
+        Command::Validate => {
+            let status = ProcessCommand::new("cargo")
+                .args(["run", "-p", "buildfix", "--", "validate"])
+                .status()
+                .context("run buildfix validate")?;
+            if !status.success() {
+                anyhow::bail!("validate failed");
+            }
         }
     }
     Ok(())

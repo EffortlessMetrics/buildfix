@@ -1,7 +1,7 @@
 use crate::planner::ReceiptSet;
 use crate::ports::RepoView;
 use buildfix_types::ops::SafetyClass;
-use buildfix_types::plan::PlannedFix;
+use buildfix_types::plan::PlanOp;
 use serde::Serialize;
 
 mod msrv;
@@ -33,7 +33,7 @@ pub trait Fixer {
         ctx: &crate::planner::PlanContext,
         repo: &dyn RepoView,
         receipts: &ReceiptSet,
-    ) -> anyhow::Result<Vec<PlannedFix>>;
+    ) -> anyhow::Result<Vec<PlanOp>>;
 }
 
 pub fn builtin_fixers() -> Vec<Box<dyn Fixer>> {

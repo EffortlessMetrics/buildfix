@@ -6,7 +6,6 @@
 //! - Multiple runs with the same input produce identical output
 
 use buildfix_domain::{FsRepoView, PlanContext, Planner, PlannerConfig};
-use buildfix_types::plan::PolicyCaps;
 use buildfix_types::receipt::ToolInfo;
 use camino::Utf8PathBuf;
 use fs_err as fs;
@@ -96,12 +95,7 @@ edition = "2021"
         let ctx = PlanContext {
             repo_root: root.clone(),
             artifacts_dir,
-            config: PlannerConfig {
-                allow: vec![],
-                deny: vec![],
-                require_clean_hashes: true,
-                caps: PolicyCaps::default(),
-            },
+            config: PlannerConfig::default(),
         };
 
         let tool = ToolInfo {
@@ -115,17 +109,17 @@ edition = "2021"
         let plan1 = planner.plan(&ctx, &repo, &receipts, tool.clone()).unwrap();
         let plan2 = planner.plan(&ctx, &repo, &receipts, tool).unwrap();
 
-        // Fix IDs should be in the same order
-        let fix_ids_1: Vec<&str> = plan1.fixes.iter().map(|f| f.fix_id.0.as_str()).collect();
-        let fix_ids_2: Vec<&str> = plan2.fixes.iter().map(|f| f.fix_id.0.as_str()).collect();
+        // Op IDs should be in the same order
+        let op_ids_1: Vec<&str> = plan1.ops.iter().map(|o| o.id.as_str()).collect();
+        let op_ids_2: Vec<&str> = plan2.ops.iter().map(|o| o.id.as_str()).collect();
 
-        prop_assert_eq!(&fix_ids_1, &fix_ids_2, "fix ordering should be deterministic");
+        prop_assert_eq!(&op_ids_1, &op_ids_2, "op ordering should be deterministic");
 
-        // Fix titles should also be in the same order
-        let titles_1: Vec<&str> = plan1.fixes.iter().map(|f| f.title.as_str()).collect();
-        let titles_2: Vec<&str> = plan2.fixes.iter().map(|f| f.title.as_str()).collect();
+        // Op targets should also be in the same order
+        let targets_1: Vec<&str> = plan1.ops.iter().map(|o| o.target.path.as_str()).collect();
+        let targets_2: Vec<&str> = plan2.ops.iter().map(|o| o.target.path.as_str()).collect();
 
-        prop_assert_eq!(&titles_1, &titles_2, "fix title ordering should be deterministic");
+        prop_assert_eq!(&targets_1, &targets_2, "op target ordering should be deterministic");
     }
 
     /// Summary counts match actual fix counts.
@@ -180,19 +174,8 @@ members = []
         let plan = planner.plan(&ctx, &repo, &receipts, tool).unwrap();
 
         // Verify summary counts
-        let safe_count = plan.fixes.iter()
-            .filter(|f| f.safety == buildfix_types::ops::SafetyClass::Safe)
-            .count() as u64;
-        let guarded_count = plan.fixes.iter()
-            .filter(|f| f.safety == buildfix_types::ops::SafetyClass::Guarded)
-            .count() as u64;
-        let unsafe_count = plan.fixes.iter()
-            .filter(|f| f.safety == buildfix_types::ops::SafetyClass::Unsafe)
-            .count() as u64;
-
-        prop_assert_eq!(plan.summary.safe, safe_count);
-        prop_assert_eq!(plan.summary.guarded, guarded_count);
-        prop_assert_eq!(plan.summary.unsafe_, unsafe_count);
-        prop_assert_eq!(plan.summary.fixes_total, plan.fixes.len() as u64);
+        prop_assert_eq!(plan.summary.ops_total, plan.ops.len() as u64);
+        let blocked_count = plan.ops.iter().filter(|o| o.blocked).count() as u64;
+        prop_assert_eq!(plan.summary.ops_blocked, blocked_count);
     }
 }

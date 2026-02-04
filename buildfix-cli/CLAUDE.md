@@ -9,6 +9,8 @@ cargo build -p buildfix
 cargo run -p buildfix -- plan
 cargo run -p buildfix -- apply
 cargo run -p buildfix -- explain resolver-v2
+cargo run -p buildfix -- list-fixes
+cargo run -p buildfix -- validate
 ```
 
 ## Subcommands
@@ -23,6 +25,7 @@ buildfix plan [OPTIONS]
   --out-dir <PATH>         # Output directory (default: artifacts/buildfix/)
   --allow <PATTERN>        # Allow glob patterns
   --deny <PATTERN>         # Deny glob patterns
+  --param <KEY=VALUE>      # Params for unsafe ops (repeatable)
   --max-ops <N>            # Max operations per plan
   --max-files <N>          # Max files to modify
   --max-patch-bytes <N>    # Max patch size
@@ -43,6 +46,7 @@ buildfix apply [OPTIONS]
   --allow-guarded          # Include guarded fixes
   --allow-unsafe           # Include unsafe fixes
   --allow-dirty            # Allow dirty working tree
+  --param <KEY=VALUE>      # Params for unsafe ops (repeatable)
 ```
 
 **Outputs:** `apply.json`, `apply.md`, `patch.diff`
@@ -56,14 +60,20 @@ buildfix explain <FIX_KEY_OR_ID>
 
 **Outputs:** Safety class, description, triggers, remediation steps
 
+### `list-fixes`
+List known fixes and policy keys.
+
+### `validate`
+Validate receipts and buildfix artifacts against schemas.
+
 ## Configuration File
 
 Optional `buildfix.toml` in repo root:
 
 ```toml
 [policy]
-allow = ["Cargo.toml", "crates/*/Cargo.toml"]
-deny = ["vendor/*"]
+allow = ["builddiag/workspace.resolver_v2/*"]
+deny = ["builddiag/rust.msrv_consistent/*"]
 max_ops = 50
 max_files = 25
 max_patch_bytes = 250000

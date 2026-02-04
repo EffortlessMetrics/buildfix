@@ -1,8 +1,8 @@
 use crate::fixers::{Fixer, FixerMeta};
 use crate::planner::ReceiptSet;
 use crate::ports::RepoView;
-use buildfix_types::ops::{FixId, Operation, SafetyClass};
-use buildfix_types::plan::PlannedFix;
+use buildfix_types::ops::{OpKind, OpTarget, SafetyClass};
+use buildfix_types::plan::{PlanOp, Rationale};
 use camino::{Utf8Path, Utf8PathBuf};
 use std::collections::{BTreeMap, BTreeSet};
 use toml_edit::{DocumentMut, Table};
@@ -21,9 +21,9 @@ impl PathDepVersionFixer {
     ) -> BTreeSet<Utf8PathBuf> {
         let mut out = BTreeSet::new();
         for t in triggers {
-            let Some(loc) = &t.location else { continue };
-            if loc.path.as_str().ends_with("Cargo.toml") {
-                out.insert(loc.path.clone());
+            let Some(path) = &t.path else { continue };
+            if path.ends_with("Cargo.toml") {
+                out.insert(Utf8PathBuf::from(path.clone()));
             }
         }
         out
@@ -211,7 +211,7 @@ impl Fixer for PathDepVersionFixer {
         _ctx: &crate::planner::PlanContext,
         repo: &dyn RepoView,
         receipts: &ReceiptSet,
-    ) -> anyhow::Result<Vec<PlannedFix>> {
+    ) -> anyhow::Result<Vec<PlanOp>> {
         let triggers =
             receipts.matching_findings(Self::SENSORS, Self::CHECK_IDS, &["missing_version"]);
         if triggers.is_empty() {
@@ -221,9 +221,9 @@ impl Fixer for PathDepVersionFixer {
         let mut triggers_by_manifest: BTreeMap<Utf8PathBuf, Vec<buildfix_types::plan::FindingRef>> =
             BTreeMap::new();
         for t in &triggers {
-            if let Some(loc) = &t.location {
+            if let Some(path) = &t.path {
                 triggers_by_manifest
-                    .entry(loc.path.clone())
+                    .entry(Utf8PathBuf::from(path.clone()))
                     .or_default()
                     .push(t.clone());
             }
@@ -243,41 +243,79 @@ impl Fixer for PathDepVersionFixer {
 
             let candidates = Self::collect_path_deps(&doc);
             for cand in candidates {
-                let Some(version) = Self::infer_dep_version(repo, &manifest, &cand.dep_path) else {
-                    // If we can't infer a version deterministically, skip. This keeps the fix set
-                    // "safe by default".
-                    continue;
+                let version = Self::infer_dep_version(repo, &manifest, &cand.dep_path);
+                let safety = if version.is_some() {
+                    SafetyClass::Safe
+                } else {
+                    SafetyClass::Unsafe
                 };
 
-                let title = format!(
-                    "Add version = \"{}\" for path dependency {}",
-                    version, cand.dep
-                );
-
-                fixes.push(PlannedFix {
-                    id: String::new(),
-                    fix_id: FixId::new(Self::FIX_ID),
-                    safety: SafetyClass::Safe,
-                    title,
-                    description: Some(
-                        "Adds a version field so the path dependency is publishable / policy-compliant.".to_string()
+                let mut args = serde_json::Map::new();
+                args.insert(
+                    "toml_path".to_string(),
+                    serde_json::Value::Array(
+                        cand.toml_path
+                            .iter()
+                            .map(|s| serde_json::Value::String(s.clone()))
+                            .collect(),
                     ),
-                    triggers: triggers_by_manifest
-                        .get(&manifest)
-                        .cloned()
-                        .unwrap_or_else(Vec::new),
-                    operations: vec![Operation::EnsurePathDepHasVersion {
-                        manifest: manifest.clone(),
-                        toml_path: cand.toml_path.clone(),
-                        dep: cand.dep.clone(),
-                        dep_path: cand.dep_path.clone(),
-                        version,
-                    }],
-                    preconditions: vec![],
+                );
+                args.insert(
+                    "dep".to_string(),
+                    serde_json::Value::String(cand.dep.clone()),
+                );
+                args.insert(
+                    "dep_path".to_string(),
+                    serde_json::Value::String(cand.dep_path.clone()),
+                );
+                if let Some(v) = &version {
+                    args.insert("version".to_string(), serde_json::Value::String(v.clone()));
+                } else {
+                    args.insert("version".to_string(), serde_json::Value::Null);
+                }
+
+                let manifest_path = manifest.to_string();
+                let findings = triggers_by_manifest
+                    .get(&manifest)
+                    .cloned()
+                    .unwrap_or_else(Vec::new);
+                let fix_key = findings
+                    .first()
+                    .map(fix_key_for)
+                    .unwrap_or_else(|| "unknown/-/-".to_string());
+
+                fixes.push(PlanOp {
+                    id: String::new(),
+                    safety,
+                    blocked: false,
+                    blocked_reason: None,
+                    target: OpTarget {
+                        path: manifest_path,
+                    },
+                    kind: OpKind::TomlTransform {
+                        rule_id: "ensure_path_dep_has_version".to_string(),
+                        args: Some(serde_json::Value::Object(args)),
+                    },
+                    rationale: Rationale {
+                        fix_key,
+                        description: Some(Self::DESCRIPTION.to_string()),
+                        findings,
+                    },
+                    params_required: if version.is_some() {
+                        vec![]
+                    } else {
+                        vec!["version".to_string()]
+                    },
+                    preview: None,
                 });
             }
         }
 
         Ok(fixes)
     }
+}
+
+fn fix_key_for(f: &buildfix_types::plan::FindingRef) -> String {
+    let check = f.check_id.clone().unwrap_or_else(|| "-".to_string());
+    format!("{}/{}/{}", f.source, check, f.code)
 }

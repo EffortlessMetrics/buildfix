@@ -8,7 +8,7 @@ Fixers are the core planning units in buildfix. Each fixer:
 
 1. Declares metadata (fix key, safety class, consumed sensors/checks)
 2. Matches sensor findings via `ReceiptSet`
-3. Emits `PlannedFix` operations with a safety class
+3. Emits `PlanOp` operations with a safety class
 
 ## Architecture
 
@@ -41,8 +41,8 @@ Create a new file in `buildfix-domain/src/fixers/`:
 use crate::fixers::{Fixer, FixerMeta};
 use crate::planner::ReceiptSet;
 use crate::ports::RepoView;
-use buildfix_types::ops::{FixId, Operation, SafetyClass};
-use buildfix_types::plan::PlannedFix;
+use buildfix_types::ops::{OpKind, OpTarget, SafetyClass};
+use buildfix_types::plan::{PlanOp, Rationale};
 use camino::Utf8PathBuf;
 use toml_edit::DocumentMut;
 
@@ -54,7 +54,6 @@ impl MyFixer {
     const SENSORS: &'static [&'static str] = &["mysensor"];
     const CHECK_IDS: &'static [&'static str] = &["my.check_id"];
 
-    /// Check if the fix is needed by inspecting repo state.
     fn needs_fix(repo: &dyn RepoView, manifest: &Utf8PathBuf) -> bool {
         let contents = match repo.read_to_string(manifest) {
             Ok(c) => c,
@@ -68,6 +67,7 @@ impl MyFixer {
 
         // Determine if fix is needed based on current state
         // Return true if the fix should be applied
+        let _ = doc;
         todo!()
     }
 }
@@ -88,31 +88,41 @@ impl Fixer for MyFixer {
         _ctx: &crate::planner::PlanContext,
         repo: &dyn RepoView,
         receipts: &ReceiptSet,
-    ) -> anyhow::Result<Vec<PlannedFix>> {
-        // Find matching findings from receipts
-        let triggers = receipts.matching_findings(Self::SENSORS, Self::CHECK_IDS, &[]);
-        if triggers.is_empty() {
+    ) -> anyhow::Result<Vec<PlanOp>> {
+        let findings = receipts.matching_findings(Self::SENSORS, Self::CHECK_IDS, &[]);
+        if findings.is_empty() {
             return Ok(vec![]);
         }
 
-        // Check if fix is actually needed
         let manifest: Utf8PathBuf = "Cargo.toml".into();
         if !Self::needs_fix(repo, &manifest) {
             return Ok(vec![]);
         }
 
-        // Return the planned fix
-        Ok(vec![PlannedFix {
-            id: String::new(),  // Filled in by planner
-            fix_id: FixId::new(Self::FIX_ID),
+        let fix_key = findings
+            .first()
+            .map(|f| format!("{}/{}/{}", f.source, f.check_id.clone().unwrap_or_default(), f.code))
+            .unwrap_or_else(|| "unknown/-/-".to_string());
+
+        Ok(vec![PlanOp {
+            id: String::new(),
             safety: SafetyClass::Safe,
-            title: "Title shown in plan".to_string(),
-            description: Some("Detailed description".to_string()),
-            triggers,
-            operations: vec![
-                // Add your operations here
-            ],
-            preconditions: vec![],  // Filled in by attach_preconditions
+            blocked: false,
+            blocked_reason: None,
+            target: OpTarget {
+                path: manifest.to_string(),
+            },
+            kind: OpKind::TomlTransform {
+                rule_id: "my_rule_id".to_string(),
+                args: Some(serde_json::json!({ "example": "value" })),
+            },
+            rationale: Rationale {
+                fix_key,
+                description: Some(Self::DESCRIPTION.to_string()),
+                findings,
+            },
+            params_required: vec![],
+            preview: None,
         }])
     }
 }
@@ -120,40 +130,26 @@ impl Fixer for MyFixer {
 
 ## Step 3: Define the Operation
 
-If you need a new operation type, add it to `buildfix-types/src/ops.rs`:
+Use existing `OpKind` variants when possible:
 
-```rust
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(tag = "type")]
-pub enum Operation {
-    // ... existing variants ...
+- `toml_set` for setting a specific TOML path
+- `toml_remove` for deleting a TOML path
+- `toml_transform` with a new `rule_id` for more complex edits
 
-    /// My new operation
-    MyOperation {
-        /// Target manifest file
-        manifest: Utf8PathBuf,
-        /// Value to set
-        value: String,
-    },
-}
-```
+If you add a new `rule_id`, it must be implemented in the edit engine.
 
 ## Step 4: Implement the Edit
 
-Add edit logic to `buildfix-edit/src/lib.rs` in the `apply_operation` function:
+Add edit logic to `buildfix-edit/src/lib.rs` in `apply_op_to_content`:
 
 ```rust
-Operation::MyOperation { manifest, value } => {
-    let path = repo_root.join(manifest);
-    let content = fs::read_to_string(&path)?;
-
-    // Parse and modify using toml_edit
-    let mut doc = content.parse::<DocumentMut>()?;
-
-    // Make changes...
-    // doc["section"]["key"] = toml_edit::value(value);
-
-    Ok(doc.to_string())
+OpKind::TomlTransform { rule_id, args } => match rule_id.as_str() {
+    "my_rule_id" => {
+        // Parse and modify using toml_edit
+        // doc["section"]["key"] = toml_edit::value("new");
+        let _ = args;
+    }
+    _ => {}
 }
 ```
 
@@ -170,7 +166,7 @@ pub fn builtin_fixers() -> Vec<Box<dyn Fixer>> {
         Box::new(path_dep_version::PathDepVersionFixer),
         Box::new(workspace_inheritance::WorkspaceInheritanceFixer),
         Box::new(msrv::MsrvNormalizeFixer),
-        Box::new(my_fixer::MyFixer),  // Add here
+        Box::new(my_fixer::MyFixer),
     ]
 }
 ```
@@ -195,7 +191,7 @@ FixExplanation {
             code: None,
         },
     ],
-},
+}
 ```
 
 ## Step 7: Write Tests
@@ -209,7 +205,7 @@ Scenario: My fixer applies when finding present
   Given a workspace with my issue
   And a receipt from mysensor with finding my.check_id
   When I run buildfix plan
-  Then the plan contains my_fix
+  Then the plan contains my_rule_id
   And the patch shows the expected change
 ```
 
@@ -217,16 +213,19 @@ Scenario: My fixer applies when finding present
 
 ```rust
 #[test]
-fn test_my_fixer_produces_fix() {
+fn test_my_fixer_produces_op() {
     let fixer = MyFixer;
     let repo = MockRepoView::new(/* setup */);
     let receipts = ReceiptSet::from(/* test receipts */);
     let ctx = PlanContext::default();
 
-    let fixes = fixer.plan(&ctx, &repo, &receipts).unwrap();
+    let ops = fixer.plan(&ctx, &repo, &receipts).unwrap();
 
-    assert_eq!(fixes.len(), 1);
-    assert_eq!(fixes[0].fix_id.as_str(), "mysensor.my_fix");
+    assert_eq!(ops.len(), 1);
+    match &ops[0].kind {
+        OpKind::TomlTransform { rule_id, .. } => assert_eq!(rule_id, "my_rule_id"),
+        _ => panic!("expected toml_transform op"),
+    }
 }
 ```
 

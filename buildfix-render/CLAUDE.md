@@ -13,15 +13,15 @@ cargo clippy -p buildfix-render
 
 ### `render_plan_md(plan: &BuildfixPlan) -> String`
 Renders a plan as markdown with:
-- Summary counts (total fixes, by safety class)
-- List of fixes with title, id, safety, triggers
-- Operation details per fix
+- Summary counts (ops_total, ops_blocked, files_touched)
+- List of ops with safety, policy keys, findings
+- Operation details per op
 
 ### `render_apply_md(apply: &BuildfixApply) -> String`
 Renders apply results as markdown with:
-- Attempted/Applied/Skipped/Failed counts
-- Per-fix results with status and file changes
-- Error details for failed fixes
+- Attempted/Applied/Blocked/Failed counts
+- Per-op results with status and file changes
+- Error details for failed ops
 
 ## Output Format
 
@@ -29,15 +29,16 @@ Renders apply results as markdown with:
 # Buildfix Plan
 
 ## Summary
-- Total fixes: 3
-- Safe: 2, Guarded: 1, Unsafe: 0
+- Ops total: 3
+- Ops blocked: 0
+- Files touched: 2
 
-## Fixes
+## Ops
 
-### 1. Add workspace resolver v2
+### 1. builddiag/workspace.resolver_v2/not_v2
 - **ID:** `abc123`
 - **Safety:** Safe
-- **Triggers:** builddiag/resolver-missing
+- **Findings:** builddiag/workspace.resolver_v2/not_v2
 ...
 ```
 

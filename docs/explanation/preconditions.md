@@ -28,11 +28,11 @@ When generating a plan, buildfix:
 ```json
 {
   "preconditions": {
-    "files": {
-      "Cargo.toml": "sha256:e3b0c44298fc1c14...",
-      "crates/foo/Cargo.toml": "sha256:d7a8fbb307d78094..."
-    },
-    "git_head": "abc123def456...",
+    "files": [
+      { "path": "Cargo.toml", "sha256": "e3b0c44298fc1c14..." },
+      { "path": "crates/foo/Cargo.toml", "sha256": "d7a8fbb307d78094..." }
+    ],
+    "head_sha": "abc123def456...",
     "dirty": false
   }
 }
@@ -100,7 +100,7 @@ Preconditions can be disabled (not recommended):
 buildfix plan --no-clean-hashes
 ```
 
-This sets `require_clean_hashes: false` in the plan. Apply will skip hash verification.
+This clears `preconditions.files` in the plan. Apply will skip hash verification.
 
 **Warning**: Disabling preconditions removes drift protection. Only do this if you understand the risks.
 
@@ -111,18 +111,12 @@ In addition to file hashes, buildfix captures the git HEAD SHA:
 ```json
 {
   "preconditions": {
-    "git_head": "abc123def456..."
+    "head_sha": "abc123def456..."
   }
 }
 ```
 
-This provides:
-- Best-effort drift detection even for files not in the plan
-- Audit trail of which commit the plan was generated against
-
-Git head verification is advisory (logged, not enforced) because:
-- File hashes are the authoritative check
-- Git state might change without affecting target files
+When provided (via `--git-head-precondition`), the head SHA is enforced and will block apply on mismatch.
 
 ## Dirty Tree Detection
 

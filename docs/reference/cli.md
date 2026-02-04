@@ -8,10 +8,12 @@ Complete reference for buildfix commands and options.
 buildfix <COMMAND>
 
 Commands:
-  plan      Generate a deterministic fix plan from receipts
-  apply     Apply an existing plan (default: dry-run)
-  explain   Explain what a fix does
-  help      Print help
+  plan         Generate a deterministic fix plan from receipts
+  apply        Apply an existing plan (default: dry-run)
+  explain      Explain what a fix does
+  list-fixes   List known fixes and their policy keys
+  validate     Validate receipts and buildfix artifacts
+  help         Print help
 ```
 
 ## buildfix plan
@@ -29,13 +31,16 @@ buildfix plan [OPTIONS]
 | `--repo-root <PATH>` | `.` | Repository root directory |
 | `--artifacts-dir <PATH>` | `<repo-root>/artifacts` | Directory containing sensor receipts |
 | `--out-dir <PATH>` | `<artifacts-dir>/buildfix` | Output directory for plan artifacts |
-| `--allow <PATTERN>` | | Allowlist patterns for fix IDs (repeatable) |
-| `--deny <PATTERN>` | | Denylist patterns for fix IDs (repeatable) |
-| `--max-ops <N>` | `50` | Maximum operations in plan |
-| `--max-files <N>` | `25` | Maximum files touched |
-| `--max-patch-bytes <N>` | `250000` | Maximum patch size in bytes |
+| `--allow <PATTERN>` | | Allowlist patterns for policy keys (repeatable) |
+| `--deny <PATTERN>` | | Denylist patterns for policy keys (repeatable) |
+| `--max-ops <N>` | | Maximum operations in plan |
+| `--max-files <N>` | | Maximum files touched |
+| `--max-patch-bytes <N>` | | Maximum patch size in bytes |
 | `--no-clean-hashes` | `false` | Disable SHA256 preconditions (not recommended) |
 | `--git-head-precondition` | `false` | Include git HEAD SHA in preconditions |
+| `--param <KEY=VALUE>` | | Parameter values for unsafe ops (repeatable) |
+
+Policy keys are derived from receipt triggers as `sensor/check_id/code`. Use `*` wildcards to match multiple codes.
 
 ### Outputs
 
@@ -55,8 +60,11 @@ buildfix plan
 # Custom paths
 buildfix plan --repo-root /path/to/repo --out-dir /tmp/buildfix
 
-# Allow only specific fixes
-buildfix plan --allow "depguard/*" --deny "builddiag/rust.msrv_consistent/*"
+# Allow only resolver-v2 and path-dep-version triggers
+buildfix plan --allow "builddiag/workspace.resolver_v2/*" --allow "depguard/deps.path_requires_version/missing_version"
+
+# Provide params for unsafe ops
+buildfix plan --param rust_version=1.75
 ```
 
 ## buildfix apply
@@ -74,9 +82,10 @@ buildfix apply [OPTIONS]
 | `--repo-root <PATH>` | `.` | Repository root directory |
 | `--out-dir <PATH>` | `<repo-root>/artifacts/buildfix` | Directory containing plan.json |
 | `--apply` | `false` | Actually write changes (otherwise dry-run) |
-| `--allow-guarded` | `false` | Allow guarded fixes to apply |
-| `--allow-unsafe` | `false` | Allow unsafe fixes to apply (requires params) |
+| `--allow-guarded` | `false` | Allow guarded ops to apply |
+| `--allow-unsafe` | `false` | Allow unsafe ops to apply (requires params) |
 | `--allow-dirty` | `false` | Allow apply on dirty working tree |
+| `--param <KEY=VALUE>` | | Parameter values for unsafe ops (repeatable) |
 
 ### Behavior
 
@@ -86,10 +95,12 @@ Without `--apply`:
 - Does NOT write to repo files
 
 With `--apply`:
-- Verifies all file hashes match plan
+- Verifies all file hashes match the plan
 - Creates backups in `<out-dir>/backups/`
 - Applies changes atomically
 - Records results in apply.json
+
+A policy block (allow/deny, safety gate, caps, precondition mismatch, dirty tree) returns exit code `2`.
 
 ### Outputs
 
@@ -107,14 +118,14 @@ With `--apply`:
 # Dry-run (validate only)
 buildfix apply
 
-# Apply safe fixes
+# Apply safe ops
 buildfix apply --apply
 
-# Include guarded fixes
+# Include guarded ops
 buildfix apply --apply --allow-guarded
 
-# Include unsafe fixes (when params provided)
-buildfix apply --apply --allow-unsafe
+# Include unsafe ops (when params provided)
+buildfix apply --apply --allow-unsafe --param version=1.2.3
 ```
 
 ## buildfix explain
@@ -142,62 +153,35 @@ Lookup supports multiple formats:
 | Partial ID | `workspace_resolver_v2` |
 | With underscores | `resolver_v2` |
 
-### Available Fixes
-
-| Key | Fix ID | Safety |
-|-----|--------|--------|
-| `resolver-v2` | `cargo.workspace_resolver_v2` | Safe |
-| `path-dep-version` | `cargo.path_dep_add_version` | Safe |
-| `workspace-inheritance` | `cargo.use_workspace_dependency` | Safe |
-| `msrv` | `cargo.normalize_rust_version` | Guarded |
-
 ### Output
 
+`buildfix explain` includes policy keys (derived from triggers) that can be used in allow/deny lists.
+
+## buildfix list-fixes
+
+List known fixes and their policy keys.
+
 ```
-================================================================================
-FIX: Workspace Resolver V2
-================================================================================
-
-Key:     resolver-v2
-Fix ID:  cargo.workspace_resolver_v2
-Safety:  Safe
-
-DESCRIPTION
---------------------------------------------------------------------------------
-Sets `[workspace].resolver = "2"` in the root Cargo.toml.
-...
-
-TRIGGERING FINDINGS
---------------------------------------------------------------------------------
-This fix is triggered by sensor findings matching:
-
-  - builddiag / workspace.resolver_v2
-  - cargo / cargo.workspace.resolver_v2
-
-SAFETY CLASS: Safe
---------------------------------------------------------------------------------
-SAFE fixes are fully determined from repo-local truth and have low impact.
-They are applied automatically with `buildfix apply --apply`.
-
-SAFETY RATIONALE
---------------------------------------------------------------------------------
-This fix is classified as SAFE because:
-- It only modifies the resolver field in the workspace table
-...
-
-REMEDIATION GUIDANCE
---------------------------------------------------------------------------------
-To manually apply this fix, add or update your root Cargo.toml:
-...
+buildfix list-fixes [--format text|json]
 ```
 
-### Examples
+JSON output includes `policy_keys` for each fix.
 
-```bash
-buildfix explain resolver-v2
-buildfix explain path-dep-version
-buildfix explain cargo.normalize_rust_version
+## buildfix validate
+
+Validate receipts and buildfix artifacts against embedded schemas.
+
 ```
+buildfix validate [OPTIONS]
+```
+
+### Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--repo-root <PATH>` | `.` | Repository root directory |
+| `--artifacts-dir <PATH>` | `<repo-root>/artifacts` | Directory containing sensor receipts |
+| `--out-dir <PATH>` | `<artifacts-dir>/buildfix` | Directory containing buildfix artifacts |
 
 ## Environment Variables
 

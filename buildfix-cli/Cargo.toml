@@ -9,6 +9,12 @@ homepage.workspace = true
 readme = "README.md"
 keywords = ["cargo", "workspace", "repair", "cli", "toml"]
 categories = ["command-line-utilities", "development-tools"]
+include = [
+  "src/**",
+  "schemas/**",
+  "README.md",
+  "Cargo.toml",
+]
 
 [[bin]]
 name = "buildfix"
@@ -20,12 +26,15 @@ camino.workspace = true
 chrono.workspace = true
 clap.workspace = true
 fs-err.workspace = true
+hex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 thiserror.workspace = true
 toml.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+jsonschema = { version = "0.18", features = ["draft202012"] }
 
 buildfix-domain = { path = "../buildfix-domain" }
 buildfix-edit = { path = "../buildfix-edit" }

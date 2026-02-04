@@ -20,7 +20,7 @@ It does **not** prove correctness. Sensors + CI are the proof layer.
 
 - run builds/tests/coverage/benchmarks
 - call the network
-- run arbitrary shell commands as part of fixes
+- run arbitrary shell commands as part of ops
 - refactor code
 - make style-only/format-only edits
 - invent dependency versions without a repo-local source of truth
@@ -47,12 +47,12 @@ Only files needed for deterministic edits, for example:
 
 - root `Cargo.toml`
 - member `Cargo.toml` files (as needed by a fix)
-- `rust-toolchain.toml` (only for allowlisted toolchain/MSRV fixes)
+- `rust-toolchain.toml` (only for allowlisted toolchain/MSRV ops)
 - other config files only when a fix explicitly requires them
 
 ### Policy input (user / repo)
 
-- allow/deny list for fix keys (and/or check/code patterns)
+- allow/deny list for policy keys (sensor/check_id/code)
 - safety policy knobs:
   - allow guarded ops
   - allow unsafe ops only with explicit parameters
@@ -84,6 +84,7 @@ This allows the director/cockpit to display “Fix plan available / applied / bl
 - `buildfix apply`
 - `buildfix list-fixes`
 - `buildfix explain <fix-key|check_id|code>`
+- `buildfix validate`
 
 ## Exit semantics
 
@@ -118,7 +119,7 @@ Defaults:
 
 ## v0.1 fix set (allowlisted)
 
-Only fixes that are provably deterministic from repo-local truth:
+Only ops that are provably deterministic from repo-local truth:
 
 1. Workspace resolver v2 (`[workspace].resolver = "2"`)
 2. Path dependency requires version (read target crate version)

@@ -15,16 +15,15 @@ cargo clippy -p buildfix-types
 - `SafetyClass` enum: `Safe`, `Guarded`, `Unsafe` - determines auto-apply behavior
 
 ### Plan Types (`plan.rs`)
-- `BuildfixPlan` - Complete plan with fixes, receipts consumed, and policy info
-- `PlannedFix` - Individual fix with id, title, operations, triggers, safety class
-- `Precondition` enum: `FileExists`, `FileSha256`, `GitHeadSha`
+- `BuildfixPlan` - Complete plan with ops, inputs, and policy info
+- `PlanOp` - Individual op with target, kind, rationale, safety class
+- `FilePrecondition` - File SHA256 preconditions
 
 ### Operations (`ops.rs`)
-- `Operation` enum - Tagged operations that can be applied:
-  - `EnsureWorkspaceResolverV2`
-  - `EnsurePathDepHasVersion`
-  - `UseWorkspaceDependency`
-  - `SetPackageRustVersion`
+- `OpKind` enum - Tagged operation kinds:
+  - `toml_set`
+  - `toml_remove`
+  - `toml_transform` (rule_id + args)
 
 ### Receipt Types (`receipt.rs`)
 - `ReceiptEnvelope` - Generic sensor receipt with tool, check_id, findings
@@ -32,7 +31,7 @@ cargo clippy -p buildfix-types
 
 ### Apply Types (`apply.rs`)
 - `BuildfixApply` - Results of applying a plan
-- `AppliedFixResult` - Per-fix outcome with status and file changes
+- `ApplyResult` - Per-op outcome with status and file changes
 
 ## Schema Versions
 
