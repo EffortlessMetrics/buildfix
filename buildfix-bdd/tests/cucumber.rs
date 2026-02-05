@@ -1,3 +1,7 @@
+// TODO: Migrate from deprecated Command::cargo_bin to cargo_bin_cmd! macro
+// when assert_cmd stabilizes the replacement API.
+#![allow(deprecated)]
+
 use anyhow::Context;
 use assert_cmd::Command;
 use camino::Utf8PathBuf;
