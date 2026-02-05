@@ -4,6 +4,7 @@ use buildfix_types::ops::SafetyClass;
 use buildfix_types::plan::PlanOp;
 use serde::Serialize;
 
+mod edition;
 mod msrv;
 mod path_dep_version;
 mod resolver_v2;
@@ -42,6 +43,7 @@ pub fn builtin_fixers() -> Vec<Box<dyn Fixer>> {
         Box::new(path_dep_version::PathDepVersionFixer),
         Box::new(workspace_inheritance::WorkspaceInheritanceFixer),
         Box::new(msrv::MsrvNormalizeFixer),
+        Box::new(edition::EditionUpgradeFixer),
     ]
 }
 

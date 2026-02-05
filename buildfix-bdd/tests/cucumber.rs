@@ -508,6 +508,105 @@ async fn assert_plan_contains_msrv_fix(world: &mut BuildfixWorld) {
     );
 }
 
+// ============================================================================
+// Scenario: Normalizes edition to workspace value
+// ============================================================================
+
+#[given("a repo with inconsistent edition")]
+async fn repo_with_inconsistent_edition(world: &mut BuildfixWorld) {
+    let td = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(td.path().to_path_buf()).unwrap();
+
+    fs::create_dir_all(root.join("crates").join("crate-a")).unwrap();
+
+    // Root workspace with edition = "2021"
+    fs::write(
+        root.join("Cargo.toml"),
+        r#"
+[workspace]
+members = ["crates/crate-a"]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+"#,
+    )
+    .unwrap();
+
+    // crate-a has older edition = "2018"
+    fs::write(
+        root.join("crates").join("crate-a").join("Cargo.toml"),
+        r#"
+[package]
+name = "crate-a"
+version = "0.1.0"
+edition = "2018"
+"#,
+    )
+    .unwrap();
+
+    world.temp = Some(td);
+    world.repo_root = Some(root);
+}
+
+#[given("a builddiag receipt for edition inconsistency")]
+async fn builddiag_receipt_edition(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let artifacts = root.join("artifacts").join("builddiag");
+    fs::create_dir_all(&artifacts).unwrap();
+
+    let receipt = serde_json::json!({
+        "schema": "builddiag.report.v1",
+        "tool": { "name": "builddiag", "version": "0.0.0" },
+        "verdict": { "status": "fail", "counts": { "findings": 1, "errors": 1, "warnings": 0 } },
+        "findings": [{
+            "severity": "error",
+            "check_id": "rust.edition_consistent",
+            "code": "edition_mismatch",
+            "message": "crate edition does not match workspace",
+            "location": { "path": "crates/crate-a/Cargo.toml", "line": 5, "column": 1 },
+            "data": {
+                "crate_edition": "2018",
+                "workspace_edition": "2021"
+            }
+        }]
+    });
+
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
+}
+
+#[then("the plan contains an edition normalization fix")]
+async fn assert_plan_contains_edition_fix(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    assert!(
+        plan_has_rule(&v, "set_package_edition"),
+        "expected an edition normalization op"
+    );
+}
+
+#[then(expr = "the crate-a Cargo.toml has edition {string}")]
+async fn assert_crate_a_has_edition(world: &mut BuildfixWorld, expected: String) {
+    let root = repo_root(world).clone();
+    let contents = fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml"))
+        .context("read crate-a Cargo.toml")
+        .unwrap();
+    let expected_line = format!("edition = \"{}\"", expected);
+    assert!(
+        contents.contains(&expected_line),
+        "expected edition = \"{}\", got:\n{}",
+        expected,
+        contents
+    );
+}
+
 #[when("I run buildfix apply with --apply --allow-guarded")]
 async fn run_apply_allow_guarded(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
@@ -632,16 +731,17 @@ async fn assert_plan_empty(world: &mut BuildfixWorld) {
 // Scenario: Plan fails when max_ops cap exceeded
 // ============================================================================
 
-#[when("I run buildfix plan with --max-ops 0")]
-async fn run_plan_with_max_ops_zero(world: &mut BuildfixWorld) {
+#[when(expr = "I run buildfix plan with --max-ops {int}")]
+async fn run_plan_with_max_ops(world: &mut BuildfixWorld, max_ops: u64) {
     let root = repo_root(world).clone();
     let mut cmd = Command::cargo_bin("buildfix").expect("buildfix binary");
-    cmd.current_dir(root.as_str())
+    // max_ops cap may or may not exit with code 2 depending on whether ops get blocked
+    let _ = cmd
+        .current_dir(root.as_str())
         .arg("plan")
         .arg("--max-ops")
-        .arg("0")
-        .assert()
-        .failure();
+        .arg(max_ops.to_string())
+        .output();
 }
 
 #[when(expr = "I run buildfix plan with allowlist {string}")]
@@ -772,6 +872,34 @@ async fn assert_all_plan_ops_blocked_with_reason(world: &mut BuildfixWorld, need
             reason
         );
     }
+}
+
+#[then(expr = "some plan ops are blocked with reason containing {string}")]
+async fn assert_some_plan_ops_blocked_with_reason(world: &mut BuildfixWorld, needle: String) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    let ops = plan_ops(&v);
+    assert!(!ops.is_empty(), "expected plan ops, got 0");
+
+    let blocked_with_reason: Vec<_> = ops
+        .iter()
+        .filter(|op| {
+            op["blocked"].as_bool() == Some(true)
+                && op["blocked_reason"]
+                    .as_str()
+                    .map(|r| r.contains(&needle))
+                    .unwrap_or(false)
+        })
+        .collect();
+
+    assert!(
+        !blocked_with_reason.is_empty(),
+        "expected at least one op blocked with reason containing '{}', got 0",
+        needle
+    );
 }
 
 #[then("the patch diff is empty")]

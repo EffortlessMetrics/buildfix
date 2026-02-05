@@ -258,6 +258,72 @@ Consider using cargo-msrv to verify actual minimum version."#,
             },
         ],
     },
+    // 5) Edition normalization
+    FixExplanation {
+        key: "edition",
+        fix_id: "cargo.normalize_edition",
+        title: "Edition Normalization",
+        safety: SafetyClass::Guarded,
+        description: r#"Normalizes per-crate Rust edition declarations to match the workspace
+canonical value.
+
+The Rust edition determines which language features are available and how certain
+syntax is interpreted. Having consistent editions across a workspace ensures:
+- Predictable behavior across all crates
+- Easier upgrades when moving to a new edition
+- Clear documentation of language version requirements
+
+The canonical edition is determined from (in order):
+1. [workspace.package].edition in root Cargo.toml
+2. [package].edition in root Cargo.toml"#,
+        safety_rationale: r#"This fix is classified as GUARDED because:
+- Changing edition can affect code semantics and compilation
+- A higher edition may require code changes (e.g., 2021 keyword changes)
+- A lower edition might disable features your code depends on
+
+The fix requires --allow-guarded because:
+- Edition changes can break builds
+- The impact depends on which language features are used
+- Manual review is recommended before applying
+
+The fix is skipped entirely (not even planned) when:
+- No canonical workspace edition exists
+- The crate already has the correct edition"#,
+        remediation: r#"To manually apply this fix:
+
+1. Decide on your workspace's canonical edition
+2. Set it in root Cargo.toml:
+    [workspace.package]
+    edition = "2021"
+
+3. Update each member crate:
+    [package]
+    edition = "2021"
+    # Or use workspace inheritance:
+    edition.workspace = true
+
+Before changing edition, verify your code compiles:
+    cargo +nightly fix --edition
+
+Consider using cargo fix to automatically migrate code between editions."#,
+        triggers: &[
+            TriggerPattern {
+                sensor: "builddiag",
+                check_id: "rust.edition_consistent",
+                code: None,
+            },
+            TriggerPattern {
+                sensor: "cargo",
+                check_id: "cargo.edition_consistent",
+                code: None,
+            },
+            TriggerPattern {
+                sensor: "cargo",
+                check_id: "edition.consistent",
+                code: None,
+            },
+        ],
+    },
 ];
 
 /// Look up a fix explanation by key or fix_id.
@@ -349,10 +415,11 @@ mod tests {
 
     #[test]
     fn test_all_fixes_registered() {
-        assert_eq!(FIX_REGISTRY.len(), 4);
+        assert_eq!(FIX_REGISTRY.len(), 5);
         assert!(lookup_fix("resolver-v2").is_some());
         assert!(lookup_fix("path-dep-version").is_some());
         assert!(lookup_fix("workspace-inheritance").is_some());
         assert!(lookup_fix("msrv").is_some());
+        assert!(lookup_fix("edition").is_some());
     }
 }

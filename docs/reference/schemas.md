@@ -216,13 +216,53 @@ Cockpit-compatible receipt envelope for integration with the director system.
     "counts": { "info": 0, "warn": 1, "error": 0 },
     "reasons": []
   },
+  "capabilities": {
+    "inputs_available": ["artifacts/builddiag/report.json"],
+    "inputs_failed": []
+  },
   "findings": [],
+  "artifacts": {
+    "plan": "artifacts/buildfix/plan.json",
+    "apply": "artifacts/buildfix/apply.json",
+    "patch": "artifacts/buildfix/patch.diff"
+  },
   "data": {
     "ops_total": 1,
     "ops_blocked": 0
   }
 }
 ```
+
+### Capabilities Block
+
+The `capabilities` block implements the "No Green By Omission" pattern. It explicitly tracks which sensor inputs were successfully loaded and which failed.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `inputs_available` | string[] | Paths to successfully loaded receipts |
+| `inputs_failed` | object[] | Receipts that failed to load |
+
+Each `inputs_failed` entry contains:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `path` | string | Path to the failed receipt |
+| `reason` | string | Human-readable failure reason |
+
+This ensures:
+- A passing verdict with empty `inputs_available` signals a problem
+- Failed inputs are explicitly tracked, not silently ignored
+- Consumers can distinguish "no issues found" from "nothing was checked"
+
+### Artifacts Block
+
+The `artifacts` block contains paths to related output files:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `plan` | string? | Path to plan.json if generated |
+| `apply` | string? | Path to apply.json if generated |
+| `patch` | string? | Path to patch.diff if generated |
 
 ### Verdict Status
 

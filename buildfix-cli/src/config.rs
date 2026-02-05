@@ -119,7 +119,6 @@ pub fn load_or_default(repo_root: &Utf8Path) -> anyhow::Result<BuildfixConfig> {
 ///
 /// CLI arguments take precedence over config file settings.
 #[derive(Debug, Clone, Default)]
-#[allow(dead_code)] // Fields prepared for future policy/caps implementation
 pub struct MergedConfig {
     /// Allow patterns (from config file, extended by CLI).
     pub allow: Vec<String>,

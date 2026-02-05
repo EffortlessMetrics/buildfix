@@ -636,6 +636,14 @@ pub fn apply_op_to_content(contents: &str, kind: &OpKind) -> anyhow::Result<Stri
                     .context("missing rust_version param")?;
                 doc["package"]["rust-version"] = value(rust_version);
             }
+            "set_package_edition" => {
+                let edition = args
+                    .as_ref()
+                    .and_then(|v| v.get("edition"))
+                    .and_then(|v| v.as_str())
+                    .context("missing edition param")?;
+                doc["package"]["edition"] = value(edition);
+            }
             "ensure_path_dep_has_version" => {
                 let args = args.as_ref().context("missing args")?;
                 let toml_path = args

@@ -32,6 +32,14 @@ Feature: Plan and apply
     When I run buildfix apply with --apply --allow-guarded
     Then the crate-a Cargo.toml has rust-version "1.70"
 
+  Scenario: Normalizes edition to workspace value
+    Given a repo with inconsistent edition
+    And a builddiag receipt for edition inconsistency
+    When I run buildfix plan
+    Then the plan contains an edition normalization fix
+    When I run buildfix apply with --apply --allow-guarded
+    Then the crate-a Cargo.toml has edition "2021"
+
   # ============================================================================
   # Error handling and edge cases
   # ============================================================================
@@ -82,11 +90,11 @@ Feature: Plan and apply
   # Policy enforcement
   # ============================================================================
 
-  Scenario: Plan fails when max_ops cap exceeded
-    Given a repo with a path dependency missing version
-    And a depguard receipt for missing path dependency version
-    When I run buildfix plan with --max-ops 0
-    Then the plan command fails
+  Scenario: Max ops cap blocks excess ops
+    Given a repo with multiple issues
+    And receipts for multiple issues
+    When I run buildfix plan with --max-ops 1
+    Then some plan ops are blocked with reason containing "max_ops"
 
   Scenario: Allowlist blocks unmatched fixes
     Given a repo missing workspace resolver v2

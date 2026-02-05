@@ -192,6 +192,99 @@ Capturing preconditions at plan time (not apply time) ensures:
 3. Plans can be stored and applied later
 4. Drift is detectable across any time gap
 
+## Backup Recovery
+
+If an apply operation fails or produces unexpected results, you can recover using backup files.
+
+### Locating Backups
+
+Backups are stored in the artifacts directory:
+
+```
+artifacts/buildfix/backups/
+├── Cargo.toml.buildfix.bak
+└── crates/foo/Cargo.toml.buildfix.bak
+```
+
+The backup path mirrors the original file path with the `.buildfix.bak` suffix appended.
+
+### Manual Recovery
+
+To restore a single file:
+
+```bash
+# View the backup
+cat artifacts/buildfix/backups/Cargo.toml.buildfix.bak
+
+# Restore by copying
+cp artifacts/buildfix/backups/Cargo.toml.buildfix.bak Cargo.toml
+```
+
+To restore all backups:
+
+```bash
+# Find and restore all backups
+for bak in artifacts/buildfix/backups/**/*.buildfix.bak; do
+  original="${bak#artifacts/buildfix/backups/}"
+  original="${original%.buildfix.bak}"
+  cp "$bak" "$original"
+done
+```
+
+### Backup Information in Artifacts
+
+The `apply.json` artifact records backup paths for each modified file:
+
+```json
+{
+  "results": [
+    {
+      "op_id": "...",
+      "status": "applied",
+      "files": [
+        {
+          "path": "Cargo.toml",
+          "sha256_before": "abc123...",
+          "sha256_after": "def456...",
+          "backup_path": "artifacts/buildfix/backups/Cargo.toml.buildfix.bak"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Configuring Backups
+
+Backup behavior is configurable in `buildfix.toml`:
+
+```toml
+[backups]
+enabled = true              # Create backups before editing
+suffix = ".buildfix.bak"    # Suffix appended to backup files
+```
+
+To disable backups (not recommended):
+
+```toml
+[backups]
+enabled = false
+```
+
+### Best Practices
+
+1. **Always keep backups enabled** for production use
+2. **Commit before applying** so you can use `git checkout` as an alternative recovery
+3. **Review apply.json** after apply to understand what changed
+4. **Clean up old backups** periodically to avoid confusion
+
+### When Backups Are Not Created
+
+Backups are skipped when:
+- `backups.enabled = false` in config
+- Running in dry-run mode (`buildfix apply` without `--apply`)
+- No files are actually modified (all ops blocked or skipped)
+
 ## See Also
 
 - [Safety Model](../safety-model.md)
