@@ -1227,6 +1227,13 @@ async fn assert_apply_json_schema(world: &mut BuildfixWorld) {
     );
 }
 
+#[then("buildfix validate succeeds")]
+async fn validate_succeeds(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let mut cmd = Command::cargo_bin("buildfix").expect("buildfix binary");
+    cmd.current_dir(root.as_str()).arg("validate").assert().success();
+}
+
 #[tokio::main]
 async fn main() {
     let features_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("features");

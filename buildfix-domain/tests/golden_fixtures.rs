@@ -10,6 +10,7 @@
 use buildfix_domain::{FsRepoView, PlanContext, Planner, PlannerConfig};
 use buildfix_render::{render_apply_md, render_plan_md};
 use buildfix_types::receipt::ToolInfo;
+use buildfix_types::wire::{ApplyV1, PlanV1};
 use camino::Utf8PathBuf;
 use fs_err as fs;
 use pretty_assertions::assert_eq;
@@ -159,7 +160,8 @@ fn run_fixture_test(fixture_name: &str) {
         .expect("preview patch");
 
     // Serialize and normalize
-    let plan_json = serde_json::to_string_pretty(&plan).expect("serialize plan");
+    let plan_wire = PlanV1::try_from(&plan).expect("convert plan to wire");
+    let plan_json = serde_json::to_string_pretty(&plan_wire).expect("serialize plan");
     let normalized = normalize_plan_json(&plan_json);
 
     let expected_dir = fixture_path.join("expected");
@@ -232,7 +234,8 @@ fn run_fixture_test(fixture_name: &str) {
         let (apply, _patch) = buildfix_edit::apply_plan(&repo_root, &plan, tool, &apply_opts)
             .expect("apply plan");
 
-        let apply_json = serde_json::to_string_pretty(&apply).expect("serialize apply");
+        let apply_wire = ApplyV1::try_from(&apply).expect("convert apply to wire");
+        let apply_json = serde_json::to_string_pretty(&apply_wire).expect("serialize apply");
         let normalized_apply = normalize_apply_json(&apply_json);
 
         if bless {

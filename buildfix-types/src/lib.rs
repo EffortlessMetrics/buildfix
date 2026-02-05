@@ -10,6 +10,7 @@ pub mod ops;
 pub mod plan;
 pub mod receipt;
 pub mod report;
+pub mod wire;
 
 /// Schema identifiers.
 pub mod schema {

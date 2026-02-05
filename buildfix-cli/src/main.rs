@@ -14,6 +14,7 @@ use buildfix_types::receipt::ToolInfo;
 use buildfix_types::report::{
     BuildfixReport, ReportCounts, ReportRunInfo, ReportStatus, ReportToolInfo, ReportVerdict,
 };
+use buildfix_types::wire::{ApplyV1, PlanV1, ReportV1};
 use camino::{Utf8Path, Utf8PathBuf};
 use chrono::Utc;
 use clap::{Parser, Subcommand};
@@ -304,12 +305,14 @@ fn cmd_plan(args: PlanArgs) -> anyhow::Result<ExitCode> {
         }
     }
 
-    write_json(&out_dir.join("plan.json"), &plan)?;
+    let plan_wire = PlanV1::try_from(&plan).context("convert plan to wire")?;
+    write_json(&out_dir.join("plan.json"), &plan_wire)?;
     fs::write(out_dir.join("plan.md"), render_plan_md(&plan))?;
     fs::write(out_dir.join("patch.diff"), &patch)?;
 
     let report = report_from_plan(&plan, tool);
-    write_json(&out_dir.join("report.json"), &report)?;
+    let report_wire = ReportV1::from(&report);
+    write_json(&out_dir.join("report.json"), &report_wire)?;
 
     info!("wrote plan to {}", out_dir);
 
@@ -347,7 +350,13 @@ fn cmd_apply(args: ApplyArgs) -> anyhow::Result<ExitCode> {
 
     let plan_path = out_dir.join("plan.json");
     let plan_str = fs::read_to_string(&plan_path).with_context(|| format!("read {}", plan_path))?;
-    let plan: BuildfixPlan = serde_json::from_str(&plan_str).context("parse plan.json")?;
+    let plan: BuildfixPlan = match serde_json::from_str::<PlanV1>(&plan_str) {
+        Ok(wire) => BuildfixPlan::from(wire),
+        Err(err) => {
+            debug!("plan.json is not wire format: {}", err);
+            serde_json::from_str(&plan_str).context("parse plan.json")?
+        }
+    };
 
     let opts = ApplyOptions {
         dry_run: !args.apply,
@@ -407,12 +416,14 @@ fn cmd_apply(args: ApplyArgs) -> anyhow::Result<ExitCode> {
         dirty_after: is_working_tree_dirty(&repo_root).ok(),
     };
 
-    write_json(&out_dir.join("apply.json"), &apply)?;
+    let apply_wire = ApplyV1::try_from(&apply).context("convert apply to wire")?;
+    write_json(&out_dir.join("apply.json"), &apply_wire)?;
     fs::write(out_dir.join("apply.md"), render_apply_md(&apply))?;
     fs::write(out_dir.join("patch.diff"), &patch)?;
 
     let report = report_from_apply(&apply, tool);
-    write_json(&out_dir.join("report.json"), &report)?;
+    let report_wire = ReportV1::from(&report);
+    write_json(&out_dir.join("report.json"), &report_wire)?;
 
     info!("wrote apply artifacts to {}", out_dir);
 
@@ -435,27 +446,51 @@ fn cmd_validate(args: ValidateArgs) -> anyhow::Result<ExitCode> {
 
     let receipts = buildfix_receipts::load_receipts(&artifacts_dir)
         .with_context(|| format!("load receipts from {}", artifacts_dir))?;
-    let mut receipt_errors = Vec::new();
+    let mut policy_failures = Vec::new();
     for r in &receipts {
         if let Err(e) = &r.receipt {
-            receipt_errors.push(format!("{}: {}", r.path, e));
+            policy_failures.push(format!("{}: {}", r.path, e));
         }
     }
-    if !receipt_errors.is_empty() {
-        anyhow::bail!("receipt parse errors:\n{}", receipt_errors.join("\n"));
+
+    for (path, schema) in [
+        (out_dir.join("plan.json"), PLAN_SCHEMA),
+        (out_dir.join("apply.json"), APPLY_SCHEMA),
+        (out_dir.join("report.json"), REPORT_SCHEMA),
+    ] {
+        match validate_file_if_exists(&path, schema)? {
+            ValidateOutcome::Missing | ValidateOutcome::Ok => {}
+            ValidateOutcome::SchemaErrors(errors) => {
+                for err in errors {
+                    policy_failures.push(format!("{}: {}", path, err));
+                }
+            }
+        }
     }
 
-    validate_file_if_exists(&out_dir.join("plan.json"), PLAN_SCHEMA)?;
-    validate_file_if_exists(&out_dir.join("apply.json"), APPLY_SCHEMA)?;
-    validate_file_if_exists(&out_dir.join("report.json"), REPORT_SCHEMA)?;
+    if !policy_failures.is_empty() {
+        for msg in &policy_failures {
+            error!("{}", msg);
+        }
+        return Ok(ExitCode::from(2));
+    }
 
     info!("validation successful");
     Ok(ExitCode::from(0))
 }
 
-fn validate_file_if_exists(path: &Utf8Path, schema_str: &str) -> anyhow::Result<()> {
+enum ValidateOutcome {
+    Missing,
+    Ok,
+    SchemaErrors(Vec<String>),
+}
+
+fn validate_file_if_exists(
+    path: &Utf8Path,
+    schema_str: &str,
+) -> anyhow::Result<ValidateOutcome> {
     if !path.exists() {
-        return Ok(());
+        return Ok(ValidateOutcome::Missing);
     }
     let contents = fs::read_to_string(path).with_context(|| format!("read {}", path))?;
     let json: serde_json::Value = serde_json::from_str(&contents).context("parse json")?;
@@ -468,9 +503,9 @@ fn validate_file_if_exists(path: &Utf8Path, schema_str: &str) -> anyhow::Result<
         .map_err(|e| anyhow::anyhow!("compile schema: {}", e))?;
     if let Err(errors) = compiled.validate(&json) {
         let msgs: Vec<String> = errors.map(|e| e.to_string()).collect();
-        anyhow::bail!("schema validation failed for {}:\n{}", path, msgs.join("\n"));
+        return Ok(ValidateOutcome::SchemaErrors(msgs));
     }
-    Ok(())
+    Ok(ValidateOutcome::Ok)
 }
 
 fn write_json<T: serde::Serialize>(path: &Utf8Path, v: &T) -> anyhow::Result<()> {

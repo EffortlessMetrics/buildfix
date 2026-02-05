@@ -172,6 +172,7 @@ Feature: Plan and apply
     And the artifacts directory contains patch.diff
     And the artifacts directory contains report.json
     And the plan.json has valid schema version
+    And buildfix validate succeeds
 
   Scenario: Apply produces valid JSON artifacts
     Given a repo missing workspace resolver v2
@@ -181,3 +182,4 @@ Feature: Plan and apply
     Then the artifacts directory contains apply.json
     And the artifacts directory contains apply.md
     And the apply.json has valid schema version
+    And buildfix validate succeeds
