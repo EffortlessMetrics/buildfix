@@ -3,6 +3,7 @@ use assert_cmd::Command;
 use camino::Utf8PathBuf;
 use cucumber::{given, then, when, World};
 use fs_err as fs;
+use std::process::Command as StdCommand;
 use tempfile::TempDir;
 
 #[derive(Debug, Default, World)]
@@ -301,6 +302,21 @@ async fn assert_crate_a_has_version(world: &mut BuildfixWorld) {
     );
 }
 
+#[then(expr = "the crate-a Cargo.toml has version {string} for crate-b dependency")]
+async fn assert_crate_a_has_version_for_dep(world: &mut BuildfixWorld, expected: String) {
+    let root = repo_root(world).clone();
+    let contents = fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml"))
+        .context("read crate-a Cargo.toml")
+        .unwrap();
+    let expected_line = format!("version = \"{}\"", expected);
+    assert!(
+        contents.contains(&expected_line),
+        "expected crate-b dependency to have {}, got:\n{}",
+        expected_line,
+        contents
+    );
+}
+
 // ============================================================================
 // Scenario: Converts to workspace dependency
 // ============================================================================
@@ -499,6 +515,30 @@ async fn run_apply_allow_guarded(world: &mut BuildfixWorld) {
         .success();
 }
 
+#[when("I run buildfix apply with --apply --allow-unsafe")]
+async fn run_apply_allow_unsafe(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let mut cmd = Command::cargo_bin("buildfix").expect("buildfix binary");
+    cmd.current_dir(root.as_str())
+        .arg("apply")
+        .arg("--apply")
+        .arg("--allow-unsafe")
+        .assert()
+        .success();
+}
+
+#[when("I run buildfix apply with --apply --allow-dirty")]
+async fn run_apply_allow_dirty(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let mut cmd = Command::cargo_bin("buildfix").expect("buildfix binary");
+    cmd.current_dir(root.as_str())
+        .arg("apply")
+        .arg("--apply")
+        .arg("--allow-dirty")
+        .assert()
+        .success();
+}
+
 #[then(expr = "the crate-a Cargo.toml has rust-version {string}")]
 async fn assert_crate_a_has_msrv(world: &mut BuildfixWorld, expected: String) {
     let root = repo_root(world).clone();
@@ -635,6 +675,128 @@ async fn assert_resolver_op_blocked_by_allowlist(world: &mut BuildfixWorld) {
     );
 }
 
+#[when(expr = "I run buildfix plan with denylist {string}")]
+async fn run_plan_with_denylist(world: &mut BuildfixWorld, pattern: String) {
+    let root = repo_root(world).clone();
+    let mut cmd = Command::cargo_bin("buildfix").expect("buildfix binary");
+    cmd.current_dir(root.as_str())
+        .arg("plan")
+        .arg("--deny")
+        .arg(pattern)
+        .assert()
+        .code(2);
+}
+
+#[then("the resolver v2 op is blocked by denylist")]
+async fn assert_resolver_op_blocked_by_denylist(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    let op = plan_ops(&v)
+        .iter()
+        .find(|op| {
+            op["kind"]["type"] == "toml_transform"
+                && op["kind"]["rule_id"] == "ensure_workspace_resolver_v2"
+        })
+        .expect("resolver v2 op");
+
+    assert_eq!(op["blocked"].as_bool(), Some(true));
+    let reason = op["blocked_reason"].as_str().unwrap_or("");
+    assert!(
+        reason.contains("denied"),
+        "expected denylist block reason, got: {}",
+        reason
+    );
+}
+
+#[when(expr = "I run buildfix plan with --max-files {int}")]
+async fn run_plan_with_max_files(world: &mut BuildfixWorld, max_files: u64) {
+    let root = repo_root(world).clone();
+    let mut cmd = Command::cargo_bin("buildfix").expect("buildfix binary");
+    cmd.current_dir(root.as_str())
+        .arg("plan")
+        .arg("--max-files")
+        .arg(max_files.to_string())
+        .assert()
+        .code(2);
+}
+
+#[when(expr = "I run buildfix plan with --max-patch-bytes {int}")]
+async fn run_plan_with_max_patch_bytes(world: &mut BuildfixWorld, max_bytes: u64) {
+    let root = repo_root(world).clone();
+    let mut cmd = Command::cargo_bin("buildfix").expect("buildfix binary");
+    cmd.current_dir(root.as_str())
+        .arg("plan")
+        .arg("--max-patch-bytes")
+        .arg(max_bytes.to_string())
+        .assert()
+        .code(2);
+}
+
+#[when(expr = "I run buildfix plan with param {word} {string}")]
+async fn run_plan_with_param(world: &mut BuildfixWorld, key: String, value: String) {
+    let root = repo_root(world).clone();
+    let mut cmd = Command::cargo_bin("buildfix").expect("buildfix binary");
+    let param = format!("{}={}", key, value);
+    cmd.current_dir(root.as_str())
+        .arg("plan")
+        .arg("--param")
+        .arg(param)
+        .assert()
+        .success();
+}
+
+#[then(expr = "all plan ops are blocked with reason containing {string}")]
+async fn assert_all_plan_ops_blocked_with_reason(world: &mut BuildfixWorld, needle: String) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    let ops = plan_ops(&v);
+    assert!(!ops.is_empty(), "expected plan ops, got 0");
+    for op in ops {
+        assert_eq!(op["blocked"].as_bool(), Some(true));
+        let reason = op["blocked_reason"].as_str().unwrap_or("");
+        assert!(
+            reason.contains(&needle),
+            "expected blocked_reason to contain '{}', got: {}",
+            needle,
+            reason
+        );
+    }
+}
+
+#[then("the patch diff is empty")]
+async fn assert_patch_diff_empty(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let patch_path = root.join("artifacts").join("buildfix").join("patch.diff");
+    let patch = fs::read_to_string(&patch_path).unwrap_or_default();
+    assert!(
+        patch.trim().is_empty(),
+        "expected empty patch diff, got:\n{}",
+        patch
+    );
+}
+
+#[then("the plan summary patch_bytes is 0")]
+async fn assert_plan_summary_patch_bytes_zero(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    let patch_bytes = v["summary"]["patch_bytes"].as_u64();
+    assert_eq!(
+        patch_bytes,
+        Some(0),
+        "expected summary.patch_bytes to be 0, got {:?}",
+        patch_bytes
+    );
+}
+
 #[then("the path dependency version op is blocked for missing params")]
 async fn assert_path_dep_blocked_missing_params(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
@@ -677,6 +839,46 @@ async fn modify_root_manifest_after_plan(world: &mut BuildfixWorld) {
     fs::write(&path, contents).unwrap();
 }
 
+#[given("the repo is a clean git repo")]
+async fn repo_is_clean_git_repo(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+
+    let status = StdCommand::new("git")
+        .arg("init")
+        .current_dir(root.as_str())
+        .status()
+        .expect("git init");
+    assert!(status.success(), "git init failed");
+
+    let status = StdCommand::new("git")
+        .arg("add")
+        .arg("-A")
+        .current_dir(root.as_str())
+        .status()
+        .expect("git add");
+    assert!(status.success(), "git add failed");
+
+    let status = StdCommand::new("git")
+        .arg("-c")
+        .arg("user.name=buildfix")
+        .arg("-c")
+        .arg("user.email=buildfix@example.com")
+        .arg("commit")
+        .arg("-m")
+        .arg("init")
+        .current_dir(root.as_str())
+        .status()
+        .expect("git commit");
+    assert!(status.success(), "git commit failed");
+}
+
+#[when("I dirty the working tree")]
+async fn dirty_working_tree(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let path = root.join("dirty.txt");
+    fs::write(&path, "dirty\n").unwrap();
+}
+
 #[when("I run buildfix apply with --apply expecting policy block")]
 async fn run_apply_expect_policy_block(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
@@ -703,6 +905,50 @@ async fn assert_apply_preconditions_not_verified(world: &mut BuildfixWorld) {
     assert!(
         !mismatches.is_empty(),
         "expected at least one precondition mismatch"
+    );
+}
+
+#[then("the apply preconditions include dirty working tree mismatch")]
+async fn assert_apply_preconditions_dirty_mismatch(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let apply_path = root.join("artifacts").join("buildfix").join("apply.json");
+    let apply_str = fs::read_to_string(&apply_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&apply_str).unwrap();
+
+    let mismatches = v["preconditions"]["mismatches"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let found = mismatches.iter().any(|m| {
+        m["path"].as_str() == Some("<working_tree>")
+            && m["expected"].as_str() == Some("clean")
+            && m["actual"].as_str() == Some("dirty")
+    });
+    assert!(found, "expected dirty working tree mismatch, got {:?}", mismatches);
+}
+
+#[then("the apply results show unsafe fix blocked by safety gate")]
+async fn assert_apply_results_unsafe_blocked(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let apply_path = root.join("artifacts").join("buildfix").join("apply.json");
+    let apply_str = fs::read_to_string(&apply_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&apply_str).unwrap();
+
+    let results = v["results"].as_array().cloned().unwrap_or_default();
+    assert!(!results.is_empty(), "expected apply results, got 0");
+
+    let found = results.iter().any(|r| {
+        let status_ok = r["status"].as_str() == Some("blocked");
+        let blocked_reason = r["blocked_reason"].as_str().unwrap_or("");
+        let message = r["message"].as_str().unwrap_or("");
+        status_ok
+            && (blocked_reason.contains("safety gate")
+                || message.contains("safety class not allowed"))
+    });
+    assert!(
+        found,
+        "expected blocked result with safety gate reason, got {:?}",
+        results
     );
 }
 

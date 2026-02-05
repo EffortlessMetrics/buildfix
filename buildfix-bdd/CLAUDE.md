@@ -26,6 +26,11 @@ buildfix-bdd/
 | Adds version to path dependency | Path dep missing version, verifies version added |
 | Converts to workspace dependency | Duplicate deps, verifies `workspace = true` |
 | Normalizes MSRV to workspace value | Inconsistent MSRV, requires `--allow-guarded` |
+| Denylist blocks resolver v2 | Denylist policy blocks plan ops |
+| Max files cap blocks all ops | `--max-files` caps block all ops + empty patch |
+| Max patch bytes cap blocks ops | `--max-patch-bytes` caps block ops + zero patch |
+| Unsafe fix requires allow-unsafe | Params provided, but apply blocks without `--allow-unsafe` |
+| Dirty working tree blocks apply | Dirty tree blocks apply unless `--allow-dirty` |
 
 ## Implementation Pattern
 

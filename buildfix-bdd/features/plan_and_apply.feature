@@ -74,11 +74,53 @@ Feature: Plan and apply
     When I run buildfix plan with allowlist "depguard/*"
     Then the resolver v2 op is blocked by allowlist
 
+  Scenario: Denylist blocks resolver v2
+    Given a repo missing workspace resolver v2
+    And a builddiag receipt for resolver v2
+    When I run buildfix plan with denylist "builddiag/*"
+    Then the resolver v2 op is blocked by denylist
+
+  Scenario: Max files cap blocks all ops
+    Given a repo with multiple issues
+    And receipts for multiple issues
+    When I run buildfix plan with --max-files 1
+    Then all plan ops are blocked with reason containing "max_files"
+    And the patch diff is empty
+
+  Scenario: Max patch bytes cap blocks ops
+    Given a repo missing workspace resolver v2
+    And a builddiag receipt for resolver v2
+    When I run buildfix plan with --max-patch-bytes 1
+    Then all plan ops are blocked with reason containing "max_patch_bytes"
+    And the patch diff is empty
+    And the plan summary patch_bytes is 0
+
   Scenario: Unsafe fix blocked without params
     Given a repo with a path dependency missing version and no target version
     And a depguard receipt for missing path dependency version
     When I run buildfix plan expecting policy block
     Then the path dependency version op is blocked for missing params
+
+  Scenario: Unsafe fix requires --allow-unsafe even with params
+    Given a repo with a path dependency missing version and no target version
+    And a depguard receipt for missing path dependency version
+    When I run buildfix plan with param version "0.3.0"
+    Then the plan contains a path dep version fix
+    When I run buildfix apply with --apply expecting policy block
+    Then the apply results show unsafe fix blocked by safety gate
+    When I run buildfix apply with --apply --allow-unsafe
+    Then the crate-a Cargo.toml has version "0.3.0" for crate-b dependency
+
+  Scenario: Dirty working tree blocks apply unless allowed
+    Given a repo missing workspace resolver v2
+    And a builddiag receipt for resolver v2
+    And the repo is a clean git repo
+    When I run buildfix plan
+    And I dirty the working tree
+    When I run buildfix apply with --apply expecting policy block
+    Then the apply preconditions include dirty working tree mismatch
+    When I run buildfix apply with --apply --allow-dirty
+    Then the root Cargo.toml sets workspace resolver to "2"
 
   Scenario: Precondition mismatch aborts apply
     Given a repo missing workspace resolver v2
