@@ -36,3 +36,4 @@ pretty_assertions.workspace = true
 proptest.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
+toml.workspace = true

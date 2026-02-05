@@ -1,0 +1,4 @@
+# Policy variant fixture: tests that deny patterns block specific fixes
+[policy]
+# Deny the resolver v2 fix - this fix should appear blocked in the plan
+deny = ["builddiag/workspace.resolver_v2/*"]

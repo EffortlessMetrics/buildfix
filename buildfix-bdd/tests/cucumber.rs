@@ -11,6 +11,7 @@ pub struct BuildfixWorld {
     temp: Option<TempDir>,
     repo_root: Option<Utf8PathBuf>,
     explain_output: Option<String>,
+    saved_plan_json: Option<String>,
 }
 
 fn repo_root(world: &BuildfixWorld) -> &Utf8PathBuf {
@@ -924,7 +925,11 @@ async fn assert_apply_preconditions_dirty_mismatch(world: &mut BuildfixWorld) {
             && m["expected"].as_str() == Some("clean")
             && m["actual"].as_str() == Some("dirty")
     });
-    assert!(found, "expected dirty working tree mismatch, got {:?}", mismatches);
+    assert!(
+        found,
+        "expected dirty working tree mismatch, got {:?}",
+        mismatches
+    );
 }
 
 #[then("the apply results show unsafe fix blocked by safety gate")]
@@ -1340,6 +1345,196 @@ async fn regenerate_receipts_for_fixed_repo(world: &mut BuildfixWorld) {
 }
 
 // ============================================================================
+// Scenario: Running plan twice produces identical output
+// ============================================================================
+
+#[when("I save the plan.json content")]
+async fn save_plan_json_content(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    world.saved_plan_json = Some(plan_str);
+}
+
+#[then("the plan.json content is identical to saved")]
+async fn assert_plan_json_identical(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let current_plan = fs::read_to_string(&plan_path).unwrap();
+    let saved_plan = world.saved_plan_json.as_ref().expect("saved plan");
+
+    assert_eq!(
+        &current_plan, saved_plan,
+        "plan.json content should be identical across runs"
+    );
+}
+
+// ============================================================================
+// Scenario: Resolver v2 fixer is idempotent when resolver already exists
+// ============================================================================
+
+#[given("a repo with workspace resolver v2 already set")]
+async fn repo_with_resolver_already_set(world: &mut BuildfixWorld) {
+    let td = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(td.path().to_path_buf()).unwrap();
+
+    // Workspace with resolver = "2" already set
+    fs::create_dir_all(root.join("crates").join("a")).unwrap();
+    fs::write(
+        root.join("Cargo.toml"),
+        r#"
+[workspace]
+members = ["crates/a"]
+resolver = "2"
+"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("crates").join("a").join("Cargo.toml"),
+        r#"
+[package]
+name = "a"
+version = "0.1.0"
+edition = "2021"
+"#,
+    )
+    .unwrap();
+
+    world.temp = Some(td);
+    world.repo_root = Some(root);
+}
+
+#[given("a stale builddiag receipt for resolver v2")]
+async fn stale_builddiag_receipt(world: &mut BuildfixWorld) {
+    // Receipt claims resolver is missing, but it's actually present
+    // The fixer should detect this and not produce an op
+    let root = repo_root(world).clone();
+    let artifacts = root.join("artifacts").join("builddiag");
+    fs::create_dir_all(&artifacts).unwrap();
+
+    let receipt = serde_json::json!({
+        "schema": "builddiag.report.v1",
+        "tool": { "name": "builddiag", "version": "0.0.0" },
+        "verdict": { "status": "fail", "counts": { "findings": 1, "errors": 1, "warnings": 0 } },
+        "findings": [{
+            "severity": "error",
+            "check_id": "workspace.resolver_v2",
+            "code": "not_v2",
+            "message": "workspace resolver is not 2",
+            "location": { "path": "Cargo.toml", "line": 1, "column": 1 }
+        }]
+    });
+
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
+}
+
+#[then("the plan contains no resolver v2 fix")]
+async fn assert_plan_no_resolver_fix(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    assert!(
+        !plan_has_rule(&v, "ensure_workspace_resolver_v2"),
+        "expected no resolver v2 op when resolver is already set"
+    );
+}
+
+// ============================================================================
+// Scenario: Workspace inheritance fixer is idempotent when already using workspace
+// ============================================================================
+
+#[given("a repo with dependency already using workspace inheritance")]
+async fn repo_with_workspace_inheritance_already(world: &mut BuildfixWorld) {
+    let td = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(td.path().to_path_buf()).unwrap();
+
+    fs::create_dir_all(root.join("crates").join("crate-a")).unwrap();
+
+    // Root workspace with serde in workspace.dependencies
+    fs::write(
+        root.join("Cargo.toml"),
+        r#"
+[workspace]
+members = ["crates/crate-a"]
+resolver = "2"
+
+[workspace.dependencies]
+serde = "1.0"
+"#,
+    )
+    .unwrap();
+
+    // crate-a already uses workspace = true
+    fs::write(
+        root.join("crates").join("crate-a").join("Cargo.toml"),
+        r#"
+[package]
+name = "crate-a"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde.workspace = true
+"#,
+    )
+    .unwrap();
+
+    world.temp = Some(td);
+    world.repo_root = Some(root);
+}
+
+#[given("a stale depguard receipt for workspace inheritance")]
+async fn stale_depguard_receipt_workspace_inheritance(world: &mut BuildfixWorld) {
+    // Receipt claims dep should use workspace, but it already does
+    // The fixer should detect this and not produce an op
+    let root = repo_root(world).clone();
+    let artifacts = root.join("artifacts").join("depguard");
+    fs::create_dir_all(&artifacts).unwrap();
+
+    let receipt = serde_json::json!({
+        "schema": "depguard.report.v1",
+        "tool": { "name": "depguard", "version": "0.0.0" },
+        "verdict": { "status": "fail", "counts": { "findings": 1, "errors": 1, "warnings": 0 } },
+        "findings": [{
+            "severity": "error",
+            "check_id": "deps.workspace_inheritance",
+            "code": "should_use_workspace",
+            "message": "dependency should use workspace inheritance",
+            "location": { "path": "crates/crate-a/Cargo.toml", "line": 8, "column": 1 },
+            "data": {
+                "dep": "serde",
+                "toml_path": ["dependencies", "serde"]
+            }
+        }]
+    });
+
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
+}
+
+#[then("the plan contains no workspace inheritance fix")]
+async fn assert_plan_no_workspace_inheritance_fix(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    assert!(
+        !plan_has_rule(&v, "use_workspace_dependency"),
+        "expected no workspace inheritance op when already using workspace = true"
+    );
+}
+
+// ============================================================================
 // Scenario: Converts dev-dependency to workspace inheritance
 // ============================================================================
 
@@ -1490,6 +1685,98 @@ async fn validate_succeeds(world: &mut BuildfixWorld) {
         .arg("validate")
         .assert()
         .success();
+}
+
+// ============================================================================
+// Error handling scenarios
+// ============================================================================
+
+#[given("a corrupted JSON receipt")]
+async fn corrupted_json_receipt(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let artifacts = root.join("artifacts").join("broken");
+    fs::create_dir_all(&artifacts).unwrap();
+
+    // Write invalid JSON that cannot be parsed
+    fs::write(
+        artifacts.join("report.json"),
+        r#"{ "schema": "broken.report.v1", invalid json here }"#,
+    )
+    .unwrap();
+}
+
+#[given("a receipt missing the schema field")]
+async fn receipt_missing_schema_field(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let artifacts = root.join("artifacts").join("incomplete");
+    fs::create_dir_all(&artifacts).unwrap();
+
+    // Valid JSON but missing required "schema" field
+    let receipt = serde_json::json!({
+        "tool": { "name": "incomplete", "version": "0.0.0" },
+        "verdict": { "status": "pass", "counts": { "findings": 0, "errors": 0, "warnings": 0 } },
+        "findings": []
+    });
+
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
+}
+
+#[then("the report mentions receipt load error")]
+async fn assert_report_mentions_receipt_error(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    // Check that inputs contains an entry with null schema/tool (indicating load error)
+    let inputs = v["inputs"].as_array().expect("inputs array");
+    let has_error_input = inputs.iter().any(|input| {
+        // An errored receipt will have schema: null and tool: null
+        input["schema"].is_null() && input["tool"].is_null()
+    });
+    assert!(
+        has_error_input,
+        "expected plan inputs to contain an errored receipt (schema=null, tool=null), got: {}",
+        serde_json::to_string_pretty(&v["inputs"]).unwrap()
+    );
+}
+
+#[given("a repo with malformed Cargo.toml")]
+async fn repo_with_malformed_cargo_toml(world: &mut BuildfixWorld) {
+    let td = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(td.path().to_path_buf()).unwrap();
+
+    fs::create_dir_all(root.join("crates").join("a")).unwrap();
+
+    // Write invalid TOML to the root Cargo.toml
+    fs::write(
+        root.join("Cargo.toml"),
+        r#"
+[workspace
+members = ["crates/a"]
+this is not valid toml
+"#,
+    )
+    .unwrap();
+
+    // Valid member Cargo.toml
+    fs::write(
+        root.join("crates").join("a").join("Cargo.toml"),
+        r#"
+[package]
+name = "a"
+version = "0.1.0"
+edition = "2021"
+"#,
+    )
+    .unwrap();
+
+    world.temp = Some(td);
+    world.repo_root = Some(root);
 }
 
 #[tokio::main]

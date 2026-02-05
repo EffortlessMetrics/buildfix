@@ -36,6 +36,26 @@ Feature: Plan and apply
   # Error handling and edge cases
   # ============================================================================
 
+  Scenario: Corrupted receipt JSON is skipped gracefully
+    Given a repo missing workspace resolver v2
+    And a corrupted JSON receipt
+    When I run buildfix plan
+    Then the plan contains no fixes
+    And the report mentions receipt load error
+
+  Scenario: Receipt missing required schema field is skipped gracefully
+    Given a repo missing workspace resolver v2
+    And a receipt missing the schema field
+    When I run buildfix plan
+    Then the plan contains no fixes
+    And the report mentions receipt load error
+
+  Scenario: Invalid Cargo.toml is handled gracefully
+    Given a repo with malformed Cargo.toml
+    And a builddiag receipt for resolver v2
+    When I run buildfix plan
+    Then the plan contains no fixes
+
   Scenario: Guarded fix skipped without --allow-guarded flag
     Given a repo with inconsistent MSRV
     And a builddiag receipt for MSRV inconsistency
@@ -188,6 +208,26 @@ Feature: Plan and apply
     When I regenerate receipts for the fixed repo
     And I run buildfix plan
     Then the plan contains no fixes
+
+  Scenario: Running plan twice produces identical output
+    Given a repo with multiple issues
+    And receipts for multiple issues
+    When I run buildfix plan
+    And I save the plan.json content
+    When I run buildfix plan
+    Then the plan.json content is identical to saved
+
+  Scenario: Resolver v2 fixer is idempotent when resolver already exists
+    Given a repo with workspace resolver v2 already set
+    And a stale builddiag receipt for resolver v2
+    When I run buildfix plan
+    Then the plan contains no resolver v2 fix
+
+  Scenario: Workspace inheritance fixer is idempotent when already using workspace
+    Given a repo with dependency already using workspace inheritance
+    And a stale depguard receipt for workspace inheritance
+    When I run buildfix plan
+    Then the plan contains no workspace inheritance fix
 
   # ============================================================================
   # Dev-dependencies handling

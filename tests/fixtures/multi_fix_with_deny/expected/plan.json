@@ -1,0 +1,143 @@
+{
+  "inputs": [
+    {
+      "path": "<ARTIFACTS>/builddiag/report.json",
+      "schema": "builddiag.report.v1",
+      "tool": "builddiag"
+    },
+    {
+      "path": "<ARTIFACTS>/depguard/report.json",
+      "schema": "depguard.report.v1",
+      "tool": "depguard"
+    }
+  ],
+  "ops": [
+    {
+      "blocked": true,
+      "blocked_reason": "denied by policy",
+      "id": "ab9ced5a-84ab-52fb-9080-73eece088fd5",
+      "kind": {
+        "rule_id": "ensure_workspace_resolver_v2",
+        "type": "toml_transform"
+      },
+      "rationale": {
+        "description": "Sets [workspace].resolver = \"2\" for correct feature unification",
+        "findings": [
+          {
+            "check_id": "workspace.resolver_v2",
+            "code": "not_v2",
+            "line": 1,
+            "path": "Cargo.toml",
+            "source": "builddiag"
+          }
+        ],
+        "fix_key": "builddiag/workspace.resolver_v2/not_v2"
+      },
+      "safety": "safe",
+      "target": {
+        "path": "Cargo.toml"
+      }
+    },
+    {
+      "blocked": false,
+      "id": "cca08d34-3186-5420-9b9e-56f75695ef63",
+      "kind": {
+        "args": {
+          "dep": "crate-b",
+          "dep_path": "../b",
+          "toml_path": [
+            "dependencies",
+            "crate-b"
+          ],
+          "version": "0.2.0"
+        },
+        "rule_id": "ensure_path_dep_has_version",
+        "type": "toml_transform"
+      },
+      "rationale": {
+        "description": "Adds version field to path dependencies for publishability",
+        "findings": [
+          {
+            "check_id": "deps.path_requires_version",
+            "code": "missing_version",
+            "line": 7,
+            "path": "crates/a/Cargo.toml",
+            "source": "depguard"
+          }
+        ],
+        "fix_key": "depguard/deps.path_requires_version/missing_version"
+      },
+      "safety": "safe",
+      "target": {
+        "path": "crates/a/Cargo.toml"
+      }
+    },
+    {
+      "blocked": false,
+      "id": "482bf98c-2e65-5de5-a8ef-5fdf1e64c52f",
+      "kind": {
+        "args": {
+          "dep": "serde",
+          "preserved": {},
+          "toml_path": [
+            "dependencies",
+            "serde"
+          ]
+        },
+        "rule_id": "use_workspace_dependency",
+        "type": "toml_transform"
+      },
+      "rationale": {
+        "description": "Converts dependency specs to workspace = true inheritance",
+        "findings": [
+          {
+            "check_id": "deps.workspace_inheritance",
+            "code": "should_use_workspace",
+            "line": 8,
+            "path": "crates/a/Cargo.toml",
+            "source": "depguard"
+          }
+        ],
+        "fix_key": "depguard/deps.workspace_inheritance/should_use_workspace"
+      },
+      "safety": "safe",
+      "target": {
+        "path": "crates/a/Cargo.toml"
+      }
+    }
+  ],
+  "policy": {
+    "allow": [],
+    "allow_dirty": false,
+    "allow_guarded": false,
+    "allow_unsafe": false,
+    "deny": [
+      "builddiag/workspace.resolver_v2/*"
+    ]
+  },
+  "preconditions": {
+    "files": [
+      {
+        "path": "Cargo.toml",
+        "sha256": "<SHA256>"
+      },
+      {
+        "path": "crates/a/Cargo.toml",
+        "sha256": "<SHA256>"
+      }
+    ]
+  },
+  "repo": {
+    "root": "<REPO_ROOT>"
+  },
+  "schema": "buildfix.plan.v1",
+  "summary": {
+    "files_touched": 2,
+    "ops_blocked": 1,
+    "ops_total": 3
+  },
+  "tool": {
+    "name": "buildfix",
+    "version": "test"
+  }
+}

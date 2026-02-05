@@ -1,0 +1,67 @@
+{
+  "inputs": [
+    {
+      "path": "<ARTIFACTS>/builddiag/report.json",
+      "schema": "builddiag.report.v1",
+      "tool": "builddiag"
+    }
+  ],
+  "ops": [
+    {
+      "blocked": false,
+      "id": "57fb44c4-888e-57e5-8b1b-4374618cfc32",
+      "kind": {
+        "args": {
+          "rust_version": "1.70"
+        },
+        "rule_id": "set_package_rust_version",
+        "type": "toml_transform"
+      },
+      "rationale": {
+        "description": "Normalizes per-crate MSRV to workspace canonical rust-version",
+        "findings": [
+          {
+            "check_id": "rust.msrv_consistent",
+            "code": "msrv_mismatch",
+            "line": 5,
+            "path": "crates/a/Cargo.toml",
+            "source": "builddiag"
+          }
+        ],
+        "fix_key": "builddiag/rust.msrv_consistent/msrv_mismatch"
+      },
+      "safety": "guarded",
+      "target": {
+        "path": "crates/a/Cargo.toml"
+      }
+    }
+  ],
+  "policy": {
+    "allow": [],
+    "allow_dirty": false,
+    "allow_guarded": true,
+    "allow_unsafe": false,
+    "deny": []
+  },
+  "preconditions": {
+    "files": [
+      {
+        "path": "crates/a/Cargo.toml",
+        "sha256": "<SHA256>"
+      }
+    ]
+  },
+  "repo": {
+    "root": "<REPO_ROOT>"
+  },
+  "schema": "buildfix.plan.v1",
+  "summary": {
+    "files_touched": 1,
+    "ops_blocked": 0,
+    "ops_total": 1
+  },
+  "tool": {
+    "name": "buildfix",
+    "version": "test"
+  }
+}

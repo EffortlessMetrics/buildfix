@@ -6,6 +6,7 @@
 //! - `repo/` - The repository state (Cargo.toml files)
 //! - `receipts/` - Sensor receipts that trigger fixes
 //! - `expected/` - Expected output files (plan.json, plan.md, patch.diff)
+//! - `buildfix.toml` - (optional) Policy configuration for the fixture
 
 use buildfix_domain::{FsRepoView, PlanContext, Planner, PlannerConfig};
 use buildfix_render::{render_apply_md, render_plan_md};
@@ -14,8 +15,55 @@ use buildfix_types::wire::{ApplyV1, PlanV1};
 use camino::Utf8PathBuf;
 use fs_err as fs;
 use pretty_assertions::assert_eq;
+use serde::Deserialize;
 use std::path::Path;
 use tempfile::TempDir;
+
+/// Policy section from buildfix.toml fixture config.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+struct FixturePolicyConfig {
+    allow: Vec<String>,
+    deny: Vec<String>,
+    allow_guarded: bool,
+    allow_unsafe: bool,
+    allow_dirty: bool,
+    max_ops: Option<u64>,
+    max_files: Option<u64>,
+    max_patch_bytes: Option<u64>,
+}
+
+/// Top-level fixture config from buildfix.toml.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+struct FixtureConfig {
+    policy: FixturePolicyConfig,
+}
+
+/// Loaded fixture config with metadata.
+struct LoadedFixtureConfig {
+    config: FixtureConfig,
+    /// Whether a buildfix.toml file was present.
+    has_config_file: bool,
+}
+
+/// Load fixture config from buildfix.toml if it exists.
+fn load_fixture_config(fixture_path: &Path) -> LoadedFixtureConfig {
+    let config_path = fixture_path.join("buildfix.toml");
+    if config_path.exists() {
+        let contents = fs::read_to_string(&config_path).expect("read buildfix.toml");
+        let config = toml::from_str(&contents).expect("parse buildfix.toml");
+        LoadedFixtureConfig {
+            config,
+            has_config_file: true,
+        }
+    } else {
+        LoadedFixtureConfig {
+            config: FixtureConfig::default(),
+            has_config_file: false,
+        }
+    }
+}
 
 /// Strips dynamic fields from a plan JSON for comparison.
 fn normalize_plan_json(json: &str) -> serde_json::Value {
@@ -100,6 +148,10 @@ fn run_fixture_test(fixture_name: &str) {
         fixture_path.display()
     );
 
+    // Load fixture config if present
+    let loaded = load_fixture_config(&fixture_path);
+    let fixture_config = &loaded.config;
+
     // Copy repo to tempdir for isolation
     let temp_dir = TempDir::new().expect("create temp dir");
     let temp_repo = temp_dir.path();
@@ -121,11 +173,24 @@ fn run_fixture_test(fixture_name: &str) {
 
     let receipts = buildfix_receipts::load_receipts(&artifacts_dir_utf8).expect("load receipts");
 
+    // Build planner config from fixture config
+    let planner_config = PlannerConfig {
+        allow: fixture_config.policy.allow.clone(),
+        deny: fixture_config.policy.deny.clone(),
+        allow_guarded: fixture_config.policy.allow_guarded,
+        allow_unsafe: fixture_config.policy.allow_unsafe,
+        allow_dirty: fixture_config.policy.allow_dirty,
+        max_ops: fixture_config.policy.max_ops,
+        max_files: fixture_config.policy.max_files,
+        max_patch_bytes: fixture_config.policy.max_patch_bytes,
+        params: std::collections::HashMap::new(),
+    };
+
     let planner = Planner::new();
     let ctx = PlanContext {
         repo_root: repo_root.clone(),
         artifacts_dir: artifacts_dir_utf8,
-        config: PlannerConfig::default(),
+        config: planner_config,
     };
     let repo = FsRepoView::new(repo_root.clone());
     let tool = ToolInfo {
@@ -147,10 +212,20 @@ fn run_fixture_test(fixture_name: &str) {
         .expect("attach preconditions");
 
     // Generate patch preview
+    // If a buildfix.toml config file exists, respect its policy settings.
+    // Otherwise, default to allowing guarded/unsafe for backward compatibility with existing fixtures.
     let preview_opts = buildfix_edit::ApplyOptions {
         dry_run: true,
-        allow_guarded: true,
-        allow_unsafe: true,
+        allow_guarded: if loaded.has_config_file {
+            fixture_config.policy.allow_guarded
+        } else {
+            true
+        },
+        allow_unsafe: if loaded.has_config_file {
+            fixture_config.policy.allow_unsafe
+        } else {
+            true
+        },
         backup_enabled: false,
         backup_dir: None,
         backup_suffix: ".buildfix.bak".to_string(),
@@ -221,10 +296,20 @@ fn run_fixture_test(fixture_name: &str) {
 
     // Apply expectations (only when expected files exist or when blessing).
     if expected_apply_path.exists() || bless {
+        // If a buildfix.toml config file exists, respect its policy settings.
+        // Otherwise, default to allowing guarded/unsafe for backward compatibility.
         let apply_opts = buildfix_edit::ApplyOptions {
             dry_run: false,
-            allow_guarded: true,
-            allow_unsafe: true,
+            allow_guarded: if loaded.has_config_file {
+                fixture_config.policy.allow_guarded
+            } else {
+                true
+            },
+            allow_unsafe: if loaded.has_config_file {
+                fixture_config.policy.allow_unsafe
+            } else {
+                true
+            },
             backup_enabled: false,
             backup_dir: None,
             backup_suffix: ".buildfix.bak".to_string(),
@@ -309,4 +394,14 @@ fn golden_msrv_normalize() {
 #[test]
 fn golden_multi_fix() {
     run_fixture_test("multi_fix");
+}
+
+#[test]
+fn golden_msrv_normalize_guarded_allowed() {
+    run_fixture_test("msrv_normalize_guarded_allowed");
+}
+
+#[test]
+fn golden_multi_fix_with_deny() {
+    run_fixture_test("multi_fix_with_deny");
 }

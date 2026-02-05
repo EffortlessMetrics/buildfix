@@ -260,6 +260,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "thiserror",
+ "toml",
  "toml_edit",
  "tracing",
  "uuid",
