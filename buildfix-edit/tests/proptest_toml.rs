@@ -135,12 +135,14 @@ fn arb_preserved_args() -> impl Strategy<Value = PreservedArgs> {
         prop::option::of(any::<bool>()),
         prop::option::of(prop::collection::vec(ident(), 1..4)),
     )
-        .prop_map(|(package, optional, default_features, features)| PreservedArgs {
-            package,
-            optional,
-            default_features,
-            features,
-        })
+        .prop_map(
+            |(package, optional, default_features, features)| PreservedArgs {
+                package,
+                optional,
+                default_features,
+                features,
+            },
+        )
 }
 
 proptest! {

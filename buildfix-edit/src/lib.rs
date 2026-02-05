@@ -207,34 +207,34 @@ fn execute_plan(
         mismatches: vec![],
     };
 
-    if verify_preconditions {
-        if !check_preconditions(repo_root, plan, &touched_files, &mut preconditions)? {
-            // Abort entire apply if any mismatch.
-            let mut results = Vec::new();
-            let mut summary = ApplySummary::default();
+    if verify_preconditions
+        && !check_preconditions(repo_root, plan, &touched_files, &mut preconditions)?
+    {
+        // Abort entire apply if any mismatch.
+        let mut results = Vec::new();
+        let mut summary = ApplySummary::default();
 
-            for resolved in &resolved_ops {
-                if !resolved.allowed {
-                    continue;
-                }
-                summary.blocked += 1;
-                results.push(ApplyResult {
-                    op_id: resolved.op.id.clone(),
-                    status: ApplyStatus::Blocked,
-                    message: Some("precondition mismatch".to_string()),
-                    blocked_reason: Some("precondition mismatch".to_string()),
-                    files: vec![],
-                });
+        for resolved in &resolved_ops {
+            if !resolved.allowed {
+                continue;
             }
-
-            return Ok(ExecuteOutcome {
-                before: before.clone(),
-                after: before,
-                results,
-                summary,
-                preconditions,
+            summary.blocked += 1;
+            results.push(ApplyResult {
+                op_id: resolved.op.id.clone(),
+                status: ApplyStatus::Blocked,
+                message: Some("precondition mismatch".to_string()),
+                blocked_reason: Some("precondition mismatch".to_string()),
+                files: vec![],
             });
         }
+
+        return Ok(ExecuteOutcome {
+            before: before.clone(),
+            after: before,
+            results,
+            summary,
+            preconditions,
+        });
     }
 
     let mut current = before.clone();
@@ -332,7 +332,10 @@ fn resolve_op<'a>(op: &'a PlanOp, opts: &ApplyOptions) -> ResolvedOp<'a> {
                     blocked_message: None,
                 };
             }
-            let blocked_reason = op.blocked_reason.clone().or(Some("missing params".to_string()));
+            let blocked_reason = op
+                .blocked_reason
+                .clone()
+                .or(Some("missing params".to_string()));
             return ResolvedOp {
                 op,
                 kind: op.kind.clone(),
@@ -413,13 +416,22 @@ fn fill_op_param(kind: &mut OpKind, key: &str, value: &str) {
 
     match (rule_id.as_str(), key) {
         ("set_package_rust_version", "rust_version") => {
-            map.insert(key.to_string(), serde_json::Value::String(value.to_string()));
+            map.insert(
+                key.to_string(),
+                serde_json::Value::String(value.to_string()),
+            );
         }
         ("ensure_path_dep_has_version", "version") => {
-            map.insert(key.to_string(), serde_json::Value::String(value.to_string()));
+            map.insert(
+                key.to_string(),
+                serde_json::Value::String(value.to_string()),
+            );
         }
         _ => {
-            map.insert(key.to_string(), serde_json::Value::String(value.to_string()));
+            map.insert(
+                key.to_string(),
+                serde_json::Value::String(value.to_string()),
+            );
         }
     }
 
@@ -491,7 +503,7 @@ fn create_backups(
     changed_files: &BTreeSet<Utf8PathBuf>,
     before: &BTreeMap<Utf8PathBuf, String>,
     opts: &ApplyOptions,
-    results: &mut Vec<ApplyResult>,
+    results: &mut [ApplyResult],
 ) -> anyhow::Result<()> {
     let Some(ref backup_dir) = opts.backup_dir else {
         return Ok(());
@@ -503,8 +515,7 @@ fn create_backups(
         let backup_path = backup_dir.join(backup_rel);
 
         if let Some(parent) = backup_path.parent() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("create backup dir {}", parent))?;
+            fs::create_dir_all(parent).with_context(|| format!("create backup dir {}", parent))?;
         }
 
         fs::write(&backup_path, &contents)
@@ -513,7 +524,7 @@ fn create_backups(
         // Update any result entries that mention this file.
         for result in results.iter_mut() {
             for file in &mut result.files {
-                if file.path == path.to_string() {
+                if file.path == *path {
                     file.backup_path = Some(backup_path.to_string());
                 }
             }
@@ -727,7 +738,11 @@ fn set_toml_path(doc: &mut DocumentMut, toml_path: &[String], value: serde_json:
     }
     let mut current = doc.as_table_mut();
     for key in &toml_path[..toml_path.len() - 1] {
-        current = current.entry(key).or_insert(toml_edit::table()).as_table_mut().unwrap();
+        current = current
+            .entry(key)
+            .or_insert(toml_edit::table())
+            .as_table_mut()
+            .unwrap();
     }
     let last = toml_path.last().unwrap();
     current[last] = Item::Value(json_value_to_toml(value));

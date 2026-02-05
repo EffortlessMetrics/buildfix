@@ -343,8 +343,12 @@ allow = ["some/pattern/*"]
         let cli_allow = vec!["cli/pattern/*".to_string()];
         let cli_deny = vec!["cli/deny/*".to_string()];
 
-        let merged =
-            ConfigMerger::new(config).merge_plan_args(&cli_allow, &cli_deny, false, &HashMap::new());
+        let merged = ConfigMerger::new(config).merge_plan_args(
+            &cli_allow,
+            &cli_deny,
+            false,
+            &HashMap::new(),
+        );
 
         assert_eq!(merged.allow.len(), 2);
         assert!(merged.allow.contains(&"config/pattern/*".to_string()));

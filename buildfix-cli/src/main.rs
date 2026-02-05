@@ -258,7 +258,8 @@ fn cmd_plan(args: PlanArgs) -> anyhow::Result<ExitCode> {
         let attach_opts = AttachPreconditionsOptions {
             include_git_head: args.git_head_precondition,
         };
-        attach_preconditions(&repo_root, &mut plan, &attach_opts).context("attach preconditions")?;
+        attach_preconditions(&repo_root, &mut plan, &attach_opts)
+            .context("attach preconditions")?;
     } else {
         plan.preconditions.files.clear();
     }
@@ -382,11 +383,14 @@ fn cmd_apply(args: ApplyArgs) -> anyhow::Result<ExitCode> {
     let (mut apply, patch) = if policy_block {
         let mut apply = empty_apply_from_plan(&plan, &repo_root, tool.clone(), &plan_path);
         apply.preconditions.verified = false;
-        apply.preconditions.mismatches.push(buildfix_types::apply::PreconditionMismatch {
-            path: "<working_tree>".to_string(),
-            expected: "clean".to_string(),
-            actual: "dirty".to_string(),
-        });
+        apply
+            .preconditions
+            .mismatches
+            .push(buildfix_types::apply::PreconditionMismatch {
+                path: "<working_tree>".to_string(),
+                expected: "clean".to_string(),
+                actual: "dirty".to_string(),
+            });
         for op in &plan.ops {
             apply.results.push(buildfix_types::apply::ApplyResult {
                 op_id: op.id.clone(),
@@ -485,10 +489,7 @@ enum ValidateOutcome {
     SchemaErrors(Vec<String>),
 }
 
-fn validate_file_if_exists(
-    path: &Utf8Path,
-    schema_str: &str,
-) -> anyhow::Result<ValidateOutcome> {
+fn validate_file_if_exists(path: &Utf8Path, schema_str: &str) -> anyhow::Result<ValidateOutcome> {
     if !path.exists() {
         return Ok(ValidateOutcome::Missing);
     }

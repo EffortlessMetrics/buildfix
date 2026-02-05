@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeSet, HashMap};
 use uuid::Uuid;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PlannerConfig {
     pub allow: Vec<String>,
     pub deny: Vec<String>,
@@ -23,22 +23,6 @@ pub struct PlannerConfig {
     pub max_files: Option<u64>,
     pub max_patch_bytes: Option<u64>,
     pub params: HashMap<String, String>,
-}
-
-impl Default for PlannerConfig {
-    fn default() -> Self {
-        Self {
-            allow: vec![],
-            deny: vec![],
-            allow_guarded: false,
-            allow_unsafe: false,
-            allow_dirty: false,
-            max_ops: None,
-            max_files: None,
-            max_patch_bytes: None,
-            params: HashMap::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -198,13 +182,22 @@ fn fill_op_param(op: &mut PlanOp, key: &str, value: &str) {
 
     match (rule_id.as_str(), key) {
         ("set_package_rust_version", "rust_version") => {
-            map.insert(key.to_string(), serde_json::Value::String(value.to_string()));
+            map.insert(
+                key.to_string(),
+                serde_json::Value::String(value.to_string()),
+            );
         }
         ("ensure_path_dep_has_version", "version") => {
-            map.insert(key.to_string(), serde_json::Value::String(value.to_string()));
+            map.insert(
+                key.to_string(),
+                serde_json::Value::String(value.to_string()),
+            );
         }
         _ => {
-            map.insert(key.to_string(), serde_json::Value::String(value.to_string()));
+            map.insert(
+                key.to_string(),
+                serde_json::Value::String(value.to_string()),
+            );
         }
     }
 
@@ -219,7 +212,10 @@ fn apply_allow_deny(allow: &[String], deny: &[String], ops: &mut [PlanOp]) {
 
         let trigger_keys = op_fix_keys(op);
 
-        if deny.iter().any(|pat| trigger_keys.iter().any(|k| glob_match(pat, k))) {
+        if deny
+            .iter()
+            .any(|pat| trigger_keys.iter().any(|k| glob_match(pat, k)))
+        {
             op.blocked = true;
             op.blocked_reason = Some("denied by policy".to_string());
             continue;
@@ -244,7 +240,7 @@ fn op_fix_keys(op: &PlanOp) -> Vec<String> {
     op.rationale
         .findings
         .iter()
-        .map(|f| fix_key_for_finding(f))
+        .map(fix_key_for_finding)
         .collect()
 }
 
@@ -405,7 +401,13 @@ fn stable_finding_key(f: &FindingRef) -> String {
         .map(|p| format!("{}:{}", p, f.line.unwrap_or(0)))
         .unwrap_or_else(|| "no_location".to_string());
 
-    format!("{}/{}/{}|{}", f.source, f.check_id.clone().unwrap_or_default(), f.code, loc)
+    format!(
+        "{}/{}/{}|{}",
+        f.source,
+        f.check_id.clone().unwrap_or_default(),
+        f.code,
+        loc
+    )
 }
 
 fn stable_op_sort_key(op: &PlanOp) -> String {
@@ -426,8 +428,8 @@ fn op_sort_key(op: &PlanOp) -> String {
 fn deterministic_op_id(op: &PlanOp) -> Uuid {
     // Deterministic ID: v5(namespace, stable_key_bytes)
     const NAMESPACE: Uuid = Uuid::from_bytes([
-        0x4b, 0x5d, 0x35, 0x58, 0x06, 0x58, 0x4c, 0x05, 0x8e, 0x8c, 0x0b, 0x1a, 0x44, 0x53,
-        0x52, 0xd1,
+        0x4b, 0x5d, 0x35, 0x58, 0x06, 0x58, 0x4c, 0x05, 0x8e, 0x8c, 0x0b, 0x1a, 0x44, 0x53, 0x52,
+        0xd1,
     ]);
 
     let rule_id = match &op.kind {

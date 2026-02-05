@@ -382,11 +382,17 @@ impl Fixer for WorkspaceInheritanceFixer {
                             .collect(),
                     ),
                 );
-                args.insert("dep".to_string(), serde_json::Value::String(cand.dep.clone()));
+                args.insert(
+                    "dep".to_string(),
+                    serde_json::Value::String(cand.dep.clone()),
+                );
 
                 let mut preserved = serde_json::Map::new();
                 if let Some(pkg) = &cand.preserved.package {
-                    preserved.insert("package".to_string(), serde_json::Value::String(pkg.clone()));
+                    preserved.insert(
+                        "package".to_string(),
+                        serde_json::Value::String(pkg.clone()),
+                    );
                 }
                 if let Some(opt) = cand.preserved.optional {
                     preserved.insert("optional".to_string(), serde_json::Value::Bool(opt));
@@ -406,7 +412,10 @@ impl Fixer for WorkspaceInheritanceFixer {
                         ),
                     );
                 }
-                args.insert("preserved".to_string(), serde_json::Value::Object(preserved));
+                args.insert(
+                    "preserved".to_string(),
+                    serde_json::Value::Object(preserved),
+                );
 
                 let findings = triggers_by_manifest
                     .get(&manifest)

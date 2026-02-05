@@ -21,9 +21,9 @@ fn plan_ops(plan: &serde_json::Value) -> &Vec<serde_json::Value> {
 }
 
 fn plan_has_rule(plan: &serde_json::Value, rule_id: &str) -> bool {
-    plan_ops(plan).iter().any(|op| {
-        op["kind"]["type"] == "toml_transform" && op["kind"]["rule_id"] == rule_id
-    })
+    plan_ops(plan)
+        .iter()
+        .any(|op| op["kind"]["type"] == "toml_transform" && op["kind"]["rule_id"] == rule_id)
 }
 
 #[given("a repo missing workspace resolver v2")]
@@ -97,10 +97,7 @@ async fn run_plan(world: &mut BuildfixWorld) {
 async fn run_plan_expect_policy_block(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
     let mut cmd = Command::cargo_bin("buildfix").expect("buildfix binary");
-    cmd.current_dir(root.as_str())
-        .arg("plan")
-        .assert()
-        .code(2);
+    cmd.current_dir(root.as_str()).arg("plan").assert().code(2);
 }
 
 #[then("the plan contains a resolver v2 fix")]
@@ -623,7 +620,10 @@ async fn assert_resolver_op_blocked_by_allowlist(world: &mut BuildfixWorld) {
 
     let op = plan_ops(&v)
         .iter()
-        .find(|op| op["kind"]["type"] == "toml_transform" && op["kind"]["rule_id"] == "ensure_workspace_resolver_v2")
+        .find(|op| {
+            op["kind"]["type"] == "toml_transform"
+                && op["kind"]["rule_id"] == "ensure_workspace_resolver_v2"
+        })
         .expect("resolver v2 op");
 
     assert_eq!(op["blocked"].as_bool(), Some(true));
@@ -644,7 +644,10 @@ async fn assert_path_dep_blocked_missing_params(world: &mut BuildfixWorld) {
 
     let op = plan_ops(&v)
         .iter()
-        .find(|op| op["kind"]["type"] == "toml_transform" && op["kind"]["rule_id"] == "ensure_path_dep_has_version")
+        .find(|op| {
+            op["kind"]["type"] == "toml_transform"
+                && op["kind"]["rule_id"] == "ensure_path_dep_has_version"
+        })
         .expect("path dep op");
 
     assert_eq!(op["blocked"].as_bool(), Some(true));
@@ -655,7 +658,10 @@ async fn assert_path_dep_blocked_missing_params(world: &mut BuildfixWorld) {
         "expected missing params reason, got: {}",
         reason
     );
-    let params = op["params_required"].as_array().cloned().unwrap_or_default();
+    let params = op["params_required"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
     assert!(
         params.iter().any(|v| v.as_str() == Some("version")),
         "expected params_required to contain version"
@@ -690,7 +696,10 @@ async fn assert_apply_preconditions_not_verified(world: &mut BuildfixWorld) {
     let v: serde_json::Value = serde_json::from_str(&apply_str).unwrap();
 
     assert_eq!(v["preconditions"]["verified"].as_bool(), Some(false));
-    let mismatches = v["preconditions"]["mismatches"].as_array().cloned().unwrap_or_default();
+    let mismatches = v["preconditions"]["mismatches"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
     assert!(
         !mismatches.is_empty(),
         "expected at least one precondition mismatch"
@@ -1231,7 +1240,10 @@ async fn assert_apply_json_schema(world: &mut BuildfixWorld) {
 async fn validate_succeeds(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
     let mut cmd = Command::cargo_bin("buildfix").expect("buildfix binary");
-    cmd.current_dir(root.as_str()).arg("validate").assert().success();
+    cmd.current_dir(root.as_str())
+        .arg("validate")
+        .assert()
+        .success();
 }
 
 #[tokio::main]

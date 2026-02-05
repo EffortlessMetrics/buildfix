@@ -156,8 +156,8 @@ fn run_fixture_test(fixture_name: &str) {
         backup_suffix: ".buildfix.bak".to_string(),
         params: std::collections::HashMap::new(),
     };
-    let patch = buildfix_edit::preview_patch(&repo_root, &plan, &preview_opts)
-        .expect("preview patch");
+    let patch =
+        buildfix_edit::preview_patch(&repo_root, &plan, &preview_opts).expect("preview patch");
 
     // Serialize and normalize
     let plan_wire = PlanV1::try_from(&plan).expect("convert plan to wire");
@@ -231,8 +231,8 @@ fn run_fixture_test(fixture_name: &str) {
             params: std::collections::HashMap::new(),
         };
 
-        let (apply, _patch) = buildfix_edit::apply_plan(&repo_root, &plan, tool, &apply_opts)
-            .expect("apply plan");
+        let (apply, _patch) =
+            buildfix_edit::apply_plan(&repo_root, &plan, tool, &apply_opts).expect("apply plan");
 
         let apply_wire = ApplyV1::try_from(&apply).expect("convert apply to wire");
         let apply_json = serde_json::to_string_pretty(&apply_wire).expect("serialize apply");

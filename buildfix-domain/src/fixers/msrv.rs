@@ -129,7 +129,11 @@ impl Fixer for MsrvNormalizeFixer {
             }
 
             let (safety, params_required, rust_version_value) = match &rust_version {
-                Some(rv) => (SafetyClass::Guarded, vec![], serde_json::Value::String(rv.clone())),
+                Some(rv) => (
+                    SafetyClass::Guarded,
+                    vec![],
+                    serde_json::Value::String(rv.clone()),
+                ),
                 None => (
                     SafetyClass::Unsafe,
                     vec!["rust_version".to_string()],

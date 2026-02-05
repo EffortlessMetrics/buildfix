@@ -105,16 +105,8 @@ pub fn render_apply_md(apply: &BuildfixApply) -> String {
         if !r.files.is_empty() {
             out.push_str("\n**Files changed**\n\n");
             for fc in &r.files {
-                let before = fc
-                    .sha256_before
-                    .as_ref()
-                    .map(|s| s.as_str())
-                    .unwrap_or("-");
-                let after = fc
-                    .sha256_after
-                    .as_ref()
-                    .map(|s| s.as_str())
-                    .unwrap_or("-");
+                let before = fc.sha256_before.as_deref().unwrap_or("-");
+                let after = fc.sha256_after.as_deref().unwrap_or("-");
                 out.push_str(&format!("- `{}` {} → {}\n", fc.path, before, after));
             }
         }
