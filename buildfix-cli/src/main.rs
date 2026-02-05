@@ -12,7 +12,8 @@ use buildfix_types::apply::BuildfixApply;
 use buildfix_types::plan::BuildfixPlan;
 use buildfix_types::receipt::ToolInfo;
 use buildfix_types::report::{
-    BuildfixReport, ReportCounts, ReportRunInfo, ReportStatus, ReportToolInfo, ReportVerdict,
+    BuildfixReport, InputFailure, ReportArtifacts, ReportCapabilities, ReportCounts, ReportRunInfo,
+    ReportStatus, ReportToolInfo, ReportVerdict,
 };
 use buildfix_types::wire::{ApplyV1, PlanV1, ReportV1};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -311,7 +312,7 @@ fn cmd_plan(args: PlanArgs) -> anyhow::Result<ExitCode> {
     fs::write(out_dir.join("plan.md"), render_plan_md(&plan))?;
     fs::write(out_dir.join("patch.diff"), &patch)?;
 
-    let report = report_from_plan(&plan, tool);
+    let report = report_from_plan(&plan, tool, &receipts);
     let report_wire = ReportV1::from(&report);
     write_json(&out_dir.join("report.json"), &report_wire)?;
 
@@ -524,12 +525,18 @@ fn tool_info() -> ToolInfo {
     }
 }
 
-fn report_from_plan(plan: &BuildfixPlan, tool: ToolInfo) -> BuildfixReport {
+fn report_from_plan(
+    plan: &BuildfixPlan,
+    tool: ToolInfo,
+    receipts: &[buildfix_receipts::LoadedReceipt],
+) -> BuildfixReport {
     let status = if plan.ops.is_empty() {
         ReportStatus::Pass
     } else {
         ReportStatus::Warn
     };
+
+    let capabilities = build_capabilities(receipts);
 
     BuildfixReport {
         schema: buildfix_types::schema::BUILDFIX_REPORT_V1.to_string(),
@@ -553,12 +560,42 @@ fn report_from_plan(plan: &BuildfixPlan, tool: ToolInfo) -> BuildfixReport {
             reasons: vec![],
         },
         findings: vec![],
+        capabilities: Some(capabilities),
+        artifacts: Some(ReportArtifacts {
+            plan: Some("plan.json".to_string()),
+            apply: None,
+            patch: Some("patch.diff".to_string()),
+        }),
         data: Some(serde_json::json!({
             "ops_total": plan.summary.ops_total,
             "ops_blocked": plan.summary.ops_blocked,
             "files_touched": plan.summary.files_touched,
             "patch_bytes": plan.summary.patch_bytes,
         })),
+    }
+}
+
+fn build_capabilities(receipts: &[buildfix_receipts::LoadedReceipt]) -> ReportCapabilities {
+    let mut inputs_available = Vec::new();
+    let mut inputs_failed = Vec::new();
+
+    for r in receipts {
+        match &r.receipt {
+            Ok(_) => {
+                inputs_available.push(r.path.to_string());
+            }
+            Err(e) => {
+                inputs_failed.push(InputFailure {
+                    path: r.path.to_string(),
+                    reason: e.to_string(),
+                });
+            }
+        }
+    }
+
+    ReportCapabilities {
+        inputs_available,
+        inputs_failed,
     }
 }
 
@@ -595,6 +632,12 @@ fn report_from_apply(apply: &BuildfixApply, tool: ToolInfo) -> BuildfixReport {
             reasons: vec![],
         },
         findings: vec![],
+        capabilities: None, // Apply doesn't have receipt context
+        artifacts: Some(ReportArtifacts {
+            plan: Some("plan.json".to_string()),
+            apply: Some("apply.json".to_string()),
+            patch: Some("patch.diff".to_string()),
+        }),
         data: Some(serde_json::json!({
             "attempted": apply.summary.attempted,
             "applied": apply.summary.applied,

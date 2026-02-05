@@ -43,6 +43,12 @@ pub fn load_receipts(artifacts_dir: &Utf8Path) -> anyhow::Result<Vec<LoadedRecei
             .unwrap_or("unknown")
             .to_string();
 
+        // Skip buildfix's own output directory - it's not a sensor receipt.
+        if sensor_id == "buildfix" {
+            debug!(path = %utf8_path, "skipping buildfix's own report");
+            continue;
+        }
+
         let receipt = match fs::read_to_string(&utf8_path) {
             Ok(s) => {
                 serde_json::from_str::<ReceiptEnvelope>(&s).map_err(|e| ReceiptLoadError::Json {

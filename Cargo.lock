@@ -2879,6 +2879,8 @@ dependencies = [
  "buildfix-types",
  "clap",
  "fs-err",
+ "jsonschema",
+ "serde_json",
 ]
 
 [[package]]

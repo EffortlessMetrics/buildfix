@@ -43,3 +43,4 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 uuid = { version = "1.8", features = ["v4", "v5", "serde"] }
 toml = "0.8"
+jsonschema = { version = "0.18", features = ["draft202012"] }

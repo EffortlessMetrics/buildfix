@@ -1,19 +1,21 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:effortless:buildfix.report.v1",
-  "title": "buildfix.report.v1",
+  "$id": "urn:cockpit:sensor.report.v1",
+  "title": "sensor.report.v1",
+  "description": "Universal envelope for sensor output in the Cockpit ecosystem.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schema",
     "tool",
     "run",
-    "verdict",
-    "findings"
+    "verdict"
   ],
   "properties": {
     "schema": {
-      "const": "buildfix.report.v1"
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*\\.report\\.v[0-9]+$",
+      "description": "Schema identifier, e.g. 'buildfix.report.v1', 'builddiag.report.v1'"
     },
     "tool": {
       "type": "object",
@@ -24,13 +26,22 @@
       ],
       "properties": {
         "name": {
-          "const": "buildfix"
+          "type": "string",
+          "minLength": 1,
+          "description": "Tool name, e.g. 'buildfix', 'builddiag'"
         },
         "version": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1,
+          "description": "Tool version, e.g. '0.1.0'"
+        },
+        "repo": {
+          "type": "string",
+          "description": "Repository URL"
         },
         "commit": {
-          "type": "string"
+          "type": "string",
+          "description": "Git commit SHA"
         }
       }
     },
@@ -43,15 +54,22 @@
       "properties": {
         "started_at": {
           "type": "string",
-          "format": "date-time"
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when the run started"
         },
         "ended_at": {
           "type": "string",
-          "format": "date-time"
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when the run ended"
         },
         "duration_ms": {
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "description": "Duration in milliseconds"
+        },
+        "git_head_sha": {
+          "type": "string",
+          "description": "Git HEAD SHA at run time"
         }
       }
     },
@@ -70,7 +88,8 @@
             "warn",
             "fail",
             "skip"
-          ]
+          ],
+          "description": "Overall verdict status (frozen vocabulary)"
         },
         "counts": {
           "type": "object",
@@ -83,15 +102,18 @@
           "properties": {
             "info": {
               "type": "integer",
-              "minimum": 0
+              "minimum": 0,
+              "description": "Count of info-level findings"
             },
             "warn": {
               "type": "integer",
-              "minimum": 0
+              "minimum": 0,
+              "description": "Count of warn-level findings"
             },
             "error": {
               "type": "integer",
-              "minimum": 0
+              "minimum": 0,
+              "description": "Count of error-level findings"
             }
           }
         },
@@ -100,7 +122,8 @@
           "items": {
             "type": "string"
           },
-          "default": []
+          "default": [],
+          "description": "Human-readable reasons for the verdict"
         }
       }
     },
@@ -122,38 +145,53 @@
               "info",
               "warn",
               "error"
-            ]
+            ],
+            "description": "Finding severity (frozen vocabulary)"
           },
           "check_id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "description": "Check identifier, e.g. 'workspace_resolver'"
           },
           "code": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "description": "Finding code within check, e.g. 'missing_v2'"
           },
           "message": {
-            "type": "string"
+            "type": "string",
+            "description": "Human-readable message"
           },
           "location": {
             "type": "object",
             "additionalProperties": false,
+            "required": [
+              "path"
+            ],
             "properties": {
               "path": {
-                "type": "string"
+                "type": "string",
+                "description": "Repo-relative path (forward slashes, no leading ./)"
               },
               "line": {
                 "type": "integer",
-                "minimum": 1
+                "minimum": 1,
+                "description": "1-based line number"
               },
               "col": {
                 "type": "integer",
-                "minimum": 1
+                "minimum": 1,
+                "description": "1-based column number"
               }
             }
           },
           "fingerprint": {
-            "type": "string"
+            "type": "string",
+            "description": "Stable key for deduplication across runs"
           },
-          "data": {}
+          "data": {
+            "description": "Tool-specific finding payload"
+          }
         }
       }
     },
@@ -162,6 +200,29 @@
       "additionalProperties": false,
       "description": "Capabilities block for 'No Green By Omission' pattern",
       "properties": {
+        "check_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of check_ids this sensor can emit"
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Scopes this sensor covers, e.g. ['workspace', 'crate']"
+        },
+        "partial": {
+          "type": "boolean",
+          "default": false,
+          "description": "True if some inputs could not be processed"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Reason for partial results, if applicable"
+        },
         "inputs_available": {
           "type": "array",
           "items": {
@@ -213,16 +274,7 @@
       }
     },
     "data": {
-      "type": [
-        "object",
-        "array",
-        "string",
-        "number",
-        "boolean",
-        "null"
-      ],
-      "default": null,
-      "description": "Tool-specific payload (plan/apply pointers, counts)."
+      "description": "Tool-specific payload (extension point)"
     }
   }
 }

@@ -26,9 +26,33 @@ pub struct ReceiptEnvelope {
     #[serde(default)]
     pub findings: Vec<Finding>,
 
+    /// Capabilities block for "No Green By Omission" pattern.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<ReceiptCapabilities>,
+
     /// Optional, tool-specific payload.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data: Option<serde_json::Value>,
+}
+
+/// Capabilities block describing what the sensor can/did check.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReceiptCapabilities {
+    /// List of check_ids this sensor can emit.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub check_ids: Vec<String>,
+
+    /// Scopes this sensor covers (e.g., "workspace", "crate").
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scopes: Vec<String>,
+
+    /// True if some inputs could not be processed.
+    #[serde(default)]
+    pub partial: bool,
+
+    /// Reason for partial results, if applicable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -124,7 +148,7 @@ pub struct Finding {
 pub enum Severity {
     #[default]
     Info,
-    Warning,
+    Warn,
     Error,
 }
 
