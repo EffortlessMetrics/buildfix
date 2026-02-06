@@ -4,6 +4,7 @@ use crate::ports::{GitPort, ReceiptSource, WritePort};
 use anyhow::Context;
 use buildfix_receipts::LoadedReceipt;
 use camino::{Utf8Path, Utf8PathBuf};
+use tracing::debug;
 
 /// Loads receipts from the filesystem via `buildfix_receipts::load_receipts`.
 #[derive(Debug, Clone)]
@@ -46,8 +47,9 @@ impl GitPort for ShellGitPort {
 
 /// In-memory receipt source for embedding and testing.
 ///
-/// Accepts pre-loaded receipts and sorts them by path on construction
-/// to match `FsReceiptSource`'s deterministic ordering.
+/// Accepts pre-loaded receipts, filters out buildfix's own receipts
+/// (mirroring the fs loader's self-ingest guard), and sorts by path on
+/// construction to match `FsReceiptSource`'s deterministic ordering.
 #[derive(Debug, Clone)]
 pub struct InMemoryReceiptSource {
     receipts: Vec<LoadedReceipt>,
@@ -55,6 +57,14 @@ pub struct InMemoryReceiptSource {
 
 impl InMemoryReceiptSource {
     pub fn new(mut receipts: Vec<LoadedReceipt>) -> Self {
+        receipts.retain(|r| {
+            if r.sensor_id == "buildfix" {
+                debug!(path = %r.path, "skipping buildfix's own report");
+                false
+            } else {
+                true
+            }
+        });
         receipts.sort_by(|a, b| a.path.cmp(&b.path));
         Self { receipts }
     }
@@ -99,6 +109,16 @@ mod tests {
         }
     }
 
+    fn make_receipt_with_sensor(path: &str, sensor_id: &str) -> LoadedReceipt {
+        LoadedReceipt {
+            path: Utf8PathBuf::from(path),
+            sensor_id: sensor_id.to_string(),
+            receipt: Err(ReceiptLoadError::Io {
+                message: "stub".to_string(),
+            }),
+        }
+    }
+
     #[test]
     fn in_memory_sorts_by_path() {
         let source = InMemoryReceiptSource::new(vec![
@@ -131,5 +151,33 @@ mod tests {
         let source = InMemoryReceiptSource::new(vec![]);
         let loaded = source.load_receipts().unwrap();
         assert!(loaded.is_empty());
+    }
+
+    #[test]
+    fn in_memory_filters_buildfix_receipts() {
+        let source = InMemoryReceiptSource::new(vec![make_receipt_with_sensor(
+            "artifacts/buildfix/report.json",
+            "buildfix",
+        )]);
+        let loaded = source.load_receipts().unwrap();
+        assert!(loaded.is_empty());
+    }
+
+    #[test]
+    fn in_memory_filters_buildfix_among_others() {
+        let source = InMemoryReceiptSource::new(vec![
+            make_receipt_with_sensor("artifacts/z-sensor/report.json", "z-sensor"),
+            make_receipt_with_sensor("artifacts/buildfix/report.json", "buildfix"),
+            make_receipt_with_sensor("artifacts/a-sensor/report.json", "a-sensor"),
+        ]);
+        let loaded = source.load_receipts().unwrap();
+        let paths: Vec<&str> = loaded.iter().map(|r| r.path.as_str()).collect();
+        assert_eq!(
+            paths,
+            vec![
+                "artifacts/a-sensor/report.json",
+                "artifacts/z-sensor/report.json",
+            ]
+        );
     }
 }
