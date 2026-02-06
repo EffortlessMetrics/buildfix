@@ -78,7 +78,11 @@ fn main() -> anyhow::Result<()> {
             golden_dir,
             contracts_dir,
         } => {
-            cmd_conform(&artifacts_dir, golden_dir.as_deref(), contracts_dir.as_deref())?;
+            cmd_conform(
+                &artifacts_dir,
+                golden_dir.as_deref(),
+                contracts_dir.as_deref(),
+            )?;
         }
     }
     Ok(())
@@ -99,8 +103,8 @@ fn cmd_conform(
     let schema_str: String;
     let sensor_schema = if let Some(dir) = contracts_dir {
         let schema_path = format!("{}/schemas/sensor.report.v1.json", dir);
-        schema_str = fs::read_to_string(&schema_path)
-            .with_context(|| format!("read {}", schema_path))?;
+        schema_str =
+            fs::read_to_string(&schema_path).with_context(|| format!("read {}", schema_path))?;
         schema_str.as_str()
     } else {
         SENSOR_REPORT_V1_SCHEMA
@@ -184,10 +188,7 @@ fn validate_against_schema(file_path: &str, schema_str: &str) -> Result<(), Vec<
     let compiled = jsonschema::draft202012::new(&schema_json)
         .map_err(|e| vec![format!("Schema compile: {}", e)])?;
 
-    let errors: Vec<String> = compiled
-        .iter_errors(&json)
-        .map(|e| e.to_string())
-        .collect();
+    let errors: Vec<String> = compiled.iter_errors(&json).map(|e| e.to_string()).collect();
     if errors.is_empty() {
         Ok(())
     } else {
@@ -222,9 +223,10 @@ fn check_required_fields(file_path: &str) -> Result<(), Vec<String>> {
 
     // Check run.started_at
     if let Some(run) = json.get("run")
-        && run.get("started_at").is_none() {
-            errors.push("missing required field: run.started_at".to_string());
-        }
+        && run.get("started_at").is_none()
+    {
+        errors.push("missing required field: run.started_at".to_string());
+    }
 
     // Check verdict.status and verdict.counts
     if let Some(verdict) = json.get("verdict") {

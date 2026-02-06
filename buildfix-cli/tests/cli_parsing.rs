@@ -380,3 +380,38 @@ fn test_validate_with_no_artifacts() {
         .assert()
         .success();
 }
+
+#[test]
+fn test_validate_detects_schema_violation() {
+    let temp = create_temp_repo();
+    let bf_dir = temp.path().join("artifacts").join("buildfix");
+    fs::create_dir_all(&bf_dir).unwrap();
+
+    // Valid JSON but violates the plan schema (missing required fields).
+    fs::write(bf_dir.join("plan.json"), r#"{"not_a_plan": true}"#).unwrap();
+
+    buildfix()
+        .current_dir(temp.path())
+        .arg("validate")
+        .assert()
+        .code(2);
+}
+
+#[test]
+fn test_validate_round_trip() {
+    let temp = create_temp_repo();
+
+    // Generate artifacts via plan.
+    buildfix()
+        .current_dir(temp.path())
+        .arg("plan")
+        .assert()
+        .success();
+
+    // Validate that the generated artifacts pass schema validation.
+    buildfix()
+        .current_dir(temp.path())
+        .arg("validate")
+        .assert()
+        .success();
+}

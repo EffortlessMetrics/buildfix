@@ -3,14 +3,12 @@ mod explain;
 
 use anyhow::Context;
 use buildfix_core::adapters::{FsReceiptSource, FsWritePort, ShellGitPort};
-use buildfix_core::pipeline::{
-    run_apply, run_plan, write_apply_artifacts, write_plan_artifacts,
-};
+use buildfix_core::pipeline::{run_apply, run_plan, write_apply_artifacts, write_plan_artifacts};
 use buildfix_core::settings::{ApplySettings, PlanSettings};
 use buildfix_types::receipt::ToolInfo;
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::{Parser, Subcommand};
-use config::{parse_cli_params, ConfigMerger};
+use config::{ConfigMerger, parse_cli_params};
 use fs_err as fs;
 
 use std::process::ExitCode;
@@ -242,13 +240,12 @@ fn cmd_plan(args: PlanArgs) -> anyhow::Result<ExitCode> {
     let writer = FsWritePort;
     let tool = tool_info();
 
-    let outcome = run_plan(&settings, &receipts_port, &git, tool)
-        .map_err(|e| match e {
-            buildfix_core::pipeline::ToolError::Internal(e) => e,
-            buildfix_core::pipeline::ToolError::PolicyBlock => {
-                anyhow::anyhow!("policy block")
-            }
-        })?;
+    let outcome = run_plan(&settings, &receipts_port, &git, tool).map_err(|e| match e {
+        buildfix_core::pipeline::ToolError::Internal(e) => e,
+        buildfix_core::pipeline::ToolError::PolicyBlock => {
+            anyhow::anyhow!("policy block")
+        }
+    })?;
 
     write_plan_artifacts(&outcome, &out_dir, &writer)?;
 
@@ -300,13 +297,12 @@ fn cmd_apply(args: ApplyArgs) -> anyhow::Result<ExitCode> {
     let writer = FsWritePort;
     let tool = tool_info();
 
-    let outcome = run_apply(&settings, &git, tool)
-        .map_err(|e| match e {
-            buildfix_core::pipeline::ToolError::Internal(e) => e,
-            buildfix_core::pipeline::ToolError::PolicyBlock => {
-                anyhow::anyhow!("policy block")
-            }
-        })?;
+    let outcome = run_apply(&settings, &git, tool).map_err(|e| match e {
+        buildfix_core::pipeline::ToolError::Internal(e) => e,
+        buildfix_core::pipeline::ToolError::PolicyBlock => {
+            anyhow::anyhow!("policy block")
+        }
+    })?;
 
     write_apply_artifacts(&outcome, &out_dir, &writer)?;
 
@@ -384,10 +380,7 @@ fn validate_file_if_exists(path: &Utf8Path, schema_str: &str) -> anyhow::Result<
         serde_json::from_str(schema_str).context("parse schema")?;
     let compiled = jsonschema::draft202012::new(&schema_json)
         .map_err(|e| anyhow::anyhow!("compile schema: {}", e))?;
-    let errors: Vec<String> = compiled
-        .iter_errors(&json)
-        .map(|e| e.to_string())
-        .collect();
+    let errors: Vec<String> = compiled.iter_errors(&json).map(|e| e.to_string()).collect();
     if !errors.is_empty() {
         return Ok(ValidateOutcome::SchemaErrors(errors));
     }
@@ -470,7 +463,7 @@ fn cmd_explain(args: ExplainArgs) -> anyhow::Result<()> {
 }
 
 fn cmd_list_fixes(args: ListFixesArgs) -> anyhow::Result<()> {
-    use explain::{format_safety_class, policy_keys, FIX_REGISTRY};
+    use explain::{FIX_REGISTRY, format_safety_class, policy_keys};
 
     match args.format {
         OutputFormat::Text => {

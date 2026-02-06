@@ -263,19 +263,20 @@ fn enforce_caps(cfg: &PlannerConfig, ops: &mut [PlanOp]) -> anyhow::Result<()> {
     }
 
     if cap_reason.is_none()
-        && let Some(max_files) = cfg.max_files {
-            let files = ops
-                .iter()
-                .map(|o| o.target.path.as_str())
-                .collect::<BTreeSet<_>>();
-            let total_files = files.len() as u64;
-            if total_files > max_files {
-                cap_reason = Some(format!(
-                    "caps exceeded: max_files {} > {} allowed",
-                    total_files, max_files
-                ));
-            }
+        && let Some(max_files) = cfg.max_files
+    {
+        let files = ops
+            .iter()
+            .map(|o| o.target.path.as_str())
+            .collect::<BTreeSet<_>>();
+        let total_files = files.len() as u64;
+        if total_files > max_files {
+            cap_reason = Some(format!(
+                "caps exceeded: max_files {} > {} allowed",
+                total_files, max_files
+            ));
         }
+    }
 
     if let Some(reason) = cap_reason {
         for op in ops.iter_mut() {

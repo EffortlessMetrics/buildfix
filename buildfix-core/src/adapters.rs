@@ -44,6 +44,28 @@ impl GitPort for ShellGitPort {
     }
 }
 
+/// In-memory receipt source for embedding and testing.
+///
+/// Accepts pre-loaded receipts and sorts them by path on construction
+/// to match `FsReceiptSource`'s deterministic ordering.
+#[derive(Debug, Clone)]
+pub struct InMemoryReceiptSource {
+    receipts: Vec<LoadedReceipt>,
+}
+
+impl InMemoryReceiptSource {
+    pub fn new(mut receipts: Vec<LoadedReceipt>) -> Self {
+        receipts.sort_by(|a, b| a.path.cmp(&b.path));
+        Self { receipts }
+    }
+}
+
+impl ReceiptSource for InMemoryReceiptSource {
+    fn load_receipts(&self) -> anyhow::Result<Vec<LoadedReceipt>> {
+        Ok(self.receipts.clone())
+    }
+}
+
 /// Filesystem write operations.
 #[derive(Debug, Clone, Default)]
 pub struct FsWritePort;
@@ -59,5 +81,55 @@ impl WritePort for FsWritePort {
 
     fn create_dir_all(&self, path: &Utf8Path) -> anyhow::Result<()> {
         std::fs::create_dir_all(path).with_context(|| format!("create_dir_all {}", path))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use buildfix_receipts::ReceiptLoadError;
+
+    fn make_receipt(path: &str) -> LoadedReceipt {
+        LoadedReceipt {
+            path: Utf8PathBuf::from(path),
+            sensor_id: "test".to_string(),
+            receipt: Err(ReceiptLoadError::Io {
+                message: "stub".to_string(),
+            }),
+        }
+    }
+
+    #[test]
+    fn in_memory_sorts_by_path() {
+        let source = InMemoryReceiptSource::new(vec![
+            make_receipt("artifacts/z-sensor/report.json"),
+            make_receipt("artifacts/a-sensor/report.json"),
+            make_receipt("artifacts/m-sensor/report.json"),
+        ]);
+        let loaded = source.load_receipts().unwrap();
+        let paths: Vec<&str> = loaded.iter().map(|r| r.path.as_str()).collect();
+        assert_eq!(
+            paths,
+            vec![
+                "artifacts/a-sensor/report.json",
+                "artifacts/m-sensor/report.json",
+                "artifacts/z-sensor/report.json",
+            ]
+        );
+    }
+
+    #[test]
+    fn in_memory_preserves_errors() {
+        let source = InMemoryReceiptSource::new(vec![make_receipt("artifacts/bad/report.json")]);
+        let loaded = source.load_receipts().unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert!(loaded[0].receipt.is_err());
+    }
+
+    #[test]
+    fn in_memory_empty_source() {
+        let source = InMemoryReceiptSource::new(vec![]);
+        let loaded = source.load_receipts().unwrap();
+        assert!(loaded.is_empty());
     }
 }

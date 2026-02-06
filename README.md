@@ -45,6 +45,27 @@ cargo run -p buildfix -- apply --apply --allow-unsafe --param rust_version=1.75
 cargo run -p buildfix -- validate
 ```
 
+## Privilege posture
+
+buildfix is read-only by default and never reaches out to the network.
+
+| Capability | Default | Gate |
+|------------|---------|------|
+| Read repo files | yes | — |
+| Write repo files | **no** | `--apply` |
+| Network access | **no** | — (none) |
+| Code execution | **no** | — (none) |
+
+### Recommended CI lanes
+
+| Lane | Command | Safety |
+|------|---------|--------|
+| CI (safe only) | `buildfix plan && buildfix apply --apply` | safe ops auto-applied |
+| Maintainer | `buildfix apply --apply --allow-guarded` | includes guarded ops |
+| Expert | `buildfix apply --apply --allow-unsafe --param key=val` | all ops with params |
+
+See [`docs/safety-model.md`](docs/safety-model.md) for the full safety model.
+
 ## Documentation
 
 Full documentation is in [`docs/`](docs/index.md):

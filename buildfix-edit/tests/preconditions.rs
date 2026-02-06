@@ -1,6 +1,6 @@
 //! Precondition validation tests.
 
-use buildfix_edit::{apply_plan, attach_preconditions, ApplyOptions, AttachPreconditionsOptions};
+use buildfix_edit::{ApplyOptions, AttachPreconditionsOptions, apply_plan, attach_preconditions};
 use buildfix_types::apply::ApplyStatus;
 use buildfix_types::ops::{OpKind, OpTarget, SafetyClass};
 use buildfix_types::plan::{
@@ -137,11 +137,13 @@ fn test_sha_mismatch_blocks_apply() {
     // All ops should be blocked due to precondition mismatch
     for result in &apply.results {
         assert_eq!(result.status, ApplyStatus::Blocked);
-        assert!(result
-            .blocked_reason
-            .as_ref()
-            .map(|r| r.contains("precondition"))
-            .unwrap_or(false));
+        assert!(
+            result
+                .blocked_reason
+                .as_ref()
+                .map(|r| r.contains("precondition"))
+                .unwrap_or(false)
+        );
     }
 }
 

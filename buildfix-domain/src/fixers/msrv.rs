@@ -27,13 +27,13 @@ impl MsrvNormalizeFixer {
         // Preferred: [workspace.package].rust-version
         if let Some(ws) = doc.get("workspace").and_then(|i| i.as_table())
             && let Some(pkg) = ws.get("package").and_then(|i| i.as_table())
-                && let Some(v) = pkg
-                    .get("rust-version")
-                    .and_then(|i| i.as_value())
-                    .and_then(|v| v.as_str())
-                {
-                    return Some(v.to_string());
-                }
+            && let Some(v) = pkg
+                .get("rust-version")
+                .and_then(|i| i.as_value())
+                .and_then(|v| v.as_str())
+        {
+            return Some(v.to_string());
+        }
 
         // Fallback: [package].rust-version
         if let Some(pkg) = doc.get("package").and_then(|i| i.as_table())
@@ -41,9 +41,9 @@ impl MsrvNormalizeFixer {
                 .get("rust-version")
                 .and_then(|i| i.as_value())
                 .and_then(|v| v.as_str())
-            {
-                return Some(v.to_string());
-            }
+        {
+            return Some(v.to_string());
+        }
 
         None
     }
@@ -120,9 +120,10 @@ impl Fixer for MsrvNormalizeFixer {
                 Err(_) => continue,
             };
             if let Some(rv) = &rust_version
-                && !Self::needs_change(&contents, rv) {
-                    continue;
-                }
+                && !Self::needs_change(&contents, rv)
+            {
+                continue;
+            }
 
             let (safety, params_required, rust_version_value) = match &rust_version {
                 Some(rv) => (

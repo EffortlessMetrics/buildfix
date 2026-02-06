@@ -6,4 +6,4 @@
 
 mod load;
 
-pub use load::{load_receipts, LoadedReceipt, ReceiptLoadError};
+pub use load::{LoadedReceipt, ReceiptLoadError, load_receipts};

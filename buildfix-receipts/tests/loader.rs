@@ -1,6 +1,6 @@
 //! Unit tests for receipt loader.
 
-use buildfix_receipts::{load_receipts, ReceiptLoadError};
+use buildfix_receipts::{ReceiptLoadError, load_receipts};
 use camino::Utf8PathBuf;
 use std::fs;
 use tempfile::TempDir;

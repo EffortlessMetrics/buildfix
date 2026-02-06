@@ -22,7 +22,7 @@ use diffy::PatchFormatter;
 use fs_err as fs;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use toml_edit::{value, DocumentMut, InlineTable, Item};
+use toml_edit::{DocumentMut, InlineTable, Item, value};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Default)]
@@ -102,9 +102,10 @@ pub fn attach_preconditions(
     plan.preconditions.files = pres;
 
     if opts.include_git_head
-        && let Ok(sha) = get_head_sha(repo_root) {
-            plan.preconditions.head_sha = Some(sha);
-        }
+        && let Ok(sha) = get_head_sha(repo_root)
+    {
+        plan.preconditions.head_sha = Some(sha);
+    }
 
     if let Ok(dirty) = is_working_tree_dirty(repo_root) {
         plan.preconditions.dirty = Some(dirty);
@@ -469,14 +470,15 @@ fn check_preconditions(
 
     if let Some(expected) = &plan.preconditions.head_sha
         && let Ok(actual) = get_head_sha(repo_root)
-            && &actual != expected {
-                preconditions.verified = false;
-                preconditions.mismatches.push(PreconditionMismatch {
-                    path: "<git_head>".to_string(),
-                    expected: expected.clone(),
-                    actual,
-                });
-            }
+        && &actual != expected
+    {
+        preconditions.verified = false;
+        preconditions.mismatches.push(PreconditionMismatch {
+            path: "<git_head>".to_string(),
+            expected: expected.clone(),
+            actual,
+        });
+    }
 
     Ok(preconditions.verified)
 }

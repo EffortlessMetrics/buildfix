@@ -8,7 +8,7 @@ use crate::settings::{ApplySettings, PlanSettings};
 use anyhow::Context;
 use buildfix_domain::{FsRepoView, PlanContext, Planner, PlannerConfig};
 use buildfix_edit::{
-    apply_plan, attach_preconditions, preview_patch, ApplyOptions, AttachPreconditionsOptions,
+    ApplyOptions, AttachPreconditionsOptions, apply_plan, attach_preconditions, preview_patch,
 };
 use buildfix_receipts::LoadedReceipt;
 use buildfix_render::{render_apply_md, render_plan_md};
@@ -118,18 +118,19 @@ pub fn run_plan(
     plan.summary.patch_bytes = Some(patch_bytes);
 
     if let Some(max_bytes) = planner_cfg.max_patch_bytes
-        && patch_bytes > max_bytes {
-            for op in plan.ops.iter_mut() {
-                op.blocked = true;
-                op.blocked_reason = Some(format!(
-                    "caps exceeded: max_patch_bytes {} > {} allowed",
-                    patch_bytes, max_bytes
-                ));
-            }
-            plan.summary.ops_blocked = plan.ops.len() as u64;
-            plan.summary.patch_bytes = Some(0);
-            patch.clear();
+        && patch_bytes > max_bytes
+    {
+        for op in plan.ops.iter_mut() {
+            op.blocked = true;
+            op.blocked_reason = Some(format!(
+                "caps exceeded: max_patch_bytes {} > {} allowed",
+                patch_bytes, max_bytes
+            ));
         }
+        plan.summary.ops_blocked = plan.ops.len() as u64;
+        plan.summary.patch_bytes = Some(0);
+        patch.clear();
+    }
 
     let report = report_from_plan(&plan, tool, &receipts);
     let policy_block = plan.ops.iter().any(|o| o.blocked);
@@ -150,10 +151,8 @@ pub fn write_plan_artifacts(
 ) -> anyhow::Result<()> {
     writer.create_dir_all(out_dir)?;
 
-    let plan_wire =
-        PlanV1::try_from(&outcome.plan).context("convert plan to wire")?;
-    let plan_json =
-        serde_json::to_string_pretty(&plan_wire).context("serialize plan")?;
+    let plan_wire = PlanV1::try_from(&outcome.plan).context("convert plan to wire")?;
+    let plan_json = serde_json::to_string_pretty(&plan_wire).context("serialize plan")?;
     writer.write_file(&out_dir.join("plan.json"), plan_json.as_bytes())?;
 
     let plan_md = render_plan_md(&outcome.plan);
@@ -162,8 +161,7 @@ pub fn write_plan_artifacts(
     writer.write_file(&out_dir.join("patch.diff"), outcome.patch.as_bytes())?;
 
     let report_wire = ReportV1::from(&outcome.report);
-    let report_json =
-        serde_json::to_string_pretty(&report_wire).context("serialize report")?;
+    let report_json = serde_json::to_string_pretty(&report_wire).context("serialize report")?;
     writer.write_file(&out_dir.join("report.json"), report_json.as_bytes())?;
 
     // Write extras.
@@ -197,8 +195,8 @@ pub fn run_apply(
     tool: ToolInfo,
 ) -> Result<ApplyOutcome, ToolError> {
     let plan_path = settings.out_dir.join("plan.json");
-    let plan_str = std::fs::read_to_string(&plan_path)
-        .with_context(|| format!("read {}", plan_path))?;
+    let plan_str =
+        std::fs::read_to_string(&plan_path).with_context(|| format!("read {}", plan_path))?;
 
     let plan: BuildfixPlan = match serde_json::from_str::<PlanV1>(&plan_str) {
         Ok(wire) => BuildfixPlan::from(wire),
@@ -221,10 +219,12 @@ pub fn run_apply(
     let mut policy_block_dirty = false;
 
     // Block apply on dirty working tree unless explicitly allowed.
-    if !settings.dry_run && !settings.allow_dirty
-        && let Ok(Some(true)) = git.is_dirty(&settings.repo_root) {
-            policy_block_dirty = true;
-        }
+    if !settings.dry_run
+        && !settings.allow_dirty
+        && let Ok(Some(true)) = git.is_dirty(&settings.repo_root)
+    {
+        policy_block_dirty = true;
+    }
 
     let (mut apply, patch) = if policy_block_dirty {
         let mut apply = empty_apply_from_plan(&plan, &settings.repo_root, tool.clone(), &plan_path);
@@ -266,8 +266,7 @@ pub fn run_apply(
     };
 
     let report = report_from_apply(&apply, tool);
-    let policy_block =
-        buildfix_edit::check_policy_block(&apply, settings.dry_run).is_some();
+    let policy_block = buildfix_edit::check_policy_block(&apply, settings.dry_run).is_some();
 
     Ok(ApplyOutcome {
         apply,
@@ -287,8 +286,7 @@ pub fn write_apply_artifacts(
 
     let apply_wire =
         buildfix_types::wire::ApplyV1::try_from(&outcome.apply).context("convert apply to wire")?;
-    let apply_json =
-        serde_json::to_string_pretty(&apply_wire).context("serialize apply")?;
+    let apply_json = serde_json::to_string_pretty(&apply_wire).context("serialize apply")?;
     writer.write_file(&out_dir.join("apply.json"), apply_json.as_bytes())?;
 
     let apply_md = render_apply_md(&outcome.apply);
@@ -297,8 +295,7 @@ pub fn write_apply_artifacts(
     writer.write_file(&out_dir.join("patch.diff"), outcome.patch.as_bytes())?;
 
     let report_wire = ReportV1::from(&outcome.report);
-    let report_json =
-        serde_json::to_string_pretty(&report_wire).context("serialize report")?;
+    let report_json = serde_json::to_string_pretty(&report_wire).context("serialize report")?;
     writer.write_file(&out_dir.join("report.json"), report_json.as_bytes())?;
 
     // Write extras.

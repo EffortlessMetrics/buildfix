@@ -88,3 +88,7 @@ When an op needs a value:
 - It must be provided explicitly by the user as a parameter (unsafe)
 
 If neither is true, the fix remains blocked and is marked unsafe.
+
+## See also
+
+- [Privilege Posture](../README.md#privilege-posture) — quick-reference table and CI lane recommendations.

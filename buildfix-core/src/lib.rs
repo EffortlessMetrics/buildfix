@@ -24,3 +24,6 @@ pub mod settings;
 
 // Re-export the domain's RepoView so callers don't need buildfix-domain directly.
 pub use buildfix_domain::RepoView;
+
+// Re-export receipt types so embedders don't need buildfix-receipts directly.
+pub use buildfix_receipts::{LoadedReceipt, ReceiptLoadError};

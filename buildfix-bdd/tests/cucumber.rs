@@ -5,7 +5,7 @@
 use anyhow::Context;
 use assert_cmd::Command;
 use camino::Utf8PathBuf;
-use cucumber::{given, then, when, World};
+use cucumber::{World, given, then, when};
 use fs_err as fs;
 use std::process::Command as StdCommand;
 use tempfile::TempDir;

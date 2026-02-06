@@ -40,28 +40,29 @@ impl PathDepVersionFixer {
 
         if let Ok(contents) = repo.read_to_string(&target_manifest)
             && let Ok(doc) = contents.parse::<DocumentMut>()
-                && let Some(pkg) = doc.get("package").and_then(|i| i.as_table())
-                    && let Some(v) = pkg
-                        .get("version")
-                        .and_then(|i| i.as_value())
-                        .and_then(|v| v.as_str())
-                    {
-                        return Some(v.to_string());
-                    }
+            && let Some(pkg) = doc.get("package").and_then(|i| i.as_table())
+            && let Some(v) = pkg
+                .get("version")
+                .and_then(|i| i.as_value())
+                .and_then(|v| v.as_str())
+        {
+            return Some(v.to_string());
+        }
 
         // 2) Workspace package version, if present.
         if let Ok(contents) = repo.read_to_string(Utf8Path::new("Cargo.toml"))
-            && let Ok(doc) = contents.parse::<DocumentMut>() {
-                let ws = doc.get("workspace").and_then(|i| i.as_table());
-                let ws_pkg = ws.and_then(|w| w.get("package")).and_then(|i| i.as_table());
-                if let Some(v) = ws_pkg
-                    .and_then(|p| p.get("version"))
-                    .and_then(|i| i.as_value())
-                    .and_then(|v| v.as_str())
-                {
-                    return Some(v.to_string());
-                }
+            && let Ok(doc) = contents.parse::<DocumentMut>()
+        {
+            let ws = doc.get("workspace").and_then(|i| i.as_table());
+            let ws_pkg = ws.and_then(|w| w.get("package")).and_then(|i| i.as_table());
+            if let Some(v) = ws_pkg
+                .and_then(|p| p.get("version"))
+                .and_then(|i| i.as_value())
+                .and_then(|v| v.as_str())
+            {
+                return Some(v.to_string());
             }
+        }
 
         None
     }
@@ -138,15 +139,17 @@ impl PathDepVersionFixer {
                     .unwrap_or(false);
 
                 if let Some(path) = path
-                    && version.is_none() && !workspace_true {
-                        let mut toml_path = prefix.clone();
-                        toml_path.push(dep_name.clone());
-                        out.push(PathDepCandidate {
-                            dep: dep_name,
-                            dep_path: path.to_string(),
-                            toml_path,
-                        });
-                    }
+                    && version.is_none()
+                    && !workspace_true
+                {
+                    let mut toml_path = prefix.clone();
+                    toml_path.push(dep_name.clone());
+                    out.push(PathDepCandidate {
+                        dep: dep_name,
+                        dep_path: path.to_string(),
+                        toml_path,
+                    });
+                }
                 continue;
             }
 
@@ -167,15 +170,17 @@ impl PathDepVersionFixer {
                     .unwrap_or(false);
 
                 if let Some(path) = path
-                    && version.is_none() && !workspace_true {
-                        let mut toml_path = prefix.clone();
-                        toml_path.push(dep_name.clone());
-                        out.push(PathDepCandidate {
-                            dep: dep_name,
-                            dep_path: path.to_string(),
-                            toml_path,
-                        });
-                    }
+                    && version.is_none()
+                    && !workspace_true
+                {
+                    let mut toml_path = prefix.clone();
+                    toml_path.push(dep_name.clone());
+                    out.push(PathDepCandidate {
+                        dep: dep_name,
+                        dep_path: path.to_string(),
+                        toml_path,
+                    });
+                }
             }
         }
         out
