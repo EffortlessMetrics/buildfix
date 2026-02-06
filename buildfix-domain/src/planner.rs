@@ -262,8 +262,8 @@ fn enforce_caps(cfg: &PlannerConfig, ops: &mut [PlanOp]) -> anyhow::Result<()> {
         }
     }
 
-    if cap_reason.is_none() {
-        if let Some(max_files) = cfg.max_files {
+    if cap_reason.is_none()
+        && let Some(max_files) = cfg.max_files {
             let files = ops
                 .iter()
                 .map(|o| o.target.path.as_str())
@@ -276,7 +276,6 @@ fn enforce_caps(cfg: &PlannerConfig, ops: &mut [PlanOp]) -> anyhow::Result<()> {
                 ));
             }
         }
-    }
 
     if let Some(reason) = cap_reason {
         for op in ops.iter_mut() {

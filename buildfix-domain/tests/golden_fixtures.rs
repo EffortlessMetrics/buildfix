@@ -80,8 +80,8 @@ fn normalize_plan_json(json: &str) -> serde_json::Value {
         // Normalize inputs paths
         if let Some(inputs) = obj.get_mut("inputs").and_then(|i| i.as_array_mut()) {
             for input in inputs {
-                if let Some(i) = input.as_object_mut() {
-                    if let Some(path) = i.get("path").and_then(|p| p.as_str()) {
+                if let Some(i) = input.as_object_mut()
+                    && let Some(path) = i.get("path").and_then(|p| p.as_str()) {
                         let path_normalized = path.replace('\\', "/");
                         if let Some(idx) = path_normalized.rfind("/artifacts/") {
                             let after = &path_normalized[idx + "/artifacts/".len()..];
@@ -91,7 +91,6 @@ fn normalize_plan_json(json: &str) -> serde_json::Value {
                             );
                         }
                     }
-                }
             }
         }
 

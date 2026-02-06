@@ -38,23 +38,20 @@ impl PathDepVersionFixer {
         let base = manifest.parent().unwrap_or_else(|| Utf8Path::new(""));
         let target_manifest: Utf8PathBuf = base.join(dep_path).join("Cargo.toml");
 
-        if let Ok(contents) = repo.read_to_string(&target_manifest) {
-            if let Ok(doc) = contents.parse::<DocumentMut>() {
-                if let Some(pkg) = doc.get("package").and_then(|i| i.as_table()) {
-                    if let Some(v) = pkg
+        if let Ok(contents) = repo.read_to_string(&target_manifest)
+            && let Ok(doc) = contents.parse::<DocumentMut>()
+                && let Some(pkg) = doc.get("package").and_then(|i| i.as_table())
+                    && let Some(v) = pkg
                         .get("version")
                         .and_then(|i| i.as_value())
                         .and_then(|v| v.as_str())
                     {
                         return Some(v.to_string());
                     }
-                }
-            }
-        }
 
         // 2) Workspace package version, if present.
-        if let Ok(contents) = repo.read_to_string(Utf8Path::new("Cargo.toml")) {
-            if let Ok(doc) = contents.parse::<DocumentMut>() {
+        if let Ok(contents) = repo.read_to_string(Utf8Path::new("Cargo.toml"))
+            && let Ok(doc) = contents.parse::<DocumentMut>() {
                 let ws = doc.get("workspace").and_then(|i| i.as_table());
                 let ws_pkg = ws.and_then(|w| w.get("package")).and_then(|i| i.as_table());
                 if let Some(v) = ws_pkg
@@ -65,7 +62,6 @@ impl PathDepVersionFixer {
                     return Some(v.to_string());
                 }
             }
-        }
 
         None
     }
@@ -141,8 +137,8 @@ impl PathDepVersionFixer {
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
 
-                if let Some(path) = path {
-                    if version.is_none() && !workspace_true {
+                if let Some(path) = path
+                    && version.is_none() && !workspace_true {
                         let mut toml_path = prefix.clone();
                         toml_path.push(dep_name.clone());
                         out.push(PathDepCandidate {
@@ -151,7 +147,6 @@ impl PathDepVersionFixer {
                             toml_path,
                         });
                     }
-                }
                 continue;
             }
 
@@ -171,8 +166,8 @@ impl PathDepVersionFixer {
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
 
-                if let Some(path) = path {
-                    if version.is_none() && !workspace_true {
+                if let Some(path) = path
+                    && version.is_none() && !workspace_true {
                         let mut toml_path = prefix.clone();
                         toml_path.push(dep_name.clone());
                         out.push(PathDepCandidate {
@@ -181,7 +176,6 @@ impl PathDepVersionFixer {
                             toml_path,
                         });
                     }
-                }
             }
         }
         out

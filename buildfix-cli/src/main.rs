@@ -12,7 +12,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use clap::{Parser, Subcommand};
 use config::{parse_cli_params, ConfigMerger};
 use fs_err as fs;
-use jsonschema::JSONSchema;
+
 use std::process::ExitCode;
 use tracing::{debug, error, info};
 use tracing_subscriber::EnvFilter;
@@ -382,13 +382,14 @@ fn validate_file_if_exists(path: &Utf8Path, schema_str: &str) -> anyhow::Result<
 
     let schema_json: serde_json::Value =
         serde_json::from_str(schema_str).context("parse schema")?;
-    let compiled = JSONSchema::options()
-        .with_draft(jsonschema::Draft::Draft202012)
-        .compile(&schema_json)
+    let compiled = jsonschema::draft202012::new(&schema_json)
         .map_err(|e| anyhow::anyhow!("compile schema: {}", e))?;
-    if let Err(errors) = compiled.validate(&json) {
-        let msgs: Vec<String> = errors.map(|e| e.to_string()).collect();
-        return Ok(ValidateOutcome::SchemaErrors(msgs));
+    let errors: Vec<String> = compiled
+        .iter_errors(&json)
+        .map(|e| e.to_string())
+        .collect();
+    if !errors.is_empty() {
+        return Ok(ValidateOutcome::SchemaErrors(errors));
     }
     Ok(ValidateOutcome::Ok)
 }

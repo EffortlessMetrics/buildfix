@@ -117,8 +117,8 @@ pub fn run_plan(
     let patch_bytes = patch.len() as u64;
     plan.summary.patch_bytes = Some(patch_bytes);
 
-    if let Some(max_bytes) = planner_cfg.max_patch_bytes {
-        if patch_bytes > max_bytes {
+    if let Some(max_bytes) = planner_cfg.max_patch_bytes
+        && patch_bytes > max_bytes {
             for op in plan.ops.iter_mut() {
                 op.blocked = true;
                 op.blocked_reason = Some(format!(
@@ -130,7 +130,6 @@ pub fn run_plan(
             plan.summary.patch_bytes = Some(0);
             patch.clear();
         }
-    }
 
     let report = report_from_plan(&plan, tool, &receipts);
     let policy_block = plan.ops.iter().any(|o| o.blocked);
@@ -222,11 +221,10 @@ pub fn run_apply(
     let mut policy_block_dirty = false;
 
     // Block apply on dirty working tree unless explicitly allowed.
-    if !settings.dry_run && !settings.allow_dirty {
-        if let Ok(Some(true)) = git.is_dirty(&settings.repo_root) {
+    if !settings.dry_run && !settings.allow_dirty
+        && let Ok(Some(true)) = git.is_dirty(&settings.repo_root) {
             policy_block_dirty = true;
         }
-    }
 
     let (mut apply, patch) = if policy_block_dirty {
         let mut apply = empty_apply_from_plan(&plan, &settings.repo_root, tool.clone(), &plan_path);

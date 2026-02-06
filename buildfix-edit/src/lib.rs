@@ -101,11 +101,10 @@ pub fn attach_preconditions(
     }
     plan.preconditions.files = pres;
 
-    if opts.include_git_head {
-        if let Ok(sha) = get_head_sha(repo_root) {
+    if opts.include_git_head
+        && let Ok(sha) = get_head_sha(repo_root) {
             plan.preconditions.head_sha = Some(sha);
         }
-    }
 
     if let Ok(dirty) = is_working_tree_dirty(repo_root) {
         plan.preconditions.dirty = Some(dirty);
@@ -468,9 +467,9 @@ fn check_preconditions(
         }
     }
 
-    if let Some(expected) = &plan.preconditions.head_sha {
-        if let Ok(actual) = get_head_sha(repo_root) {
-            if &actual != expected {
+    if let Some(expected) = &plan.preconditions.head_sha
+        && let Ok(actual) = get_head_sha(repo_root)
+            && &actual != expected {
                 preconditions.verified = false;
                 preconditions.mismatches.push(PreconditionMismatch {
                     path: "<git_head>".to_string(),
@@ -478,8 +477,6 @@ fn check_preconditions(
                     actual,
                 });
             }
-        }
-    }
 
     Ok(preconditions.verified)
 }

@@ -25,28 +25,25 @@ impl EditionUpgradeFixer {
         let doc = contents.parse::<DocumentMut>().ok()?;
 
         // Preferred: [workspace.package].edition
-        if let Some(ws) = doc.get("workspace").and_then(|i| i.as_table()) {
-            if let Some(pkg) = ws.get("package").and_then(|i| i.as_table()) {
-                if let Some(e) = pkg
+        if let Some(ws) = doc.get("workspace").and_then(|i| i.as_table())
+            && let Some(pkg) = ws.get("package").and_then(|i| i.as_table())
+                && let Some(e) = pkg
                     .get("edition")
                     .and_then(|i| i.as_value())
                     .and_then(|v| v.as_str())
                 {
                     return Some(e.to_string());
                 }
-            }
-        }
 
         // Fallback: [package].edition (for root package in a workspace)
-        if let Some(pkg) = doc.get("package").and_then(|i| i.as_table()) {
-            if let Some(e) = pkg
+        if let Some(pkg) = doc.get("package").and_then(|i| i.as_table())
+            && let Some(e) = pkg
                 .get("edition")
                 .and_then(|i| i.as_value())
                 .and_then(|v| v.as_str())
             {
                 return Some(e.to_string());
             }
-        }
 
         None
     }
@@ -122,11 +119,10 @@ impl Fixer for EditionUpgradeFixer {
                 Ok(c) => c,
                 Err(_) => continue,
             };
-            if let Some(ed) = &edition {
-                if !Self::needs_change(&contents, ed) {
+            if let Some(ed) = &edition
+                && !Self::needs_change(&contents, ed) {
                     continue;
                 }
-            }
 
             let (safety, params_required, edition_value) = match &edition {
                 Some(ed) => (

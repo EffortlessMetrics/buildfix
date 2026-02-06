@@ -1,7 +1,7 @@
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 use fs_err as fs;
-use jsonschema::JSONSchema;
+
 use std::process::Command as ProcessCommand;
 
 #[derive(Debug, Parser)]
@@ -181,21 +181,17 @@ fn validate_against_schema(file_path: &str, schema_str: &str) -> Result<(), Vec<
     let schema_json: serde_json::Value =
         serde_json::from_str(schema_str).map_err(|e| vec![format!("Schema parse: {}", e)])?;
 
-    let compiled = JSONSchema::options()
-        .with_draft(jsonschema::Draft::Draft202012)
-        .compile(&schema_json)
+    let compiled = jsonschema::draft202012::new(&schema_json)
         .map_err(|e| vec![format!("Schema compile: {}", e)])?;
 
-    let result = compiled.validate(&json);
-    if let Err(errors) = result {
-        let msgs: Vec<String> = errors.map(|e| e.to_string()).collect();
-        if msgs.is_empty() {
-            Ok(())
-        } else {
-            Err(msgs)
-        }
-    } else {
+    let errors: Vec<String> = compiled
+        .iter_errors(&json)
+        .map(|e| e.to_string())
+        .collect();
+    if errors.is_empty() {
         Ok(())
+    } else {
+        Err(errors)
     }
 }
 
@@ -225,11 +221,10 @@ fn check_required_fields(file_path: &str) -> Result<(), Vec<String>> {
     }
 
     // Check run.started_at
-    if let Some(run) = json.get("run") {
-        if run.get("started_at").is_none() {
+    if let Some(run) = json.get("run")
+        && run.get("started_at").is_none() {
             errors.push("missing required field: run.started_at".to_string());
         }
-    }
 
     // Check verdict.status and verdict.counts
     if let Some(verdict) = json.get("verdict") {

@@ -30,7 +30,7 @@ serde_json.workspace = true
 toml.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-jsonschema = { version = "0.18", features = ["draft202012"] }
+jsonschema.workspace = true
 
 buildfix-core = { path = "../buildfix-core" }
 buildfix-receipts = { path = "../buildfix-receipts" }
