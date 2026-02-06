@@ -202,24 +202,18 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
- "buildfix-domain",
- "buildfix-edit",
+ "buildfix-core",
  "buildfix-receipts",
- "buildfix-render",
  "buildfix-types",
  "camino",
- "chrono",
  "clap",
  "fs-err",
- "hex",
  "jsonschema",
  "predicates",
  "pretty_assertions",
  "serde",
  "serde_json",
- "sha2",
  "tempfile",
- "thiserror",
  "toml",
  "tracing",
  "tracing-subscriber",
@@ -238,6 +232,29 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+]
+
+[[package]]
+name = "buildfix-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "buildfix-domain",
+ "buildfix-edit",
+ "buildfix-receipts",
+ "buildfix-render",
+ "buildfix-types",
+ "camino",
+ "chrono",
+ "hex",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

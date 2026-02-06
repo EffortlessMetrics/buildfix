@@ -1,11 +1,15 @@
-# Cockpit Ecosystem Contracts
+# Cockpit Ecosystem Contracts (vendored)
+
+> **This is a vendored copy** of the Cockpit ecosystem contracts, kept in-tree
+> so that `include_str!` can embed schemas at compile time. See `vendor/README.md`
+> for update instructions.
 
 This directory contains the shared contracts for the Cockpit sensor ecosystem.
 
 ## Directory Structure
 
 ```
-contracts/
+vendor/cockpit-contracts/
 ├── schemas/           # JSON Schema definitions
 │   ├── sensor.report.v1.json    # Universal sensor output envelope
 │   └── cockpit.report.v1.json   # Director aggregate output

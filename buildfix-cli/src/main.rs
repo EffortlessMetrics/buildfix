@@ -2,34 +2,28 @@ mod config;
 mod explain;
 
 use anyhow::Context;
-use buildfix_domain::{FsRepoView, PlanContext, Planner, PlannerConfig};
-use buildfix_edit::{
-    apply_plan, attach_preconditions, is_working_tree_dirty, preview_patch, ApplyOptions,
-    AttachPreconditionsOptions,
+use buildfix_core::adapters::{FsReceiptSource, FsWritePort, ShellGitPort};
+use buildfix_core::pipeline::{
+    run_apply, run_plan, write_apply_artifacts, write_plan_artifacts,
 };
-use buildfix_render::{render_apply_md, render_plan_md};
-use buildfix_types::apply::BuildfixApply;
-use buildfix_types::plan::BuildfixPlan;
+use buildfix_core::settings::{ApplySettings, PlanSettings};
 use buildfix_types::receipt::ToolInfo;
-use buildfix_types::report::{
-    BuildfixReport, InputFailure, ReportArtifacts, ReportCapabilities, ReportCounts, ReportRunInfo,
-    ReportStatus, ReportToolInfo, ReportVerdict,
-};
-use buildfix_types::wire::{ApplyV1, PlanV1, ReportV1};
 use camino::{Utf8Path, Utf8PathBuf};
-use chrono::Utc;
 use clap::{Parser, Subcommand};
 use config::{parse_cli_params, ConfigMerger};
 use fs_err as fs;
 use jsonschema::JSONSchema;
-use sha2::{Digest, Sha256};
 use std::process::ExitCode;
 use tracing::{debug, error, info};
 use tracing_subscriber::EnvFilter;
 
 const PLAN_SCHEMA: &str = include_str!("../schemas/buildfix.plan.v1.json");
 const APPLY_SCHEMA: &str = include_str!("../schemas/buildfix.apply.v1.json");
-const REPORT_SCHEMA: &str = include_str!("../schemas/buildfix.report.v1.json");
+/// Canonical report is validated against the sensor envelope schema.
+const REPORT_SCHEMA: &str =
+    include_str!("../../vendor/cockpit-contracts/schemas/sensor.report.v1.json");
+/// Buildfix-specific extras report is validated against the buildfix schema.
+const BUILDFIX_REPORT_SCHEMA: &str = include_str!("../schemas/buildfix.report.v1.json");
 
 #[derive(Debug, Parser)]
 #[command(
@@ -209,11 +203,9 @@ fn cmd_plan(args: PlanArgs) -> anyhow::Result<ExitCode> {
         .out_dir
         .unwrap_or_else(|| artifacts_dir.join("buildfix"));
 
-    fs::create_dir_all(&out_dir).with_context(|| format!("create {}", out_dir))?;
-
     let cli_params = parse_cli_params(&args.param)?;
 
-    // Load config file and merge with CLI arguments
+    // Load config file and merge with CLI arguments.
     let file_config = config::load_or_default(&repo_root).context("load buildfix.toml config")?;
     let merged = ConfigMerger::new(file_config).merge_plan_args(
         &args.allow,
@@ -222,7 +214,15 @@ fn cmd_plan(args: PlanArgs) -> anyhow::Result<ExitCode> {
         &cli_params,
     );
 
-    let planner_cfg = PlannerConfig {
+    debug!(
+        "merged config: allow={:?}, deny={:?}, require_clean_hashes={}, params={:?}",
+        merged.allow, merged.deny, merged.require_clean_hashes, merged.params
+    );
+
+    let settings = PlanSettings {
+        repo_root: repo_root.clone(),
+        artifacts_dir: artifacts_dir.clone(),
+        out_dir: out_dir.clone(),
         allow: merged.allow.clone(),
         deny: merged.deny.clone(),
         allow_guarded: merged.allow_guarded,
@@ -232,94 +232,29 @@ fn cmd_plan(args: PlanArgs) -> anyhow::Result<ExitCode> {
         max_files: args.max_files.or(merged.max_files),
         max_patch_bytes: args.max_patch_bytes.or(merged.max_patch_bytes),
         params: merged.params.clone(),
+        require_clean_hashes: merged.require_clean_hashes,
+        git_head_precondition: args.git_head_precondition,
+        backup_suffix: merged.backups.suffix.clone(),
     };
 
-    debug!(
-        "merged config: allow={:?}, deny={:?}, require_clean_hashes={}, params={:?}",
-        merged.allow, merged.deny, merged.require_clean_hashes, merged.params
-    );
-
-    let receipts = buildfix_receipts::load_receipts(&artifacts_dir)
-        .with_context(|| format!("load receipts from {}", artifacts_dir))?;
-
-    let planner = Planner::new();
-    let ctx = PlanContext {
-        repo_root: repo_root.clone(),
-        artifacts_dir: artifacts_dir.clone(),
-        config: planner_cfg.clone(),
-    };
-    let repo = FsRepoView::new(repo_root.clone());
+    let receipts_port = FsReceiptSource::new(artifacts_dir);
+    let git = ShellGitPort;
+    let writer = FsWritePort;
     let tool = tool_info();
 
-    let mut plan = planner
-        .plan(&ctx, &repo, &receipts, tool.clone())
-        .context("generate plan")?;
-
-    if merged.require_clean_hashes {
-        let attach_opts = AttachPreconditionsOptions {
-            include_git_head: args.git_head_precondition,
-        };
-        attach_preconditions(&repo_root, &mut plan, &attach_opts)
-            .context("attach preconditions")?;
-    } else {
-        plan.preconditions.files.clear();
-    }
-
-    if let Ok(sha) = buildfix_edit::get_head_sha(&repo_root) {
-        plan.repo.head_sha = Some(sha.clone());
-        if args.git_head_precondition {
-            plan.preconditions.head_sha = Some(sha);
-        }
-    }
-    if let Ok(dirty) = is_working_tree_dirty(&repo_root) {
-        plan.repo.dirty = Some(dirty);
-        plan.preconditions.dirty = Some(dirty);
-    }
-
-    // Preview patch with all unblocked ops (guarded/unsafe included).
-    let preview_opts = ApplyOptions {
-        dry_run: true,
-        allow_guarded: true,
-        allow_unsafe: true,
-        backup_enabled: false,
-        backup_dir: None,
-        backup_suffix: merged.backups.suffix.clone(),
-        params: merged.params.clone(),
-    };
-    let mut patch = preview_patch(&repo_root, &plan, &preview_opts).context("preview patch")?;
-
-    // Update patch_bytes summary and enforce max_patch_bytes cap.
-    let patch_bytes = patch.len() as u64;
-    plan.summary.patch_bytes = Some(patch_bytes);
-
-    if let Some(max_bytes) = planner_cfg.max_patch_bytes {
-        if patch_bytes > max_bytes {
-            for op in plan.ops.iter_mut() {
-                op.blocked = true;
-                op.blocked_reason = Some(format!(
-                    "caps exceeded: max_patch_bytes {} > {} allowed",
-                    patch_bytes, max_bytes
-                ));
+    let outcome = run_plan(&settings, &receipts_port, &git, tool)
+        .map_err(|e| match e {
+            buildfix_core::pipeline::ToolError::Internal(e) => e,
+            buildfix_core::pipeline::ToolError::PolicyBlock => {
+                anyhow::anyhow!("policy block")
             }
-            plan.summary.ops_blocked = plan.ops.len() as u64;
-            plan.summary.patch_bytes = Some(0);
-            patch.clear();
-        }
-    }
+        })?;
 
-    let plan_wire = PlanV1::try_from(&plan).context("convert plan to wire")?;
-    write_json(&out_dir.join("plan.json"), &plan_wire)?;
-    fs::write(out_dir.join("plan.md"), render_plan_md(&plan))?;
-    fs::write(out_dir.join("patch.diff"), &patch)?;
-
-    let report = report_from_plan(&plan, tool, &receipts);
-    let report_wire = ReportV1::from(&report);
-    write_json(&out_dir.join("report.json"), &report_wire)?;
+    write_plan_artifacts(&outcome, &out_dir, &writer)?;
 
     info!("wrote plan to {}", out_dir);
 
-    let policy_block = plan.ops.iter().any(|o| o.blocked);
-    Ok(if policy_block {
+    Ok(if outcome.policy_block {
         ExitCode::from(2)
     } else {
         ExitCode::from(0)
@@ -334,7 +269,7 @@ fn cmd_apply(args: ApplyArgs) -> anyhow::Result<ExitCode> {
 
     let cli_params = parse_cli_params(&args.param)?;
 
-    // Load config file and merge with CLI arguments
+    // Load config file and merge with CLI arguments.
     let file_config = config::load_or_default(&repo_root).context("load buildfix.toml config")?;
     let merged = ConfigMerger::new(file_config).merge_apply_args(
         args.allow_guarded,
@@ -342,7 +277,6 @@ fn cmd_apply(args: ApplyArgs) -> anyhow::Result<ExitCode> {
         &cli_params,
     );
 
-    // Determine allow_dirty: CLI flag OR config file setting
     let allow_dirty = args.allow_dirty || merged.allow_dirty;
 
     debug!(
@@ -350,90 +284,35 @@ fn cmd_apply(args: ApplyArgs) -> anyhow::Result<ExitCode> {
         merged.allow_guarded, merged.allow_unsafe, allow_dirty
     );
 
-    let plan_path = out_dir.join("plan.json");
-    let plan_str = fs::read_to_string(&plan_path).with_context(|| format!("read {}", plan_path))?;
-    let plan: BuildfixPlan = match serde_json::from_str::<PlanV1>(&plan_str) {
-        Ok(wire) => BuildfixPlan::from(wire),
-        Err(err) => {
-            debug!("plan.json is not wire format: {}", err);
-            serde_json::from_str(&plan_str).context("parse plan.json")?
-        }
-    };
-
-    let opts = ApplyOptions {
+    let settings = ApplySettings {
+        repo_root: repo_root.clone(),
+        out_dir: out_dir.clone(),
         dry_run: !args.apply,
         allow_guarded: merged.allow_guarded,
         allow_unsafe: merged.allow_unsafe,
-        backup_enabled: merged.backups.enabled,
-        backup_dir: Some(out_dir.join("backups")),
-        backup_suffix: merged.backups.suffix.clone(),
+        allow_dirty,
         params: merged.params.clone(),
+        backup_enabled: merged.backups.enabled,
+        backup_suffix: merged.backups.suffix.clone(),
     };
 
-    let mut policy_block = false;
-
-    // Block apply on dirty working tree unless explicitly allowed
-    if args.apply && !allow_dirty {
-        if let Ok(true) = is_working_tree_dirty(&repo_root) {
-            policy_block = true;
-        }
-    }
-
+    let git = ShellGitPort;
+    let writer = FsWritePort;
     let tool = tool_info();
 
-    let (mut apply, patch) = if policy_block {
-        let mut apply = empty_apply_from_plan(&plan, &repo_root, tool.clone(), &plan_path);
-        apply.preconditions.verified = false;
-        apply
-            .preconditions
-            .mismatches
-            .push(buildfix_types::apply::PreconditionMismatch {
-                path: "<working_tree>".to_string(),
-                expected: "clean".to_string(),
-                actual: "dirty".to_string(),
-            });
-        for op in &plan.ops {
-            apply.results.push(buildfix_types::apply::ApplyResult {
-                op_id: op.id.clone(),
-                status: buildfix_types::apply::ApplyStatus::Blocked,
-                message: Some("dirty working tree".to_string()),
-                blocked_reason: Some("dirty working tree".to_string()),
-                files: vec![],
-            });
-        }
-        apply.summary.blocked = plan.ops.len() as u64;
-        (apply, String::new())
-    } else {
-        apply_plan(&repo_root, &plan, tool.clone(), &opts).context("apply plan")?
-    };
+    let outcome = run_apply(&settings, &git, tool)
+        .map_err(|e| match e {
+            buildfix_core::pipeline::ToolError::Internal(e) => e,
+            buildfix_core::pipeline::ToolError::PolicyBlock => {
+                anyhow::anyhow!("policy block")
+            }
+        })?;
 
-    // Populate plan_ref sha256 and repo info
-    apply.plan_ref = buildfix_types::apply::PlanRef {
-        path: plan_path.to_string(),
-        sha256: Some(sha256_hex(plan_str.as_bytes())),
-    };
-
-    apply.repo = buildfix_types::apply::ApplyRepoInfo {
-        root: repo_root.to_string(),
-        head_sha_before: buildfix_edit::get_head_sha(&repo_root).ok(),
-        head_sha_after: buildfix_edit::get_head_sha(&repo_root).ok(),
-        dirty_before: is_working_tree_dirty(&repo_root).ok(),
-        dirty_after: is_working_tree_dirty(&repo_root).ok(),
-    };
-
-    let apply_wire = ApplyV1::try_from(&apply).context("convert apply to wire")?;
-    write_json(&out_dir.join("apply.json"), &apply_wire)?;
-    fs::write(out_dir.join("apply.md"), render_apply_md(&apply))?;
-    fs::write(out_dir.join("patch.diff"), &patch)?;
-
-    let report = report_from_apply(&apply, tool);
-    let report_wire = ReportV1::from(&report);
-    write_json(&out_dir.join("report.json"), &report_wire)?;
+    write_apply_artifacts(&outcome, &out_dir, &writer)?;
 
     info!("wrote apply artifacts to {}", out_dir);
 
-    let policy_block = buildfix_edit::check_policy_block(&apply, !args.apply).is_some();
-    Ok(if policy_block {
+    Ok(if outcome.policy_block {
         ExitCode::from(2)
     } else {
         ExitCode::from(0)
@@ -462,6 +341,10 @@ fn cmd_validate(args: ValidateArgs) -> anyhow::Result<ExitCode> {
         (out_dir.join("plan.json"), PLAN_SCHEMA),
         (out_dir.join("apply.json"), APPLY_SCHEMA),
         (out_dir.join("report.json"), REPORT_SCHEMA),
+        (
+            out_dir.join("extras").join("buildfix.report.v1.json"),
+            BUILDFIX_REPORT_SCHEMA,
+        ),
     ] {
         match validate_file_if_exists(&path, schema)? {
             ValidateOutcome::Missing | ValidateOutcome::Ok => {}
@@ -510,12 +393,6 @@ fn validate_file_if_exists(path: &Utf8Path, schema_str: &str) -> anyhow::Result<
     Ok(ValidateOutcome::Ok)
 }
 
-fn write_json<T: serde::Serialize>(path: &Utf8Path, v: &T) -> anyhow::Result<()> {
-    let s = serde_json::to_string_pretty(v).context("serialize json")?;
-    fs::write(path, s).with_context(|| format!("write {}", path))?;
-    Ok(())
-}
-
 fn tool_info() -> ToolInfo {
     ToolInfo {
         name: "buildfix".to_string(),
@@ -523,155 +400,6 @@ fn tool_info() -> ToolInfo {
         repo: None,
         commit: None,
     }
-}
-
-fn report_from_plan(
-    plan: &BuildfixPlan,
-    tool: ToolInfo,
-    receipts: &[buildfix_receipts::LoadedReceipt],
-) -> BuildfixReport {
-    let status = if plan.ops.is_empty() {
-        ReportStatus::Pass
-    } else {
-        ReportStatus::Warn
-    };
-
-    let capabilities = build_capabilities(receipts);
-
-    BuildfixReport {
-        schema: buildfix_types::schema::BUILDFIX_REPORT_V1.to_string(),
-        tool: ReportToolInfo {
-            name: tool.name,
-            version: tool.version.unwrap_or_else(|| "unknown".to_string()),
-            commit: tool.commit,
-        },
-        run: ReportRunInfo {
-            started_at: Utc::now().to_rfc3339(),
-            ended_at: Some(Utc::now().to_rfc3339()),
-            duration_ms: Some(0),
-        },
-        verdict: ReportVerdict {
-            status,
-            counts: ReportCounts {
-                info: 0,
-                warn: plan.ops.len() as u64,
-                error: 0,
-            },
-            reasons: vec![],
-        },
-        findings: vec![],
-        capabilities: Some(capabilities),
-        artifacts: Some(ReportArtifacts {
-            plan: Some("plan.json".to_string()),
-            apply: None,
-            patch: Some("patch.diff".to_string()),
-        }),
-        data: Some(serde_json::json!({
-            "ops_total": plan.summary.ops_total,
-            "ops_blocked": plan.summary.ops_blocked,
-            "files_touched": plan.summary.files_touched,
-            "patch_bytes": plan.summary.patch_bytes,
-        })),
-    }
-}
-
-fn build_capabilities(receipts: &[buildfix_receipts::LoadedReceipt]) -> ReportCapabilities {
-    let mut inputs_available = Vec::new();
-    let mut inputs_failed = Vec::new();
-
-    for r in receipts {
-        match &r.receipt {
-            Ok(_) => {
-                inputs_available.push(r.path.to_string());
-            }
-            Err(e) => {
-                inputs_failed.push(InputFailure {
-                    path: r.path.to_string(),
-                    reason: e.to_string(),
-                });
-            }
-        }
-    }
-
-    ReportCapabilities {
-        inputs_available,
-        inputs_failed,
-    }
-}
-
-fn report_from_apply(apply: &BuildfixApply, tool: ToolInfo) -> BuildfixReport {
-    let status = if apply.summary.failed > 0 {
-        ReportStatus::Fail
-    } else if apply.summary.blocked > 0 {
-        ReportStatus::Warn
-    } else if apply.summary.applied > 0 {
-        ReportStatus::Pass
-    } else {
-        ReportStatus::Warn
-    };
-
-    BuildfixReport {
-        schema: buildfix_types::schema::BUILDFIX_REPORT_V1.to_string(),
-        tool: ReportToolInfo {
-            name: tool.name,
-            version: tool.version.unwrap_or_else(|| "unknown".to_string()),
-            commit: tool.commit,
-        },
-        run: ReportRunInfo {
-            started_at: Utc::now().to_rfc3339(),
-            ended_at: Some(Utc::now().to_rfc3339()),
-            duration_ms: Some(0),
-        },
-        verdict: ReportVerdict {
-            status,
-            counts: ReportCounts {
-                info: apply.summary.applied,
-                warn: apply.summary.blocked,
-                error: apply.summary.failed,
-            },
-            reasons: vec![],
-        },
-        findings: vec![],
-        capabilities: None, // Apply doesn't have receipt context
-        artifacts: Some(ReportArtifacts {
-            plan: Some("plan.json".to_string()),
-            apply: Some("apply.json".to_string()),
-            patch: Some("patch.diff".to_string()),
-        }),
-        data: Some(serde_json::json!({
-            "attempted": apply.summary.attempted,
-            "applied": apply.summary.applied,
-            "blocked": apply.summary.blocked,
-            "failed": apply.summary.failed,
-            "files_modified": apply.summary.files_modified,
-        })),
-    }
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    hex::encode(hasher.finalize())
-}
-
-fn empty_apply_from_plan(
-    _plan: &BuildfixPlan,
-    repo_root: &Utf8Path,
-    tool: ToolInfo,
-    plan_path: &Utf8Path,
-) -> BuildfixApply {
-    let repo_info = buildfix_types::apply::ApplyRepoInfo {
-        root: repo_root.to_string(),
-        head_sha_before: None,
-        head_sha_after: None,
-        dirty_before: None,
-        dirty_after: None,
-    };
-    let plan_ref = buildfix_types::apply::PlanRef {
-        path: plan_path.to_string(),
-        sha256: None,
-    };
-    BuildfixApply::new(tool, repo_info, plan_ref)
 }
 
 fn cmd_explain(args: ExplainArgs) -> anyhow::Result<()> {

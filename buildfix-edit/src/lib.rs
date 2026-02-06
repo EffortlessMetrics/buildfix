@@ -611,7 +611,10 @@ fn render_patch(
 }
 
 /// Applies a single operation to TOML content, returning the modified content.
-#[doc(hidden)]
+///
+/// This is the stable public API for pure TOML transforms. It parses the input
+/// TOML, applies the [`OpKind`] transformation, and returns the modified string
+/// preserving formatting.
 pub fn apply_op_to_content(contents: &str, kind: &OpKind) -> anyhow::Result<String> {
     let mut doc = contents
         .parse::<DocumentMut>()
@@ -738,6 +741,46 @@ pub fn apply_op_to_content(contents: &str, kind: &OpKind) -> anyhow::Result<Stri
     }
 
     Ok(doc.to_string())
+}
+
+/// Execute a plan against pre-loaded file contents (no filesystem access).
+///
+/// Accepts a `BTreeMap<path, content>` of already-read files and applies each
+/// operation in the plan, returning the modified contents. This lets callers
+/// read files through a `RepoView` and pass them in without giving the edit
+/// engine direct filesystem access.
+///
+/// The returned map contains only files that were actually changed.
+pub fn execute_plan_from_contents(
+    before: &BTreeMap<Utf8PathBuf, String>,
+    plan: &BuildfixPlan,
+    opts: &ApplyOptions,
+) -> anyhow::Result<BTreeMap<Utf8PathBuf, String>> {
+    let mut current = before.clone();
+
+    for op in &plan.ops {
+        let resolved = resolve_op(op, opts);
+        if !resolved.allowed {
+            continue;
+        }
+
+        let file = Utf8PathBuf::from(&op.target.path);
+        let old = current.get(&file).cloned().unwrap_or_default();
+        let new = apply_op_to_content(&old, &resolved.kind)
+            .with_context(|| format!("apply op {} to {}", op.id, op.target.path))?;
+        current.insert(file, new);
+    }
+
+    // Return only changed files.
+    let mut changed = BTreeMap::new();
+    for (path, new_content) in &current {
+        let old_content = before.get(path).map(|s| s.as_str()).unwrap_or("");
+        if new_content != old_content {
+            changed.insert(path.clone(), new_content.clone());
+        }
+    }
+
+    Ok(changed)
 }
 
 fn set_toml_path(doc: &mut DocumentMut, toml_path: &[String], value: serde_json::Value) {

@@ -32,6 +32,10 @@ enum Command {
         /// Directory containing golden files for determinism check.
         #[arg(long)]
         golden_dir: Option<String>,
+        /// Directory containing cockpit contract schemas.
+        /// Falls back to the embedded constant when omitted.
+        #[arg(long, env = "COCKPIT_CONTRACTS_DIR")]
+        contracts_dir: Option<String>,
     },
 }
 
@@ -72,23 +76,40 @@ fn main() -> anyhow::Result<()> {
         Command::Conform {
             artifacts_dir,
             golden_dir,
+            contracts_dir,
         } => {
-            cmd_conform(&artifacts_dir, golden_dir.as_deref())?;
+            cmd_conform(&artifacts_dir, golden_dir.as_deref(), contracts_dir.as_deref())?;
         }
     }
     Ok(())
 }
 
-/// Schema for sensor.report.v1 (embedded from contracts).
-const SENSOR_REPORT_V1_SCHEMA: &str = include_str!("../../contracts/schemas/sensor.report.v1.json");
+/// Schema for sensor.report.v1 (embedded from vendor).
+const SENSOR_REPORT_V1_SCHEMA: &str =
+    include_str!("../../vendor/cockpit-contracts/schemas/sensor.report.v1.json");
 
-fn cmd_conform(artifacts_dir: &str, golden_dir: Option<&str>) -> anyhow::Result<()> {
+fn cmd_conform(
+    artifacts_dir: &str,
+    golden_dir: Option<&str>,
+    contracts_dir: Option<&str>,
+) -> anyhow::Result<()> {
     let mut failures: Vec<String> = Vec::new();
+
+    // Load schema: prefer runtime contracts_dir, fall back to embedded constant.
+    let schema_str: String;
+    let sensor_schema = if let Some(dir) = contracts_dir {
+        let schema_path = format!("{}/schemas/sensor.report.v1.json", dir);
+        schema_str = fs::read_to_string(&schema_path)
+            .with_context(|| format!("read {}", schema_path))?;
+        schema_str.as_str()
+    } else {
+        SENSOR_REPORT_V1_SCHEMA
+    };
 
     // 1. Schema validation - check report.json against sensor.report.v1 schema
     let report_path = format!("{}/report.json", artifacts_dir);
     if std::path::Path::new(&report_path).exists() {
-        match validate_against_schema(&report_path, SENSOR_REPORT_V1_SCHEMA) {
+        match validate_against_schema(&report_path, sensor_schema) {
             Ok(()) => println!("[PASS] Schema validation: {}", report_path),
             Err(errors) => {
                 println!("[FAIL] Schema validation: {}", report_path);
