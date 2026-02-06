@@ -46,6 +46,7 @@ Core planning logic. Decides *what* should change based on receipts.
 - `PathDepVersionFixer` - Add version to path deps
 - `WorkspaceInheritanceFixer` - Use workspace = true
 - `MsrvNormalizeFixer` - Normalize MSRV
+- `EditionUpgradeFixer` - Normalize edition
 
 ### buildfix-edit
 TOML editing engine using `toml_edit`. Decides *how* to modify files.

@@ -7,9 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0]
+
 ### Added
 
-- **Capabilities block** in receipt and report structures for sensor capability negotiation
+- **Edition Upgrade Fixer** (`cargo.normalize_edition`): Normalizes per-crate Rust edition to workspace canonical value. Classified as Guarded; falls back to Unsafe when no workspace edition is defined (requires `--param edition=<value>`)
+- **Capabilities block** in receipt and report structures for "No Green By Omission" sensor capability negotiation
+- **Wire representation** (`buildfix-types/wire`) with versioned V1 formats for plan, apply, and report artifacts
+- **JSON schemas** for `buildfix.plan.v1.json`, `buildfix.apply.v1.json`, and `buildfix.report.v1.json`
 - **Error handling scenarios** in BDD tests for corrupted/incomplete receipts
 - **Plan application logic** improvements with better error recovery
 - **BDD scenario expansion** including:
@@ -34,12 +39,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved plan policy filtering with glob pattern matching
 - Enhanced precondition verification with dirty working tree checks
 - Better error messages for blocked operations
+- Cargo.toml dependencies updated to use workspace inheritance
 
 ### Fixed
 
 - Deterministic op ordering using stable sort keys
 - TOML formatting preservation during edits
 - Proper handling of workspace.dependencies inheritance with features
+- Clippy and rustfmt compliance across all crates
 
 ## [0.1.0] - Initial Release
 

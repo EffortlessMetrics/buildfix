@@ -4,21 +4,27 @@ This document outlines the planned features and improvements for buildfix.
 
 ## Current Status
 
-buildfix v0.1 is feature-complete for the core workflow:
+buildfix v0.2 is feature-complete with five built-in fixers:
 - Receipt-driven planning from sensor outputs
 - Safe, deterministic TOML editing
 - Precondition verification and backup system
-- Four built-in fixers covering common Cargo workspace issues
+- Five built-in fixers covering common Cargo workspace issues
+- Wire format with versioned JSON schemas (V1)
+- Capabilities block for sensor capability negotiation
+
+## Completed
+
+### v0.2
+
+- **Edition Upgrade Fixer** (`cargo.normalize_edition`): Normalizes per-crate Rust edition to workspace canonical value. Guarded safety; falls back to Unsafe when no canonical edition exists.
+- **Wire representation**: Versioned V1 formats for plan, apply, and report artifacts
+- **JSON schemas**: Embedded schemas for artifact validation
+- **Capabilities block**: "No Green By Omission" pattern for tracking input availability
+- **CLI commands**: `explain`, `list-fixes`, `validate`
 
 ## Planned Features
 
-### Near-Term (v0.2)
-
-#### Edition Upgrade Fixer
-- **Fix Key**: `cargo.upgrade_edition`
-- **Safety**: Guarded
-- **Description**: Normalizes per-crate Rust edition to workspace canonical value
-- **Pattern**: Similar to MSRV normalization, reads `[workspace.package].edition`
+### Near-Term (v0.3)
 
 #### Duplicate Dependency Consolidation Fixer
 - **Fix Key**: `cargo.consolidate_duplicate_deps`
@@ -26,7 +32,7 @@ buildfix v0.1 is feature-complete for the core workflow:
 - **Sensors**: depguard
 - **Description**: Identifies dependencies used by multiple crates at different versions and consolidates them to `[workspace.dependencies]`
 
-### Medium-Term (v0.3)
+### Medium-Term (v0.4)
 
 #### Unused Dependency Removal Fixer
 - **Fix Key**: `cargo.remove_unused_deps`
@@ -37,7 +43,7 @@ buildfix v0.1 is feature-complete for the core workflow:
 - **Anchored text replace**: Support for non-TOML file edits with strict constraints
 - **Pattern**: Line-based replacements with context anchors for safety
 
-### Long-Term
+### Long-Term (v0.5+)
 
 #### Auto-Commit Mode
 - Optional auto-commit after successful apply (maintainer-only workflow)

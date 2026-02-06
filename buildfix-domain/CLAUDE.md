@@ -42,6 +42,7 @@ trait Fixer {
 | `PathDepVersionFixer` | `cargo.path_dep_add_version` | Safe | Adds version to path dependencies |
 | `WorkspaceInheritanceFixer` | `cargo.use_workspace_dependency` | Safe | Converts deps to `{ workspace = true }` |
 | `MsrvNormalizeFixer` | `cargo.normalize_rust_version` | Guarded | Normalizes crate MSRV to workspace value |
+| `EditionUpgradeFixer` | `cargo.normalize_edition` | Guarded | Normalizes crate edition to workspace value |
 
 ## Key Types
 

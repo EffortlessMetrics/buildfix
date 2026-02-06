@@ -10,6 +10,7 @@ Complete reference of all buildfix fixes, their triggers, safety classes, and be
 | [Path Dependency Version](#path-dependency-version) | `path-dep-version` | Safe | Add version to path deps |
 | [Workspace Inheritance](#workspace-dependency-inheritance) | `workspace-inheritance` | Safe | Use workspace = true |
 | [MSRV Normalization](#msrv-normalization) | `msrv` | Guarded | Normalize rust-version |
+| [Edition Normalization](#edition-normalization) | `edition` | Guarded | Normalize edition |
 
 ## Workspace Resolver V2
 
@@ -222,6 +223,81 @@ Fix is skipped when:
 builddiag/rust.msrv_consistent/*
 cargo/cargo.msrv_consistent/*
 cargo/msrv.consistent/*
+```
+
+---
+
+## Edition Normalization
+
+**Key**: `edition`
+**Fix ID**: `cargo.normalize_edition`
+**Safety**: Guarded (Unsafe when no workspace edition defined)
+
+### Description
+
+Normalizes per-crate `edition` declarations to match the workspace canonical value.
+
+The canonical edition is determined from:
+1. `[workspace.package].edition` in root Cargo.toml
+2. `[package].edition` in root Cargo.toml
+
+When no canonical edition can be determined, the fix is classified as **Unsafe** and requires the user to provide the edition via `--param edition=<value>`.
+
+### Triggering Findings
+
+| Sensor | Check ID | Code |
+|--------|----------|------|
+| builddiag | rust.edition_consistent | * |
+| cargo | cargo.edition_consistent | * |
+| cargo | edition.consistent | * |
+
+### Example Edit
+
+```diff
+ [package]
+ name = "my-crate"
+ version = "0.1.0"
+-edition = "2018"
++edition = "2021"
+```
+
+### Why Guarded?
+
+This fix is classified as **Guarded** because:
+
+- Changing the edition affects language semantics and available syntax
+- A newer edition may introduce breaking changes (e.g., `dyn Trait` defaults, macro changes)
+- A downgrade could cause compilation failures if newer edition features are in use
+
+Manual review is recommended before applying.
+
+### Apply Command
+
+```bash
+# When workspace edition is defined:
+buildfix apply --apply --allow-guarded
+
+# When no workspace edition exists:
+buildfix apply --apply --allow-unsafe --param edition=2021
+```
+
+### Preconditions
+
+- Member crate has an `edition` field that differs from the workspace canonical value
+- Target file is valid TOML with a `[package]` table
+
+### Skip Conditions
+
+Fix is skipped when:
+- No triggering findings exist
+- Crate already has the correct edition
+
+### Policy Keys
+
+```
+builddiag/rust.edition_consistent/*
+cargo/cargo.edition_consistent/*
+cargo/edition.consistent/*
 ```
 
 ---
