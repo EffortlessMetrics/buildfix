@@ -43,9 +43,9 @@ pub fn load_receipts(artifacts_dir: &Utf8Path) -> anyhow::Result<Vec<LoadedRecei
             .unwrap_or("unknown")
             .to_string();
 
-        // Skip buildfix's own output directory - it's not a sensor receipt.
-        if sensor_id == "buildfix" {
-            debug!(path = %utf8_path, "skipping buildfix's own report");
+        // Skip reserved output directories — not sensor receipts.
+        if sensor_id == "buildfix" || sensor_id == "cockpit" {
+            debug!(path = %utf8_path, %sensor_id, "skipping non-sensor receipt");
             continue;
         }
 

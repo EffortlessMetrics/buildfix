@@ -47,8 +47,9 @@ impl GitPort for ShellGitPort {
 
 /// In-memory receipt source for embedding and testing.
 ///
-/// Accepts pre-loaded receipts, filters out buildfix's own receipts
-/// (mirroring the fs loader's self-ingest guard), and sorts by path on
+/// Accepts pre-loaded receipts, filters out reserved non-sensor receipts
+/// (buildfix, cockpit) by `sensor_id` **or** path prefix (belt-and-suspenders),
+/// mirroring the fs loader's self-ingest guard, and sorts by path on
 /// construction to match `FsReceiptSource`'s deterministic ordering.
 #[derive(Debug, Clone)]
 pub struct InMemoryReceiptSource {
@@ -58,12 +59,17 @@ pub struct InMemoryReceiptSource {
 impl InMemoryReceiptSource {
     pub fn new(mut receipts: Vec<LoadedReceipt>) -> Self {
         receipts.retain(|r| {
-            if r.sensor_id == "buildfix" {
-                debug!(path = %r.path, "skipping buildfix's own report");
-                false
-            } else {
-                true
+            let path = r.path.as_str();
+            let sid = r.sensor_id.as_str();
+
+            let is_buildfix = sid == "buildfix" || path.starts_with("artifacts/buildfix/");
+            let is_cockpit = sid == "cockpit" || path.starts_with("artifacts/cockpit/");
+
+            if is_buildfix || is_cockpit {
+                debug!(path, sensor_id = sid, "skipping non-sensor receipt");
+                return false;
             }
+            true
         });
         receipts.sort_by(|a, b| a.path.cmp(&b.path));
         Self { receipts }
@@ -154,9 +160,9 @@ mod tests {
     }
 
     #[test]
-    fn in_memory_filters_buildfix_receipts() {
+    fn in_memory_filters_buildfix_by_sensor_id() {
         let source = InMemoryReceiptSource::new(vec![make_receipt_with_sensor(
-            "artifacts/buildfix/report.json",
+            "some/arbitrary/path.json",
             "buildfix",
         )]);
         let loaded = source.load_receipts().unwrap();
@@ -164,10 +170,41 @@ mod tests {
     }
 
     #[test]
-    fn in_memory_filters_buildfix_among_others() {
+    fn in_memory_filters_buildfix_by_path() {
+        let source = InMemoryReceiptSource::new(vec![make_receipt_with_sensor(
+            "artifacts/buildfix/report.json",
+            "unknown",
+        )]);
+        let loaded = source.load_receipts().unwrap();
+        assert!(loaded.is_empty());
+    }
+
+    #[test]
+    fn in_memory_filters_cockpit_by_sensor_id() {
+        let source = InMemoryReceiptSource::new(vec![make_receipt_with_sensor(
+            "some/arbitrary/path.json",
+            "cockpit",
+        )]);
+        let loaded = source.load_receipts().unwrap();
+        assert!(loaded.is_empty());
+    }
+
+    #[test]
+    fn in_memory_filters_cockpit_by_path() {
+        let source = InMemoryReceiptSource::new(vec![make_receipt_with_sensor(
+            "artifacts/cockpit/report.json",
+            "unknown",
+        )]);
+        let loaded = source.load_receipts().unwrap();
+        assert!(loaded.is_empty());
+    }
+
+    #[test]
+    fn in_memory_filters_reserved_among_others() {
         let source = InMemoryReceiptSource::new(vec![
             make_receipt_with_sensor("artifacts/z-sensor/report.json", "z-sensor"),
             make_receipt_with_sensor("artifacts/buildfix/report.json", "buildfix"),
+            make_receipt_with_sensor("artifacts/cockpit/report.json", "unknown"),
             make_receipt_with_sensor("artifacts/a-sensor/report.json", "a-sensor"),
         ]);
         let loaded = source.load_receipts().unwrap();

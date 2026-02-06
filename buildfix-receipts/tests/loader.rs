@@ -161,6 +161,19 @@ fn test_buildfix_directory_skipped() {
 }
 
 #[test]
+fn test_cockpit_directory_skipped() {
+    let temp = create_temp_dir();
+    let artifacts = artifacts_path(&temp);
+
+    create_receipt(&artifacts, "cockpit", valid_receipt());
+    create_receipt(&artifacts, "builddiag", valid_receipt());
+
+    let receipts = load_receipts(&artifacts).unwrap();
+    assert_eq!(receipts.len(), 1);
+    assert_eq!(receipts[0].sensor_id, "builddiag");
+}
+
+#[test]
 fn test_nested_directories_not_matched() {
     let temp = create_temp_dir();
     let artifacts = artifacts_path(&temp);
