@@ -59,14 +59,19 @@ pub struct InMemoryReceiptSource {
 impl InMemoryReceiptSource {
     pub fn new(mut receipts: Vec<LoadedReceipt>) -> Self {
         receipts.retain(|r| {
-            let path = r.path.as_str();
-            let sid = r.sensor_id.as_str();
+            let sid = r.sensor_id.as_str().to_ascii_lowercase();
+            let p = r.path.as_str().replace('\\', "/");
+            let p = p.to_ascii_lowercase();
 
-            let is_buildfix = sid == "buildfix" || path.starts_with("artifacts/buildfix/");
-            let is_cockpit = sid == "cockpit" || path.starts_with("artifacts/cockpit/");
+            let is_buildfix = sid == "buildfix"
+                || p.starts_with("artifacts/buildfix/")
+                || p.contains("/artifacts/buildfix/");
+            let is_cockpit = sid == "cockpit"
+                || p.starts_with("artifacts/cockpit/")
+                || p.contains("/artifacts/cockpit/");
 
             if is_buildfix || is_cockpit {
-                debug!(path, sensor_id = sid, "skipping non-sensor receipt");
+                debug!(path = r.path.as_str(), sensor_id = r.sensor_id.as_str(), "skipping non-sensor receipt");
                 return false;
             }
             true
@@ -193,6 +198,36 @@ mod tests {
     fn in_memory_filters_cockpit_by_path() {
         let source = InMemoryReceiptSource::new(vec![make_receipt_with_sensor(
             "artifacts/cockpit/report.json",
+            "unknown",
+        )]);
+        let loaded = source.load_receipts().unwrap();
+        assert!(loaded.is_empty());
+    }
+
+    #[test]
+    fn in_memory_filters_buildfix_by_backslash_path() {
+        let source = InMemoryReceiptSource::new(vec![make_receipt_with_sensor(
+            r"artifacts\buildfix\report.json",
+            "unknown",
+        )]);
+        let loaded = source.load_receipts().unwrap();
+        assert!(loaded.is_empty());
+    }
+
+    #[test]
+    fn in_memory_filters_cockpit_by_absolute_path() {
+        let source = InMemoryReceiptSource::new(vec![make_receipt_with_sensor(
+            r"C:\repo\artifacts\cockpit\report.json",
+            "unknown",
+        )]);
+        let loaded = source.load_receipts().unwrap();
+        assert!(loaded.is_empty());
+    }
+
+    #[test]
+    fn in_memory_filters_case_insensitive_path() {
+        let source = InMemoryReceiptSource::new(vec![make_receipt_with_sensor(
+            r"C:\repo\Artifacts\cockpit\report.json",
             "unknown",
         )]);
         let loaded = source.load_receipts().unwrap();
