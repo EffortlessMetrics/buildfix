@@ -273,6 +273,9 @@
         "blocked_reason": {
           "type": "string"
         },
+        "blocked_reason_token": {
+          "type": "string"
+        },
         "target": {
           "type": "object",
           "additionalProperties": false,

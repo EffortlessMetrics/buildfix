@@ -134,6 +134,9 @@ pub struct PlanOp {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blocked_reason: Option<String>,
 
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocked_reason_token: Option<String>,
+
     pub target: OpTarget,
     pub kind: OpKind,
     pub rationale: Rationale,
@@ -173,4 +176,17 @@ pub struct FindingRef {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fingerprint: Option<String>,
+}
+
+pub mod blocked_tokens {
+    pub const MISSING_PARAMS: &str = "missing_params";
+    pub const DENYLIST: &str = "denylist";
+    pub const ALLOWLIST_MISSING: &str = "allowlist_missing";
+    pub const MAX_OPS: &str = "max_ops";
+    pub const MAX_FILES: &str = "max_files";
+    pub const MAX_PATCH_BYTES: &str = "max_patch_bytes";
+    pub const DIRTY_WORKING_TREE: &str = "dirty_working_tree";
+    pub const SAFETY_GUARDED_NOT_ALLOWED: &str = "safety_guarded_not_allowed";
+    pub const SAFETY_UNSAFE_NOT_ALLOWED: &str = "safety_unsafe_not_allowed";
+    pub const PRECONDITION_MISMATCH: &str = "precondition_mismatch";
 }

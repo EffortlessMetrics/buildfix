@@ -213,6 +213,7 @@ fn build_plan(sp: &StructuredPlan, policy: &PolicyConfig) -> BuildfixPlan {
             safety,
             blocked: false,
             blocked_reason: None,
+            blocked_reason_token: None,
             target: OpTarget {
                 path: sp.target_path.clone(),
             },
@@ -247,6 +248,7 @@ fn build_plan(sp: &StructuredPlan, policy: &PolicyConfig) -> BuildfixPlan {
             .collect::<std::collections::BTreeSet<_>>()
             .len() as u64,
         patch_bytes: None,
+        safety_counts: None,
     };
 
     plan

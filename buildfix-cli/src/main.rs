@@ -15,13 +15,13 @@ use std::process::ExitCode;
 use tracing::{debug, error, info};
 use tracing_subscriber::EnvFilter;
 
-const PLAN_SCHEMA: &str = include_str!("../schemas/buildfix.plan.v1.json");
-const APPLY_SCHEMA: &str = include_str!("../schemas/buildfix.apply.v1.json");
+const PLAN_SCHEMA: &str = include_str!("../../schemas/buildfix.plan.v1.json");
+const APPLY_SCHEMA: &str = include_str!("../../schemas/buildfix.apply.v1.json");
 /// Canonical report is validated against the sensor envelope schema.
 const REPORT_SCHEMA: &str =
     include_str!("../../vendor/cockpit-contracts/schemas/sensor.report.v1.json");
 /// Buildfix-specific extras report is validated against the buildfix schema.
-const BUILDFIX_REPORT_SCHEMA: &str = include_str!("../schemas/buildfix.report.v1.json");
+const BUILDFIX_REPORT_SCHEMA: &str = include_str!("../../schemas/buildfix.report.v1.json");
 
 #[derive(Debug, Parser)]
 #[command(

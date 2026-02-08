@@ -15,6 +15,7 @@
     {
       "blocked": true,
       "blocked_reason": "denied by policy",
+      "blocked_reason_token": "denylist",
       "id": "ab9ced5a-84ab-52fb-9080-73eece088fd5",
       "kind": {
         "rule_id": "ensure_workspace_resolver_v2",

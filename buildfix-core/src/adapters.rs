@@ -71,7 +71,11 @@ impl InMemoryReceiptSource {
                 || p.contains("/artifacts/cockpit/");
 
             if is_buildfix || is_cockpit {
-                debug!(path = r.path.as_str(), sensor_id = r.sensor_id.as_str(), "skipping non-sensor receipt");
+                debug!(
+                    path = r.path.as_str(),
+                    sensor_id = r.sensor_id.as_str(),
+                    "skipping non-sensor receipt"
+                );
                 return false;
             }
             true

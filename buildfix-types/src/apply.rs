@@ -82,6 +82,9 @@ pub struct ApplyResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blocked_reason: Option<String>,
 
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocked_reason_token: Option<String>,
+
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<ApplyFile>,
 }

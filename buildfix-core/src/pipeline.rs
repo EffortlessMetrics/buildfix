@@ -11,7 +11,7 @@ use buildfix_edit::{
     ApplyOptions, AttachPreconditionsOptions, apply_plan, attach_preconditions, preview_patch,
 };
 use buildfix_receipts::LoadedReceipt;
-use buildfix_render::{render_apply_md, render_plan_md};
+use buildfix_render::{render_apply_md, render_comment_md, render_plan_md};
 use buildfix_types::apply::BuildfixApply;
 use buildfix_types::plan::BuildfixPlan;
 use buildfix_types::receipt::ToolInfo;
@@ -126,6 +126,8 @@ pub fn run_plan(
                 "caps exceeded: max_patch_bytes {} > {} allowed",
                 patch_bytes, max_bytes
             ));
+            op.blocked_reason_token =
+                Some(buildfix_types::plan::blocked_tokens::MAX_PATCH_BYTES.to_string());
         }
         plan.summary.ops_blocked = plan.ops.len() as u64;
         plan.summary.patch_bytes = Some(0);
@@ -158,6 +160,9 @@ pub fn write_plan_artifacts(
     let plan_md = render_plan_md(&outcome.plan);
     writer.write_file(&out_dir.join("plan.md"), plan_md.as_bytes())?;
 
+    let comment_md = render_comment_md(&outcome.plan);
+    writer.write_file(&out_dir.join("comment.md"), comment_md.as_bytes())?;
+
     writer.write_file(&out_dir.join("patch.diff"), outcome.patch.as_bytes())?;
 
     let report_wire = ReportV1::from(&outcome.report);
@@ -169,6 +174,9 @@ pub fn write_plan_artifacts(
     writer.create_dir_all(&extras_dir)?;
     let mut extras_report = outcome.report.clone();
     extras_report.schema = buildfix_types::schema::BUILDFIX_REPORT_V1.to_string();
+    if let Some(ref mut artifacts) = extras_report.artifacts {
+        artifacts.comment = Some("comment.md".to_string());
+    }
     let extras_wire = ReportV1::from(&extras_report);
     let extras_json =
         serde_json::to_string_pretty(&extras_wire).context("serialize extras report")?;
@@ -243,6 +251,9 @@ pub fn run_apply(
                 status: buildfix_types::apply::ApplyStatus::Blocked,
                 message: Some("dirty working tree".to_string()),
                 blocked_reason: Some("dirty working tree".to_string()),
+                blocked_reason_token: Some(
+                    buildfix_types::plan::blocked_tokens::DIRTY_WORKING_TREE.to_string(),
+                ),
                 files: vec![],
             });
         }
@@ -380,32 +391,44 @@ pub(crate) fn report_from_plan(
             plan: Some("plan.json".to_string()),
             apply: None,
             patch: Some("patch.diff".to_string()),
+            comment: None,
         }),
         data: Some({
-            let mut data = serde_json::json!({
+            let ops_applicable = plan
+                .summary
+                .ops_total
+                .saturating_sub(plan.summary.ops_blocked);
+            let fix_available = ops_applicable > 0;
+            let mut plan_data = serde_json::json!({
                 "ops_total": plan.summary.ops_total,
                 "ops_blocked": plan.summary.ops_blocked,
+                "ops_applicable": ops_applicable,
+                "fix_available": fix_available,
                 "files_touched": plan.summary.files_touched,
                 "patch_bytes": plan.summary.patch_bytes,
                 "plan_available": !plan.ops.is_empty(),
             });
             if let Some(sc) = &plan.summary.safety_counts {
-                data["safety_counts"] = serde_json::json!({
+                plan_data["safety_counts"] = serde_json::json!({
                     "safe": sc.safe,
                     "guarded": sc.guarded,
                     "unsafe": sc.unsafe_count,
                 });
             }
-            let blocked_reasons: std::collections::BTreeSet<&str> = plan
+            let tokens: std::collections::BTreeSet<&str> = plan
                 .ops
                 .iter()
-                .filter_map(|o| o.blocked_reason.as_deref())
+                .filter_map(|o| o.blocked_reason_token.as_deref())
                 .collect();
-            let top: Vec<&str> = blocked_reasons.into_iter().take(5).collect();
+            let top: Vec<&str> = tokens.into_iter().take(5).collect();
             if !top.is_empty() {
-                data["blocked_reasons_top"] = serde_json::json!(top);
+                plan_data["blocked_reason_tokens_top"] = serde_json::json!(top);
             }
-            data
+            serde_json::json!({
+                "buildfix": {
+                    "plan": plan_data
+                }
+            })
         }),
     }
 }
@@ -472,14 +495,19 @@ pub(crate) fn report_from_apply(apply: &BuildfixApply, tool: ToolInfo) -> Buildf
             plan: Some("plan.json".to_string()),
             apply: Some("apply.json".to_string()),
             patch: Some("patch.diff".to_string()),
+            comment: None,
         }),
         data: Some(serde_json::json!({
-            "attempted": apply.summary.attempted,
-            "applied": apply.summary.applied,
-            "blocked": apply.summary.blocked,
-            "failed": apply.summary.failed,
-            "files_modified": apply.summary.files_modified,
-            "apply_performed": apply.summary.applied > 0,
+            "buildfix": {
+                "apply": {
+                    "attempted": apply.summary.attempted,
+                    "applied": apply.summary.applied,
+                    "blocked": apply.summary.blocked,
+                    "failed": apply.summary.failed,
+                    "files_modified": apply.summary.files_modified,
+                    "apply_performed": apply.summary.applied > 0,
+                }
+            }
         })),
     }
 }
@@ -551,11 +579,21 @@ mod tests {
     }
 
     fn make_op(safety: SafetyClass, blocked: bool, blocked_reason: Option<&str>) -> PlanOp {
+        make_op_with_token(safety, blocked, blocked_reason, None)
+    }
+
+    fn make_op_with_token(
+        safety: SafetyClass,
+        blocked: bool,
+        blocked_reason: Option<&str>,
+        blocked_reason_token: Option<&str>,
+    ) -> PlanOp {
         PlanOp {
             id: "test-op".into(),
             safety,
             blocked,
             blocked_reason: blocked_reason.map(|s| s.to_string()),
+            blocked_reason_token: blocked_reason_token.map(|s| s.to_string()),
             target: OpTarget {
                 path: "Cargo.toml".into(),
             },
@@ -586,8 +624,9 @@ mod tests {
 
         let report = report_from_plan(&plan, tool(), &[]);
         let data = report.data.unwrap();
+        let plan_data = &data["buildfix"]["plan"];
 
-        assert_eq!(data["plan_available"], serde_json::json!(true));
+        assert_eq!(plan_data["plan_available"], serde_json::json!(true));
     }
 
     #[test]
@@ -596,8 +635,9 @@ mod tests {
 
         let report = report_from_plan(&plan, tool(), &[]);
         let data = report.data.unwrap();
+        let plan_data = &data["buildfix"]["plan"];
 
-        assert_eq!(data["plan_available"], serde_json::json!(false));
+        assert_eq!(plan_data["plan_available"], serde_json::json!(false));
     }
 
     #[test]
@@ -618,19 +658,30 @@ mod tests {
 
         let report = report_from_plan(&plan, tool(), &[]);
         let data = report.data.unwrap();
+        let plan_data = &data["buildfix"]["plan"];
 
-        let sc_data = &data["safety_counts"];
+        let sc_data = &plan_data["safety_counts"];
         assert_eq!(sc_data["safe"], serde_json::json!(2));
         assert_eq!(sc_data["guarded"], serde_json::json!(1));
         assert_eq!(sc_data["unsafe"], serde_json::json!(0));
     }
 
     #[test]
-    fn report_plan_data_contains_blocked_reasons_top() {
+    fn report_plan_data_contains_blocked_reason_tokens_top() {
         let plan = make_plan(
             vec![
-                make_op(SafetyClass::Safe, true, Some("denied by policy")),
-                make_op(SafetyClass::Guarded, true, Some("missing params: version")),
+                make_op_with_token(
+                    SafetyClass::Safe,
+                    true,
+                    Some("denied by policy"),
+                    Some("denylist"),
+                ),
+                make_op_with_token(
+                    SafetyClass::Guarded,
+                    true,
+                    Some("missing params: version"),
+                    Some("missing_params"),
+                ),
             ],
             Some(SafetyCounts {
                 safe: 1,
@@ -641,16 +692,17 @@ mod tests {
 
         let report = report_from_plan(&plan, tool(), &[]);
         let data = report.data.unwrap();
+        let plan_data = &data["buildfix"]["plan"];
 
-        let reasons = data["blocked_reasons_top"].as_array().unwrap();
-        assert_eq!(reasons.len(), 2);
-        // BTreeSet sorts, so "denied by policy" < "missing params: version"
-        assert_eq!(reasons[0], "denied by policy");
-        assert_eq!(reasons[1], "missing params: version");
+        let tokens = plan_data["blocked_reason_tokens_top"].as_array().unwrap();
+        assert_eq!(tokens.len(), 2);
+        // BTreeSet sorts: "denylist" < "missing_params"
+        assert_eq!(tokens[0], "denylist");
+        assert_eq!(tokens[1], "missing_params");
     }
 
     #[test]
-    fn report_plan_data_no_blocked_reasons_when_none_blocked() {
+    fn report_plan_data_no_blocked_reason_tokens_when_none_blocked() {
         let plan = make_plan(
             vec![make_op(SafetyClass::Safe, false, None)],
             Some(SafetyCounts {
@@ -662,8 +714,55 @@ mod tests {
 
         let report = report_from_plan(&plan, tool(), &[]);
         let data = report.data.unwrap();
+        let plan_data = &data["buildfix"]["plan"];
 
-        assert!(data.get("blocked_reasons_top").is_none());
+        assert!(plan_data.get("blocked_reason_tokens_top").is_none());
+    }
+
+    #[test]
+    fn report_plan_data_contains_ops_applicable_and_fix_available() {
+        let plan = make_plan(
+            vec![
+                make_op(SafetyClass::Safe, false, None),
+                make_op_with_token(SafetyClass::Safe, true, Some("denied"), Some("denylist")),
+            ],
+            Some(SafetyCounts {
+                safe: 2,
+                guarded: 0,
+                unsafe_count: 0,
+            }),
+        );
+
+        let report = report_from_plan(&plan, tool(), &[]);
+        let data = report.data.unwrap();
+        let plan_data = &data["buildfix"]["plan"];
+
+        assert_eq!(plan_data["ops_applicable"], serde_json::json!(1));
+        assert_eq!(plan_data["fix_available"], serde_json::json!(true));
+    }
+
+    #[test]
+    fn report_plan_data_fix_available_false_when_all_blocked() {
+        let plan = make_plan(
+            vec![make_op_with_token(
+                SafetyClass::Safe,
+                true,
+                Some("denied"),
+                Some("denylist"),
+            )],
+            Some(SafetyCounts {
+                safe: 1,
+                guarded: 0,
+                unsafe_count: 0,
+            }),
+        );
+
+        let report = report_from_plan(&plan, tool(), &[]);
+        let data = report.data.unwrap();
+        let plan_data = &data["buildfix"]["plan"];
+
+        assert_eq!(plan_data["ops_applicable"], serde_json::json!(0));
+        assert_eq!(plan_data["fix_available"], serde_json::json!(false));
     }
 
     #[test]
@@ -686,8 +785,9 @@ mod tests {
 
         let report = report_from_apply(&apply, tool());
         let data = report.data.unwrap();
+        let apply_data = &data["buildfix"]["apply"];
 
-        assert_eq!(data["apply_performed"], serde_json::json!(true));
+        assert_eq!(apply_data["apply_performed"], serde_json::json!(true));
     }
 
     #[test]
@@ -709,7 +809,8 @@ mod tests {
 
         let report = report_from_apply(&apply, tool());
         let data = report.data.unwrap();
+        let apply_data = &data["buildfix"]["apply"];
 
-        assert_eq!(data["apply_performed"], serde_json::json!(false));
+        assert_eq!(apply_data["apply_performed"], serde_json::json!(false));
     }
 }

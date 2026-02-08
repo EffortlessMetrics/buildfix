@@ -157,6 +157,65 @@
         }
       }
     },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Capabilities block for 'No Green By Omission' pattern",
+      "properties": {
+        "inputs_available": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Successfully loaded input paths/receipts"
+        },
+        "inputs_failed": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "reason"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Path that failed to load"
+              },
+              "reason": {
+                "type": "string",
+                "description": "Reason for failure"
+              }
+            }
+          },
+          "description": "Input paths that failed to load"
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Pointers to related artifact files",
+      "properties": {
+        "plan": {
+          "type": "string",
+          "description": "Path to plan.json relative to report"
+        },
+        "apply": {
+          "type": "string",
+          "description": "Path to apply.json relative to report"
+        },
+        "patch": {
+          "type": "string",
+          "description": "Path to patch.diff relative to report"
+        },
+        "comment": {
+          "type": "string",
+          "description": "Path to comment.md relative to report"
+        }
+      }
+    },
     "data": {
       "type": [
         "object",

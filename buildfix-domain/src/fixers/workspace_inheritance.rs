@@ -431,6 +431,7 @@ impl Fixer for WorkspaceInheritanceFixer {
                     safety,
                     blocked: false,
                     blocked_reason: None,
+                    blocked_reason_token: None,
                     target: OpTarget {
                         path: manifest.to_string(),
                     },

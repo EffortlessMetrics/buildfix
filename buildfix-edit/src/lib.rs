@@ -224,6 +224,9 @@ fn execute_plan(
                 status: ApplyStatus::Blocked,
                 message: Some("precondition mismatch".to_string()),
                 blocked_reason: Some("precondition mismatch".to_string()),
+                blocked_reason_token: Some(
+                    buildfix_types::plan::blocked_tokens::PRECONDITION_MISMATCH.to_string(),
+                ),
                 files: vec![],
             });
         }
@@ -250,6 +253,7 @@ fn execute_plan(
                 status: ApplyStatus::Blocked,
                 message: None,
                 blocked_reason: resolved.blocked_reason.clone(),
+                blocked_reason_token: resolved.blocked_reason_token.clone(),
                 files: vec![],
             };
             if let Some(msg) = &resolved.blocked_message {
@@ -286,6 +290,7 @@ fn execute_plan(
                 status: ApplyStatus::Skipped,
                 message: Some("dry-run: not written".to_string()),
                 blocked_reason: None,
+                blocked_reason_token: None,
                 files,
             });
         } else {
@@ -295,6 +300,7 @@ fn execute_plan(
                 status: ApplyStatus::Applied,
                 message: None,
                 blocked_reason: None,
+                blocked_reason_token: None,
                 files,
             });
         }
@@ -316,6 +322,7 @@ struct ResolvedOp<'a> {
     kind: OpKind,
     allowed: bool,
     blocked_reason: Option<String>,
+    blocked_reason_token: Option<String>,
     blocked_message: Option<String>,
 }
 
@@ -329,6 +336,7 @@ fn resolve_op<'a>(op: &'a PlanOp, opts: &ApplyOptions) -> ResolvedOp<'a> {
                     kind,
                     allowed: allowed_by_safety(opts, op.safety),
                     blocked_reason: None,
+                    blocked_reason_token: None,
                     blocked_message: None,
                 };
             }
@@ -341,6 +349,7 @@ fn resolve_op<'a>(op: &'a PlanOp, opts: &ApplyOptions) -> ResolvedOp<'a> {
                 kind: op.kind.clone(),
                 allowed: false,
                 blocked_reason,
+                blocked_reason_token: op.blocked_reason_token.clone(),
                 blocked_message: None,
             };
         }
@@ -351,16 +360,24 @@ fn resolve_op<'a>(op: &'a PlanOp, opts: &ApplyOptions) -> ResolvedOp<'a> {
             kind: op.kind.clone(),
             allowed: false,
             blocked_reason,
+            blocked_reason_token: op.blocked_reason_token.clone(),
             blocked_message: None,
         };
     }
 
     if !allowed_by_safety(opts, op.safety) {
+        use buildfix_types::plan::blocked_tokens;
+        let token = match op.safety {
+            SafetyClass::Guarded => blocked_tokens::SAFETY_GUARDED_NOT_ALLOWED,
+            SafetyClass::Unsafe => blocked_tokens::SAFETY_UNSAFE_NOT_ALLOWED,
+            _ => blocked_tokens::SAFETY_GUARDED_NOT_ALLOWED,
+        };
         return ResolvedOp {
             op,
             kind: op.kind.clone(),
             allowed: false,
             blocked_reason: Some("safety gate".to_string()),
+            blocked_reason_token: Some(token.to_string()),
             blocked_message: Some("safety class not allowed".to_string()),
         };
     }
@@ -372,6 +389,9 @@ fn resolve_op<'a>(op: &'a PlanOp, opts: &ApplyOptions) -> ResolvedOp<'a> {
             kind,
             allowed: false,
             blocked_reason: Some(format!("missing params: {}", missing.join(", "))),
+            blocked_reason_token: Some(
+                buildfix_types::plan::blocked_tokens::MISSING_PARAMS.to_string(),
+            ),
             blocked_message: None,
         };
     }
@@ -381,6 +401,7 @@ fn resolve_op<'a>(op: &'a PlanOp, opts: &ApplyOptions) -> ResolvedOp<'a> {
         kind,
         allowed: true,
         blocked_reason: None,
+        blocked_reason_token: None,
         blocked_message: None,
     }
 }

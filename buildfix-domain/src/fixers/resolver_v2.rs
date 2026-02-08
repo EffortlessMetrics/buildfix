@@ -78,6 +78,7 @@ impl Fixer for ResolverV2Fixer {
             safety: SafetyClass::Safe,
             blocked: false,
             blocked_reason: None,
+            blocked_reason_token: None,
             target: OpTarget {
                 path: manifest.to_string(),
             },

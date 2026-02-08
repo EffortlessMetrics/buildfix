@@ -12,6 +12,7 @@
   "results": [
     {
       "blocked_reason": "denied by policy",
+      "blocked_reason_token": "denylist",
       "op_id": "ab9ced5a-84ab-52fb-9080-73eece088fd5",
       "status": "blocked"
     },

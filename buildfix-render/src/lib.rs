@@ -122,6 +122,55 @@ pub fn render_apply_md(apply: &BuildfixApply) -> String {
     out
 }
 
+/// Render a short cockpit-friendly comment summary.
+pub fn render_comment_md(plan: &BuildfixPlan) -> String {
+    let mut out = String::new();
+
+    let ops_applicable = plan
+        .summary
+        .ops_total
+        .saturating_sub(plan.summary.ops_blocked);
+    let fix_available = ops_applicable > 0;
+
+    if fix_available {
+        out.push_str("**buildfix**: fix available\n\n");
+    } else if plan.ops.is_empty() {
+        out.push_str("**buildfix**: no fixes needed\n\n");
+    } else {
+        out.push_str("**buildfix**: all ops blocked\n\n");
+    }
+
+    if let Some(sc) = &plan.summary.safety_counts {
+        out.push_str("| Safety | Count |\n|--------|-------|\n");
+        if sc.safe > 0 {
+            out.push_str(&format!("| safe | {} |\n", sc.safe));
+        }
+        if sc.guarded > 0 {
+            out.push_str(&format!("| guarded | {} |\n", sc.guarded));
+        }
+        if sc.unsafe_count > 0 {
+            out.push_str(&format!("| unsafe | {} |\n", sc.unsafe_count));
+        }
+        out.push('\n');
+    }
+
+    let tokens: std::collections::BTreeSet<&str> = plan
+        .ops
+        .iter()
+        .filter_map(|o| o.blocked_reason_token.as_deref())
+        .collect();
+    if !tokens.is_empty() {
+        out.push_str("**Blocked reasons**: ");
+        let top: Vec<&str> = tokens.into_iter().take(5).collect();
+        out.push_str(&top.join(", "));
+        out.push_str("\n\n");
+    }
+
+    out.push_str("Artifacts: [plan.md](plan.md) · [patch.diff](patch.diff)\n");
+
+    out
+}
+
 fn safety_label(s: SafetyClass) -> &'static str {
     match s {
         SafetyClass::Safe => "safe",
@@ -136,5 +185,122 @@ fn status_label(s: &ApplyStatus) -> &'static str {
         ApplyStatus::Blocked => "blocked",
         ApplyStatus::Failed => "failed",
         ApplyStatus::Skipped => "skipped",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use buildfix_types::ops::{OpKind, OpTarget};
+    use buildfix_types::plan::{
+        PlanOp, PlanPolicy, PlanSummary, Rationale, RepoInfo, SafetyCounts,
+    };
+    use buildfix_types::receipt::ToolInfo;
+
+    fn tool() -> ToolInfo {
+        ToolInfo {
+            name: "buildfix".into(),
+            version: Some("0.0.0".into()),
+            repo: None,
+            commit: None,
+        }
+    }
+
+    fn make_plan(ops: Vec<PlanOp>, safety_counts: Option<SafetyCounts>) -> BuildfixPlan {
+        let mut plan = BuildfixPlan::new(
+            tool(),
+            RepoInfo {
+                root: ".".into(),
+                head_sha: None,
+                dirty: None,
+            },
+            PlanPolicy::default(),
+        );
+        let ops_total = ops.len() as u64;
+        let ops_blocked = ops.iter().filter(|o| o.blocked).count() as u64;
+        plan.summary = PlanSummary {
+            ops_total,
+            ops_blocked,
+            files_touched: 1,
+            patch_bytes: Some(0),
+            safety_counts,
+        };
+        plan.ops = ops;
+        plan
+    }
+
+    fn make_op(safety: SafetyClass, blocked: bool, token: Option<&str>) -> PlanOp {
+        PlanOp {
+            id: "test-op".into(),
+            safety,
+            blocked,
+            blocked_reason: if blocked {
+                Some("blocked".into())
+            } else {
+                None
+            },
+            blocked_reason_token: token.map(|s| s.to_string()),
+            target: OpTarget {
+                path: "Cargo.toml".into(),
+            },
+            kind: OpKind::TomlSet {
+                toml_path: vec!["workspace".into(), "resolver".into()],
+                value: serde_json::json!("2"),
+            },
+            rationale: Rationale {
+                fix_key: "test".into(),
+                description: None,
+                findings: vec![],
+            },
+            params_required: vec![],
+            preview: None,
+        }
+    }
+
+    #[test]
+    fn comment_md_no_ops() {
+        let plan = make_plan(vec![], None);
+        let md = render_comment_md(&plan);
+        assert!(md.contains("no fixes needed"));
+        assert!(md.contains("plan.md"));
+        assert!(md.contains("patch.diff"));
+    }
+
+    #[test]
+    fn comment_md_with_ops() {
+        let plan = make_plan(
+            vec![make_op(SafetyClass::Safe, false, None)],
+            Some(SafetyCounts {
+                safe: 1,
+                guarded: 0,
+                unsafe_count: 0,
+            }),
+        );
+        let md = render_comment_md(&plan);
+        assert!(md.contains("fix available"));
+        assert!(md.contains("| safe | 1 |"));
+    }
+
+    #[test]
+    fn comment_md_all_blocked() {
+        let plan = make_plan(
+            vec![make_op(SafetyClass::Safe, true, Some("denylist"))],
+            Some(SafetyCounts {
+                safe: 1,
+                guarded: 0,
+                unsafe_count: 0,
+            }),
+        );
+        let md = render_comment_md(&plan);
+        assert!(md.contains("all ops blocked"));
+        assert!(md.contains("denylist"));
+    }
+
+    #[test]
+    fn comment_md_artifact_links() {
+        let plan = make_plan(vec![], None);
+        let md = render_comment_md(&plan);
+        assert!(md.contains("[plan.md](plan.md)"));
+        assert!(md.contains("[patch.diff](patch.diff)"));
     }
 }

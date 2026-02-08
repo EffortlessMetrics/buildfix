@@ -182,6 +182,8 @@ fn apply_params(params: &HashMap<String, String>, ops: &mut [PlanOp]) {
         } else {
             op.blocked = true;
             op.blocked_reason = Some(format!("missing params: {}", missing.join(", ")));
+            op.blocked_reason_token =
+                Some(buildfix_types::plan::blocked_tokens::MISSING_PARAMS.to_string());
         }
     }
 }
@@ -234,6 +236,8 @@ fn apply_allow_deny(allow: &[String], deny: &[String], ops: &mut [PlanOp]) {
         {
             op.blocked = true;
             op.blocked_reason = Some("denied by policy".to_string());
+            op.blocked_reason_token =
+                Some(buildfix_types::plan::blocked_tokens::DENYLIST.to_string());
             continue;
         }
 
@@ -244,6 +248,8 @@ fn apply_allow_deny(allow: &[String], deny: &[String], ops: &mut [PlanOp]) {
             if !any_allow {
                 op.blocked = true;
                 op.blocked_reason = Some("not in allowlist".to_string());
+                op.blocked_reason_token =
+                    Some(buildfix_types::plan::blocked_tokens::ALLOWLIST_MISSING.to_string());
             }
         }
     }
@@ -267,6 +273,7 @@ fn fix_key_for_finding(f: &FindingRef) -> String {
 
 fn enforce_caps(cfg: &PlannerConfig, ops: &mut [PlanOp]) -> anyhow::Result<()> {
     let mut cap_reason: Option<String> = None;
+    let mut cap_token: Option<&str> = None;
 
     if let Some(max_ops) = cfg.max_ops {
         let total_ops = ops.len() as u64;
@@ -275,6 +282,7 @@ fn enforce_caps(cfg: &PlannerConfig, ops: &mut [PlanOp]) -> anyhow::Result<()> {
                 "caps exceeded: max_ops {} > {} allowed",
                 total_ops, max_ops
             ));
+            cap_token = Some(buildfix_types::plan::blocked_tokens::MAX_OPS);
         }
     }
 
@@ -291,6 +299,7 @@ fn enforce_caps(cfg: &PlannerConfig, ops: &mut [PlanOp]) -> anyhow::Result<()> {
                 "caps exceeded: max_files {} > {} allowed",
                 total_files, max_files
             ));
+            cap_token = Some(buildfix_types::plan::blocked_tokens::MAX_FILES);
         }
     }
 
@@ -298,6 +307,7 @@ fn enforce_caps(cfg: &PlannerConfig, ops: &mut [PlanOp]) -> anyhow::Result<()> {
         for op in ops.iter_mut() {
             op.blocked = true;
             op.blocked_reason = Some(reason.clone());
+            op.blocked_reason_token = cap_token.map(|t| t.to_string());
         }
     }
 

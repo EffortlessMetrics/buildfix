@@ -11,7 +11,6 @@ keywords = ["cargo", "workspace", "repair", "cli", "toml"]
 categories = ["command-line-utilities", "development-tools"]
 include = [
   "src/**",
-  "schemas/**",
   "README.md",
   "Cargo.toml",
 ]

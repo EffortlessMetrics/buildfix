@@ -288,6 +288,7 @@ impl Fixer for PathDepVersionFixer {
                     safety,
                     blocked: false,
                     blocked_reason: None,
+                    blocked_reason_token: None,
                     target: OpTarget {
                         path: manifest_path,
                     },

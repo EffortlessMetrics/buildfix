@@ -63,6 +63,7 @@ fn minimal_plan_with_preconditions(file_path: &str, expected_sha: &str) -> Build
         safety: SafetyClass::Safe,
         blocked: false,
         blocked_reason: None,
+        blocked_reason_token: None,
         target: OpTarget {
             path: file_path.to_string(),
         },
@@ -194,6 +195,7 @@ fn test_attach_preconditions_computes_correct_sha() {
         safety: SafetyClass::Safe,
         blocked: false,
         blocked_reason: None,
+        blocked_reason_token: None,
         target: OpTarget {
             path: "Cargo.toml".to_string(),
         },
@@ -284,6 +286,7 @@ version = "0.1.0"
         safety: SafetyClass::Safe,
         blocked: false,
         blocked_reason: None,
+        blocked_reason_token: None,
         target: OpTarget {
             path: "Cargo.toml".to_string(),
         },
@@ -304,6 +307,7 @@ version = "0.1.0"
         safety: SafetyClass::Safe,
         blocked: false,
         blocked_reason: None,
+        blocked_reason_token: None,
         target: OpTarget {
             path: "crates/a/Cargo.toml".to_string(),
         },
@@ -373,6 +377,7 @@ version = "0.1.0"
         safety: SafetyClass::Safe,
         blocked: false,
         blocked_reason: None,
+        blocked_reason_token: None,
         target: OpTarget {
             path: "Cargo.toml".to_string(),
         },
@@ -393,6 +398,7 @@ version = "0.1.0"
         safety: SafetyClass::Safe,
         blocked: false,
         blocked_reason: None,
+        blocked_reason_token: None,
         target: OpTarget {
             path: "crates/a/Cargo.toml".to_string(),
         },
@@ -442,6 +448,7 @@ fn test_empty_preconditions_allows_apply() {
         safety: SafetyClass::Safe,
         blocked: false,
         blocked_reason: None,
+        blocked_reason_token: None,
         target: OpTarget {
             path: "Cargo.toml".to_string(),
         },
