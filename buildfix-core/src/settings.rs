@@ -3,6 +3,17 @@
 use camino::Utf8PathBuf;
 use std::collections::HashMap;
 
+/// Run mode controls exit-code semantics.
+///
+/// In `Cockpit` mode, policy blocks (exit 2) are mapped to exit 0
+/// because the receipt still encodes the block in its verdict/data.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum RunMode {
+    #[default]
+    Standalone,
+    Cockpit,
+}
+
 /// Settings for the plan pipeline.
 #[derive(Debug, Clone)]
 pub struct PlanSettings {
@@ -27,6 +38,9 @@ pub struct PlanSettings {
 
     // Backups
     pub backup_suffix: String,
+
+    // Mode
+    pub mode: RunMode,
 }
 
 impl Default for PlanSettings {
@@ -47,6 +61,7 @@ impl Default for PlanSettings {
             require_clean_hashes: true,
             git_head_precondition: false,
             backup_suffix: ".buildfix.bak".to_string(),
+            mode: RunMode::default(),
         }
     }
 }
@@ -67,6 +82,9 @@ pub struct ApplySettings {
     // Backups
     pub backup_enabled: bool,
     pub backup_suffix: String,
+
+    // Mode
+    pub mode: RunMode,
 }
 
 impl Default for ApplySettings {
@@ -81,6 +99,7 @@ impl Default for ApplySettings {
             params: HashMap::new(),
             backup_enabled: true,
             backup_suffix: ".buildfix.bak".to_string(),
+            mode: RunMode::default(),
         }
     }
 }

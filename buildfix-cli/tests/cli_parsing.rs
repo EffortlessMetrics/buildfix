@@ -415,3 +415,57 @@ fn test_validate_round_trip() {
         .assert()
         .success();
 }
+
+#[test]
+fn test_plan_mode_standalone_is_default() {
+    let temp = create_temp_repo();
+
+    // Default mode (standalone) — plan with no receipts should succeed (exit 0).
+    buildfix()
+        .current_dir(temp.path())
+        .arg("plan")
+        .assert()
+        .success();
+}
+
+#[test]
+fn test_plan_mode_cockpit_accepted() {
+    let temp = create_temp_repo();
+
+    // --mode cockpit is a valid flag
+    buildfix()
+        .current_dir(temp.path())
+        .args(["plan", "--mode", "cockpit"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn test_apply_mode_cockpit_accepted() {
+    let temp = create_temp_repo();
+
+    // First create a plan
+    buildfix()
+        .current_dir(temp.path())
+        .arg("plan")
+        .assert()
+        .success();
+
+    // --mode cockpit is a valid flag for apply
+    buildfix()
+        .current_dir(temp.path())
+        .args(["apply", "--mode", "cockpit"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn test_plan_mode_invalid_rejected() {
+    let temp = create_temp_repo();
+
+    buildfix()
+        .current_dir(temp.path())
+        .args(["plan", "--mode", "invalid"])
+        .assert()
+        .failure();
+}

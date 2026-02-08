@@ -4,7 +4,7 @@ use anyhow::Context;
 use buildfix_receipts::LoadedReceipt;
 use buildfix_types::ops::OpKind;
 use buildfix_types::plan::{
-    BuildfixPlan, FindingRef, PlanInput, PlanOp, PlanPolicy, PlanSummary, RepoInfo,
+    BuildfixPlan, FindingRef, PlanInput, PlanOp, PlanPolicy, PlanSummary, RepoInfo, SafetyCounts,
 };
 use buildfix_types::receipt::ToolInfo;
 use camino::Utf8PathBuf;
@@ -137,11 +137,27 @@ fn summarize(ops: &[PlanOp]) -> PlanSummary {
         .collect::<BTreeSet<_>>()
         .len() as u64;
 
+    let mut safe = 0u64;
+    let mut guarded = 0u64;
+    let mut unsafe_count = 0u64;
+    for op in ops {
+        match op.safety {
+            buildfix_types::ops::SafetyClass::Safe => safe += 1,
+            buildfix_types::ops::SafetyClass::Guarded => guarded += 1,
+            buildfix_types::ops::SafetyClass::Unsafe => unsafe_count += 1,
+        }
+    }
+
     PlanSummary {
         ops_total,
         ops_blocked,
         files_touched,
         patch_bytes: None,
+        safety_counts: Some(SafetyCounts {
+            safe,
+            guarded,
+            unsafe_count,
+        }),
     }
 }
 
@@ -385,6 +401,7 @@ impl ReceiptSet {
                     code: f.code.clone().unwrap_or_else(|| "-".to_string()),
                     path: f.location.as_ref().map(|loc| loc.path.to_string()),
                     line: f.location.as_ref().and_then(|loc| loc.line),
+                    fingerprint: f.fingerprint.clone(),
                 });
             }
         }

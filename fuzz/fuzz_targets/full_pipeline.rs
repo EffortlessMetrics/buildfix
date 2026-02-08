@@ -229,6 +229,7 @@ fn build_plan(sp: &StructuredPlan, policy: &PolicyConfig) -> BuildfixPlan {
                     code: "-".to_string(),
                     path: None,
                     line: None,
+                    fingerprint: None,
                 }],
             },
             params_required: vec![],

@@ -381,12 +381,32 @@ pub(crate) fn report_from_plan(
             apply: None,
             patch: Some("patch.diff".to_string()),
         }),
-        data: Some(serde_json::json!({
-            "ops_total": plan.summary.ops_total,
-            "ops_blocked": plan.summary.ops_blocked,
-            "files_touched": plan.summary.files_touched,
-            "patch_bytes": plan.summary.patch_bytes,
-        })),
+        data: Some({
+            let mut data = serde_json::json!({
+                "ops_total": plan.summary.ops_total,
+                "ops_blocked": plan.summary.ops_blocked,
+                "files_touched": plan.summary.files_touched,
+                "patch_bytes": plan.summary.patch_bytes,
+                "plan_available": !plan.ops.is_empty(),
+            });
+            if let Some(sc) = &plan.summary.safety_counts {
+                data["safety_counts"] = serde_json::json!({
+                    "safe": sc.safe,
+                    "guarded": sc.guarded,
+                    "unsafe": sc.unsafe_count,
+                });
+            }
+            let blocked_reasons: std::collections::BTreeSet<&str> = plan
+                .ops
+                .iter()
+                .filter_map(|o| o.blocked_reason.as_deref())
+                .collect();
+            let top: Vec<&str> = blocked_reasons.into_iter().take(5).collect();
+            if !top.is_empty() {
+                data["blocked_reasons_top"] = serde_json::json!(top);
+            }
+            data
+        }),
     }
 }
 
@@ -459,6 +479,7 @@ pub(crate) fn report_from_apply(apply: &BuildfixApply, tool: ToolInfo) -> Buildf
             "blocked": apply.summary.blocked,
             "failed": apply.summary.failed,
             "files_modified": apply.summary.files_modified,
+            "apply_performed": apply.summary.applied > 0,
         })),
     }
 }
@@ -487,4 +508,208 @@ fn sha256_hex(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     hex::encode(hasher.finalize())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use buildfix_types::ops::{OpKind, OpTarget, SafetyClass};
+    use buildfix_types::plan::{
+        PlanOp, PlanPolicy, PlanSummary, Rationale, RepoInfo, SafetyCounts,
+    };
+
+    fn tool() -> ToolInfo {
+        ToolInfo {
+            name: "buildfix".into(),
+            version: Some("0.0.0-test".into()),
+            repo: None,
+            commit: None,
+        }
+    }
+
+    fn make_plan(ops: Vec<PlanOp>, safety_counts: Option<SafetyCounts>) -> BuildfixPlan {
+        let mut plan = BuildfixPlan::new(
+            tool(),
+            RepoInfo {
+                root: ".".into(),
+                head_sha: None,
+                dirty: None,
+            },
+            PlanPolicy::default(),
+        );
+        let ops_total = ops.len() as u64;
+        let ops_blocked = ops.iter().filter(|o| o.blocked).count() as u64;
+        plan.summary = PlanSummary {
+            ops_total,
+            ops_blocked,
+            files_touched: 1,
+            patch_bytes: Some(0),
+            safety_counts,
+        };
+        plan.ops = ops;
+        plan
+    }
+
+    fn make_op(safety: SafetyClass, blocked: bool, blocked_reason: Option<&str>) -> PlanOp {
+        PlanOp {
+            id: "test-op".into(),
+            safety,
+            blocked,
+            blocked_reason: blocked_reason.map(|s| s.to_string()),
+            target: OpTarget {
+                path: "Cargo.toml".into(),
+            },
+            kind: OpKind::TomlSet {
+                toml_path: vec!["workspace".into(), "resolver".into()],
+                value: serde_json::json!("2"),
+            },
+            rationale: Rationale {
+                fix_key: "test".into(),
+                description: None,
+                findings: vec![],
+            },
+            params_required: vec![],
+            preview: None,
+        }
+    }
+
+    #[test]
+    fn report_plan_data_contains_plan_available() {
+        let plan = make_plan(
+            vec![make_op(SafetyClass::Safe, false, None)],
+            Some(SafetyCounts {
+                safe: 1,
+                guarded: 0,
+                unsafe_count: 0,
+            }),
+        );
+
+        let report = report_from_plan(&plan, tool(), &[]);
+        let data = report.data.unwrap();
+
+        assert_eq!(data["plan_available"], serde_json::json!(true));
+    }
+
+    #[test]
+    fn report_plan_data_plan_available_false_when_empty() {
+        let plan = make_plan(vec![], None);
+
+        let report = report_from_plan(&plan, tool(), &[]);
+        let data = report.data.unwrap();
+
+        assert_eq!(data["plan_available"], serde_json::json!(false));
+    }
+
+    #[test]
+    fn report_plan_data_contains_safety_counts() {
+        let sc = SafetyCounts {
+            safe: 2,
+            guarded: 1,
+            unsafe_count: 0,
+        };
+        let plan = make_plan(
+            vec![
+                make_op(SafetyClass::Safe, false, None),
+                make_op(SafetyClass::Safe, false, None),
+                make_op(SafetyClass::Guarded, false, None),
+            ],
+            Some(sc),
+        );
+
+        let report = report_from_plan(&plan, tool(), &[]);
+        let data = report.data.unwrap();
+
+        let sc_data = &data["safety_counts"];
+        assert_eq!(sc_data["safe"], serde_json::json!(2));
+        assert_eq!(sc_data["guarded"], serde_json::json!(1));
+        assert_eq!(sc_data["unsafe"], serde_json::json!(0));
+    }
+
+    #[test]
+    fn report_plan_data_contains_blocked_reasons_top() {
+        let plan = make_plan(
+            vec![
+                make_op(SafetyClass::Safe, true, Some("denied by policy")),
+                make_op(SafetyClass::Guarded, true, Some("missing params: version")),
+            ],
+            Some(SafetyCounts {
+                safe: 1,
+                guarded: 1,
+                unsafe_count: 0,
+            }),
+        );
+
+        let report = report_from_plan(&plan, tool(), &[]);
+        let data = report.data.unwrap();
+
+        let reasons = data["blocked_reasons_top"].as_array().unwrap();
+        assert_eq!(reasons.len(), 2);
+        // BTreeSet sorts, so "denied by policy" < "missing params: version"
+        assert_eq!(reasons[0], "denied by policy");
+        assert_eq!(reasons[1], "missing params: version");
+    }
+
+    #[test]
+    fn report_plan_data_no_blocked_reasons_when_none_blocked() {
+        let plan = make_plan(
+            vec![make_op(SafetyClass::Safe, false, None)],
+            Some(SafetyCounts {
+                safe: 1,
+                guarded: 0,
+                unsafe_count: 0,
+            }),
+        );
+
+        let report = report_from_plan(&plan, tool(), &[]);
+        let data = report.data.unwrap();
+
+        assert!(data.get("blocked_reasons_top").is_none());
+    }
+
+    #[test]
+    fn report_apply_data_contains_apply_performed() {
+        let mut apply = BuildfixApply::new(
+            tool(),
+            buildfix_types::apply::ApplyRepoInfo {
+                root: ".".into(),
+                head_sha_before: None,
+                head_sha_after: None,
+                dirty_before: None,
+                dirty_after: None,
+            },
+            buildfix_types::apply::PlanRef {
+                path: "plan.json".into(),
+                sha256: None,
+            },
+        );
+        apply.summary.applied = 3;
+
+        let report = report_from_apply(&apply, tool());
+        let data = report.data.unwrap();
+
+        assert_eq!(data["apply_performed"], serde_json::json!(true));
+    }
+
+    #[test]
+    fn report_apply_data_apply_performed_false_when_zero() {
+        let apply = BuildfixApply::new(
+            tool(),
+            buildfix_types::apply::ApplyRepoInfo {
+                root: ".".into(),
+                head_sha_before: None,
+                head_sha_after: None,
+                dirty_before: None,
+                dirty_after: None,
+            },
+            buildfix_types::apply::PlanRef {
+                path: "plan.json".into(),
+                sha256: None,
+            },
+        );
+
+        let report = report_from_apply(&apply, tool());
+        let data = report.data.unwrap();
+
+        assert_eq!(data["apply_performed"], serde_json::json!(false));
+    }
 }

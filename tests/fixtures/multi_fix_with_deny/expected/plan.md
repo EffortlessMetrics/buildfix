@@ -2,6 +2,7 @@
 
 - Ops: 3 (blocked 1)
 - Files touched: 2
+- Safety: 3 safe, 0 guarded, 0 unsafe
 - Inputs: 2
 
 ## Ops

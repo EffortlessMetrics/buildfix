@@ -105,6 +105,14 @@ pub struct FilePrecondition {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SafetyCounts {
+    pub safe: u64,
+    pub guarded: u64,
+    #[serde(rename = "unsafe")]
+    pub unsafe_count: u64,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PlanSummary {
     pub ops_total: u64,
     pub ops_blocked: u64,
@@ -112,6 +120,9 @@ pub struct PlanSummary {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub patch_bytes: Option<u64>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub safety_counts: Option<SafetyCounts>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -159,4 +170,7 @@ pub struct FindingRef {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub line: Option<u64>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fingerprint: Option<String>,
 }

@@ -4,7 +4,7 @@ mod explain;
 use anyhow::Context;
 use buildfix_core::adapters::{FsReceiptSource, FsWritePort, ShellGitPort};
 use buildfix_core::pipeline::{run_apply, run_plan, write_apply_artifacts, write_plan_artifacts};
-use buildfix_core::settings::{ApplySettings, PlanSettings};
+use buildfix_core::settings::{ApplySettings, PlanSettings, RunMode};
 use buildfix_types::receipt::ToolInfo;
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::{Parser, Subcommand};
@@ -94,6 +94,10 @@ struct PlanArgs {
     /// Parameters for unsafe fixes (repeatable: key=value).
     #[arg(long)]
     param: Vec<String>,
+
+    /// Run mode. In cockpit mode, policy blocks (exit 2) are mapped to exit 0.
+    #[arg(long, value_enum, default_value = "standalone")]
+    mode: CliRunMode,
 }
 
 #[derive(Debug, Parser)]
@@ -125,6 +129,10 @@ struct ApplyArgs {
     /// Parameters for unsafe fixes (repeatable: key=value).
     #[arg(long)]
     param: Vec<String>,
+
+    /// Run mode. In cockpit mode, policy blocks (exit 2) are mapped to exit 0.
+    #[arg(long, value_enum, default_value = "standalone")]
+    mode: CliRunMode,
 }
 
 #[derive(Debug, Parser)]
@@ -159,6 +167,22 @@ struct ValidateArgs {
 enum OutputFormat {
     Text,
     Json,
+}
+
+#[derive(Debug, Clone, Copy, Default, clap::ValueEnum)]
+enum CliRunMode {
+    #[default]
+    Standalone,
+    Cockpit,
+}
+
+impl From<CliRunMode> for RunMode {
+    fn from(m: CliRunMode) -> Self {
+        match m {
+            CliRunMode::Standalone => RunMode::Standalone,
+            CliRunMode::Cockpit => RunMode::Cockpit,
+        }
+    }
 }
 
 fn main() -> ExitCode {
@@ -217,6 +241,8 @@ fn cmd_plan(args: PlanArgs) -> anyhow::Result<ExitCode> {
         merged.allow, merged.deny, merged.require_clean_hashes, merged.params
     );
 
+    let mode: RunMode = args.mode.into();
+
     let settings = PlanSettings {
         repo_root: repo_root.clone(),
         artifacts_dir: artifacts_dir.clone(),
@@ -233,6 +259,7 @@ fn cmd_plan(args: PlanArgs) -> anyhow::Result<ExitCode> {
         require_clean_hashes: merged.require_clean_hashes,
         git_head_precondition: args.git_head_precondition,
         backup_suffix: merged.backups.suffix.clone(),
+        mode,
     };
 
     let receipts_port = FsReceiptSource::new(artifacts_dir);
@@ -251,7 +278,7 @@ fn cmd_plan(args: PlanArgs) -> anyhow::Result<ExitCode> {
 
     info!("wrote plan to {}", out_dir);
 
-    Ok(if outcome.policy_block {
+    Ok(if outcome.policy_block && mode != RunMode::Cockpit {
         ExitCode::from(2)
     } else {
         ExitCode::from(0)
@@ -275,6 +302,7 @@ fn cmd_apply(args: ApplyArgs) -> anyhow::Result<ExitCode> {
     );
 
     let allow_dirty = args.allow_dirty || merged.allow_dirty;
+    let mode: RunMode = args.mode.into();
 
     debug!(
         "merged config: allow_guarded={}, allow_unsafe={}, allow_dirty={}",
@@ -291,6 +319,7 @@ fn cmd_apply(args: ApplyArgs) -> anyhow::Result<ExitCode> {
         params: merged.params.clone(),
         backup_enabled: merged.backups.enabled,
         backup_suffix: merged.backups.suffix.clone(),
+        mode,
     };
 
     let git = ShellGitPort;
@@ -308,7 +337,7 @@ fn cmd_apply(args: ApplyArgs) -> anyhow::Result<ExitCode> {
 
     info!("wrote apply artifacts to {}", out_dir);
 
-    Ok(if outcome.policy_block {
+    Ok(if outcome.policy_block && mode != RunMode::Cockpit {
         ExitCode::from(2)
     } else {
         ExitCode::from(0)

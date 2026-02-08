@@ -58,7 +58,12 @@
   "summary": {
     "files_touched": 1,
     "ops_blocked": 0,
-    "ops_total": 1
+    "ops_total": 1,
+    "safety_counts": {
+      "guarded": 1,
+      "safe": 0,
+      "unsafe": 0
+    }
   },
   "tool": {
     "name": "buildfix",

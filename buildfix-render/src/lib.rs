@@ -18,6 +18,12 @@ pub fn render_plan_md(plan: &BuildfixPlan) -> String {
     if let Some(bytes) = plan.summary.patch_bytes {
         out.push_str(&format!("- Patch bytes: {}\n", bytes));
     }
+    if let Some(sc) = &plan.summary.safety_counts {
+        out.push_str(&format!(
+            "- Safety: {} safe, {} guarded, {} unsafe\n",
+            sc.safe, sc.guarded, sc.unsafe_count
+        ));
+    }
     out.push_str(&format!("- Inputs: {}\n\n", plan.inputs.len()));
 
     out.push_str("## Ops\n\n");

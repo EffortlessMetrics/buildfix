@@ -191,6 +191,25 @@
         "patch_bytes": {
           "type": "integer",
           "minimum": 0
+        },
+        "safety_counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["safe", "guarded", "unsafe"],
+          "properties": {
+            "safe": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "guarded": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unsafe": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
         }
       }
     }
@@ -219,6 +238,9 @@
         "line": {
           "type": "integer",
           "minimum": 1
+        },
+        "fingerprint": {
+          "type": "string"
         }
       }
     },
