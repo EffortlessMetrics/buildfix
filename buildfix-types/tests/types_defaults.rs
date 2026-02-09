@@ -97,7 +97,10 @@ fn op_kind_serializes_with_type_tag() {
 
     let value = serde_json::to_value(&op).expect("serialize op");
     assert_eq!(value["type"], "toml_set");
-    assert_eq!(value["toml_path"], serde_json::json!(["workspace", "resolver"]));
+    assert_eq!(
+        value["toml_path"],
+        serde_json::json!(["workspace", "resolver"])
+    );
     assert_eq!(value["value"], serde_json::json!("2"));
 }
 

@@ -488,9 +488,7 @@ mod tests {
 
         fn key_for(&self, rel: &Utf8Path) -> String {
             if rel.is_absolute() {
-                rel.strip_prefix(&self.root)
-                    .unwrap_or(rel)
-                    .to_string()
+                rel.strip_prefix(&self.root).unwrap_or(rel).to_string()
             } else {
                 rel.to_string()
             }
@@ -609,7 +607,10 @@ mod tests {
 
         let mut by_dep: HashMap<String, &PlanOp> = HashMap::new();
         for op in &fixes {
-            if let OpKind::TomlTransform { args: Some(args), .. } = &op.kind {
+            if let OpKind::TomlTransform {
+                args: Some(args), ..
+            } = &op.kind
+            {
                 if let Some(dep) = args.get("dep").and_then(|d| d.as_str()) {
                     by_dep.insert(dep.to_string(), op);
                 }
@@ -621,7 +622,10 @@ mod tests {
 
         let local_op = by_dep.get("local").expect("local op");
         assert_eq!(local_op.safety, SafetyClass::Guarded);
-        if let OpKind::TomlTransform { args: Some(args), .. } = &local_op.kind {
+        if let OpKind::TomlTransform {
+            args: Some(args), ..
+        } = &local_op.kind
+        {
             let preserved = &args["preserved"];
             assert_eq!(preserved["optional"], serde_json::json!(true));
             assert_eq!(preserved["features"], serde_json::json!(["std"]));
@@ -733,7 +737,10 @@ mod tests {
         assert_eq!(cand.preserved.package.as_deref(), Some("dep-pkg"));
         assert_eq!(cand.preserved.optional, Some(true));
         assert_eq!(cand.preserved.default_features, Some(false));
-        assert_eq!(cand.preserved.features, vec!["std".to_string(), "serde".to_string()]);
+        assert_eq!(
+            cand.preserved.features,
+            vec!["std".to_string(), "serde".to_string()]
+        );
     }
 
     #[test]
@@ -774,10 +781,8 @@ mod tests {
 
     #[test]
     fn plan_skips_missing_or_invalid_manifest() {
-        let repo_missing = TestRepo::new(&[(
-            "Cargo.toml",
-            "[workspace]\nmembers = [\"crates/member\"]\n",
-        )]);
+        let repo_missing =
+            TestRepo::new(&[("Cargo.toml", "[workspace]\nmembers = [\"crates/member\"]\n")]);
 
         let ctx = PlanContext {
             repo_root: Utf8PathBuf::from("."),

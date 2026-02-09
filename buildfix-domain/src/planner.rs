@@ -514,7 +514,7 @@ mod tests {
     use super::*;
     use buildfix_receipts::LoadedReceipt;
     use buildfix_types::ops::{OpKind, OpTarget, SafetyClass};
-    use buildfix_types::plan::{blocked_tokens, PlanOp, Rationale};
+    use buildfix_types::plan::{PlanOp, Rationale, blocked_tokens};
     use buildfix_types::receipt::{Finding, Location, ReceiptEnvelope, RunInfo, ToolInfo, Verdict};
     use camino::Utf8PathBuf;
     use std::collections::HashMap;

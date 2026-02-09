@@ -344,9 +344,7 @@ mod tests {
 
         fn key_for(&self, rel: &Utf8Path) -> String {
             let raw = if rel.is_absolute() {
-                rel.strip_prefix(&self.root)
-                    .unwrap_or(rel)
-                    .to_string()
+                rel.strip_prefix(&self.root).unwrap_or(rel).to_string()
             } else {
                 rel.to_string()
             };
@@ -428,8 +426,7 @@ mod tests {
         .expect("parse");
 
         let candidates = PathDepVersionFixer::collect_path_deps(&doc);
-        let paths: Vec<Vec<String>> =
-            candidates.iter().map(|c| c.toml_path.clone()).collect();
+        let paths: Vec<Vec<String>> = candidates.iter().map(|c| c.toml_path.clone()).collect();
 
         assert!(paths.contains(&vec!["dependencies".to_string(), "foo".to_string()]));
         assert!(paths.contains(&vec!["dev-dependencies".to_string(), "devfoo".to_string()]));
@@ -583,11 +580,16 @@ mod tests {
 
     #[test]
     fn test_repo_helpers_handle_absolute_paths() {
-        let root = Utf8PathBuf::from_path_buf(std::env::current_dir().expect("cwd"))
-            .expect("utf8");
+        let root = Utf8PathBuf::from_path_buf(std::env::current_dir().expect("cwd")).expect("utf8");
         let mut files = HashMap::new();
-        files.insert("crates/app/Cargo.toml".to_string(), "name = \"app\"".to_string());
-        let repo = TestRepo { root: root.clone(), files };
+        files.insert(
+            "crates/app/Cargo.toml".to_string(),
+            "name = \"app\"".to_string(),
+        );
+        let repo = TestRepo {
+            root: root.clone(),
+            files,
+        };
         let abs = root.join("crates/app/Cargo.toml");
         assert!(repo.exists(&abs));
         assert_eq!(repo.read_to_string(&abs).unwrap(), "name = \"app\"");

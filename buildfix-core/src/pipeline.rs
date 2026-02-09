@@ -541,6 +541,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::settings::RunMode;
     use buildfix_receipts::{LoadedReceipt, ReceiptLoadError};
     use buildfix_types::ops::{OpKind, OpTarget, SafetyClass};
     use buildfix_types::plan::{
@@ -549,7 +550,6 @@ mod tests {
     use buildfix_types::receipt::{Finding, Location, ReceiptEnvelope, RunInfo, ToolInfo, Verdict};
     use buildfix_types::wire::PlanV1;
     use camino::{Utf8Path, Utf8PathBuf};
-    use crate::settings::RunMode;
     use sha2::{Digest, Sha256};
     use std::collections::HashMap;
     use std::sync::Mutex;
@@ -954,16 +954,20 @@ mod tests {
         let report = report_from_plan(&plan, tool(), &receipts);
         assert_eq!(report.verdict.status, ReportStatus::Warn);
         assert_eq!(report.findings.len(), 1);
-        assert!(report.findings[0]
-            .message
-            .contains("Receipt failed to load"));
-        assert!(report
-            .capabilities
-            .as_ref()
-            .unwrap()
-            .inputs_failed
-            .iter()
-            .any(|f| f.path.contains("report.json")));
+        assert!(
+            report.findings[0]
+                .message
+                .contains("Receipt failed to load")
+        );
+        assert!(
+            report
+                .capabilities
+                .as_ref()
+                .unwrap()
+                .inputs_failed
+                .iter()
+                .any(|f| f.path.contains("report.json"))
+        );
     }
 
     #[test]
@@ -1027,7 +1031,10 @@ mod tests {
         let expected_sha = hex::encode(hasher.finalize());
         assert_eq!(pre.sha256, expected_sha);
 
-        assert_eq!(outcome.plan.preconditions.head_sha.as_deref(), Some("deadbeef"));
+        assert_eq!(
+            outcome.plan.preconditions.head_sha.as_deref(),
+            Some("deadbeef")
+        );
         assert_eq!(outcome.plan.preconditions.dirty, Some(true));
         assert_eq!(outcome.plan.repo.head_sha.as_deref(), Some("deadbeef"));
         assert_eq!(outcome.plan.repo.dirty, Some(true));
@@ -1049,7 +1056,10 @@ mod tests {
 
         let outcome = run_plan(&settings, &receipts, &git, tool()).expect("run_plan");
         assert!(outcome.plan.preconditions.files.is_empty());
-        assert_eq!(outcome.plan.preconditions.head_sha.as_deref(), Some("cafebabe"));
+        assert_eq!(
+            outcome.plan.preconditions.head_sha.as_deref(),
+            Some("cafebabe")
+        );
         assert_eq!(outcome.plan.preconditions.dirty, Some(false));
     }
 
@@ -1065,7 +1075,10 @@ mod tests {
         let outcome = run_plan(&settings, &receipts, &git, tool()).expect("run_plan");
 
         assert!(outcome.plan.ops.iter().all(|o| o.blocked));
-        assert_eq!(outcome.plan.summary.ops_blocked, outcome.plan.ops.len() as u64);
+        assert_eq!(
+            outcome.plan.summary.ops_blocked,
+            outcome.plan.ops.len() as u64
+        );
         assert_eq!(outcome.plan.summary.patch_bytes, Some(0));
         assert!(outcome.patch.is_empty());
         assert!(outcome.policy_block);
@@ -1129,14 +1142,22 @@ mod tests {
         let outcome = run_apply(&settings, &git, tool()).expect("run_apply");
         assert!(outcome.policy_block);
         assert_eq!(outcome.apply.summary.blocked, plan.ops.len() as u64);
-        assert!(outcome.apply.results.iter().all(|r| r.status == buildfix_types::apply::ApplyStatus::Blocked));
+        assert!(
+            outcome
+                .apply
+                .results
+                .iter()
+                .all(|r| r.status == buildfix_types::apply::ApplyStatus::Blocked)
+        );
         assert!(!outcome.apply.preconditions.verified);
-        assert!(outcome
-            .apply
-            .preconditions
-            .mismatches
-            .iter()
-            .any(|m| m.path == "<working_tree>"));
+        assert!(
+            outcome
+                .apply
+                .preconditions
+                .mismatches
+                .iter()
+                .any(|m| m.path == "<working_tree>")
+        );
         assert!(outcome.patch.is_empty());
         assert!(outcome.apply.plan_ref.sha256.as_deref().unwrap_or("").len() >= 64);
     }

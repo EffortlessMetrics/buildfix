@@ -131,9 +131,7 @@ mod tests {
 
         fn key_for(&self, rel: &Utf8Path) -> String {
             if rel.is_absolute() {
-                rel.strip_prefix(&self.root)
-                    .unwrap_or(rel)
-                    .to_string()
+                rel.strip_prefix(&self.root).unwrap_or(rel).to_string()
             } else {
                 rel.to_string()
             }
@@ -278,11 +276,16 @@ mod tests {
 
     #[test]
     fn test_repo_helpers_handle_absolute_paths() {
-        let root = Utf8PathBuf::from_path_buf(std::env::current_dir().expect("cwd"))
-            .expect("utf8");
+        let root = Utf8PathBuf::from_path_buf(std::env::current_dir().expect("cwd")).expect("utf8");
         let mut files = HashMap::new();
-        files.insert("Cargo.toml".to_string(), "[workspace]\nresolver = \"1\"\n".to_string());
-        let repo = TestRepo { root: root.clone(), files };
+        files.insert(
+            "Cargo.toml".to_string(),
+            "[workspace]\nresolver = \"1\"\n".to_string(),
+        );
+        let repo = TestRepo {
+            root: root.clone(),
+            files,
+        };
         let abs = root.join("Cargo.toml");
         assert!(repo.exists(&abs));
         assert!(repo.read_to_string(&abs).unwrap().contains("resolver"));

@@ -309,8 +309,8 @@ fn normalize_for_determinism(json_str: &str) -> Result<String, Vec<String>> {
 mod tests {
     use super::*;
     use fs_err as fs;
-    use tempfile::TempDir;
     use std::sync::Mutex;
+    use tempfile::TempDir;
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
@@ -325,8 +325,7 @@ mod tests {
         .to_string();
 
         let normalized = normalize_for_determinism(&input).expect("normalize");
-        let value: serde_json::Value =
-            serde_json::from_str(&normalized).expect("parse normalized");
+        let value: serde_json::Value = serde_json::from_str(&normalized).expect("parse normalized");
         let run = value.get("run").and_then(|v| v.as_object()).expect("run");
         assert!(run.get("started_at").is_none());
         assert!(run.get("ended_at").is_none());
@@ -486,11 +485,8 @@ mod tests {
         fs::write(artifacts.join("report.json"), actual).expect("write actual");
         fs::write(golden.join("report.json"), golden_content).expect("write golden");
 
-        check_determinism(
-            artifacts.to_str().unwrap(),
-            golden.to_str().unwrap(),
-        )
-        .expect("determinism");
+        check_determinism(artifacts.to_str().unwrap(), golden.to_str().unwrap())
+            .expect("determinism");
     }
 
     #[test]
@@ -512,11 +508,8 @@ mod tests {
         )
         .expect("write actual");
 
-        let errors = check_determinism(
-            artifacts.to_str().unwrap(),
-            golden.to_str().unwrap(),
-        )
-        .expect_err("missing golden");
+        let errors = check_determinism(artifacts.to_str().unwrap(), golden.to_str().unwrap())
+            .expect_err("missing golden");
         assert!(errors.iter().any(|e| e.contains("golden file missing")));
     }
 
@@ -550,11 +543,8 @@ mod tests {
         )
         .expect("write golden");
 
-        let errors = check_determinism(
-            artifacts.to_str().unwrap(),
-            golden.to_str().unwrap(),
-        )
-        .expect_err("mismatch");
+        let errors = check_determinism(artifacts.to_str().unwrap(), golden.to_str().unwrap())
+            .expect_err("mismatch");
         assert!(errors.iter().any(|e| e.contains("differs from golden")));
     }
 
@@ -758,11 +748,17 @@ mod tests {
     #[test]
     fn run_validate_success_and_failure() {
         with_fake_cargo(0, || {
-            run(Cli { cmd: Command::Validate }).expect("validate ok");
+            run(Cli {
+                cmd: Command::Validate,
+            })
+            .expect("validate ok");
         });
 
         with_fake_cargo(1, || {
-            let err = run(Cli { cmd: Command::Validate }).expect_err("validate fails");
+            let err = run(Cli {
+                cmd: Command::Validate,
+            })
+            .expect_err("validate fails");
             assert!(err.to_string().contains("validate failed"));
         });
     }

@@ -191,7 +191,9 @@ fn status_label(s: &ApplyStatus) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use buildfix_types::apply::{ApplyFile, ApplyRepoInfo, ApplyResult, ApplyStatus, ApplySummary, BuildfixApply, PlanRef};
+    use buildfix_types::apply::{
+        ApplyFile, ApplyRepoInfo, ApplyResult, ApplyStatus, ApplySummary, BuildfixApply, PlanRef,
+    };
     use buildfix_types::ops::{OpKind, OpTarget};
     use buildfix_types::plan::{
         FindingRef, PlanOp, PlanPolicy, PlanSummary, Rationale, RepoInfo, SafetyCounts,

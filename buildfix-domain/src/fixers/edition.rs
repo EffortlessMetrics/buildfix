@@ -211,9 +211,7 @@ mod tests {
 
         fn key_for(&self, rel: &Utf8Path) -> String {
             if rel.is_absolute() {
-                rel.strip_prefix(&self.root)
-                    .unwrap_or(rel)
-                    .to_string()
+                rel.strip_prefix(&self.root).unwrap_or(rel).to_string()
             } else {
                 rel.to_string()
             }

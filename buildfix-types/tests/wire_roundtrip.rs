@@ -1,4 +1,6 @@
-use buildfix_types::apply::{ApplyPreconditions, ApplyRepoInfo, ApplySummary, BuildfixApply, PlanRef};
+use buildfix_types::apply::{
+    ApplyPreconditions, ApplyRepoInfo, ApplySummary, BuildfixApply, PlanRef,
+};
 use buildfix_types::plan::{BuildfixPlan, PlanPolicy, PlanPreconditions, PlanSummary, RepoInfo};
 use buildfix_types::receipt::ToolInfo;
 use buildfix_types::report::{
@@ -24,7 +26,10 @@ fn plan_wire_requires_tool_version() {
     let plan = BuildfixPlan::new(tool, repo, policy);
 
     let err = PlanV1::try_from(&plan).expect_err("missing version should error");
-    assert!(matches!(err, WireError::MissingToolVersion { context: "plan" }));
+    assert!(matches!(
+        err,
+        WireError::MissingToolVersion { context: "plan" }
+    ));
 }
 
 #[test]
@@ -91,7 +96,10 @@ fn apply_wire_requires_tool_version() {
     };
 
     let err = ApplyV1::try_from(&apply).expect_err("missing version should error");
-    assert!(matches!(err, WireError::MissingToolVersion { context: "apply" }));
+    assert!(matches!(
+        err,
+        WireError::MissingToolVersion { context: "apply" }
+    ));
 }
 
 #[test]

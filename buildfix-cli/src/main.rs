@@ -533,7 +533,7 @@ fn cmd_list_fixes(args: ListFixesArgs) -> anyhow::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_file_if_exists, ValidateOutcome};
+    use super::{ValidateOutcome, validate_file_if_exists};
     use camino::Utf8PathBuf;
     use tempfile::TempDir;
 

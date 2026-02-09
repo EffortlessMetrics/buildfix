@@ -1,6 +1,6 @@
 use buildfix_edit::{
-    ApplyOptions, AttachPreconditionsOptions, apply_op_to_content, apply_plan, attach_preconditions,
-    check_policy_block, get_head_sha, is_working_tree_dirty, preview_patch,
+    ApplyOptions, AttachPreconditionsOptions, apply_op_to_content, apply_plan,
+    attach_preconditions, check_policy_block, get_head_sha, is_working_tree_dirty, preview_patch,
 };
 use buildfix_types::apply::{
     ApplyPreconditions, ApplyRepoInfo, ApplyResult, ApplyStatus, ApplySummary, BuildfixApply,
@@ -198,7 +198,11 @@ fn apply_plan_writes_backups() {
     let (apply, _patch) = apply_plan(&root, &plan, tool_info(), &opts).expect("apply");
     let result = apply.results.iter().find(|r| r.op_id == "op1").unwrap();
     assert_eq!(result.status, ApplyStatus::Applied);
-    let file = result.files.iter().find(|f| f.path == "crates/a/Cargo.toml").unwrap();
+    let file = result
+        .files
+        .iter()
+        .find(|f| f.path == "crates/a/Cargo.toml")
+        .unwrap();
     let backup_path = Utf8Path::new(file.backup_path.as_ref().expect("backup path"));
     assert!(backup_path.exists());
 }
@@ -273,21 +277,28 @@ fn apply_plan_records_block_reasons() {
     assert_eq!(blocked.status, ApplyStatus::Blocked);
     assert_eq!(blocked.blocked_reason.as_deref(), Some("blocked"));
 
-    let missing = apply.results.iter().find(|r| r.op_id == "missing_params").unwrap();
+    let missing = apply
+        .results
+        .iter()
+        .find(|r| r.op_id == "missing_params")
+        .unwrap();
     assert_eq!(missing.status, ApplyStatus::Blocked);
-    assert!(missing
-        .blocked_reason
-        .as_ref()
-        .unwrap()
-        .contains("missing params"));
+    assert!(
+        missing
+            .blocked_reason
+            .as_ref()
+            .unwrap()
+            .contains("missing params")
+    );
 
-    let safety = apply.results.iter().find(|r| r.op_id == "safety_blocked").unwrap();
+    let safety = apply
+        .results
+        .iter()
+        .find(|r| r.op_id == "safety_blocked")
+        .unwrap();
     assert_eq!(safety.status, ApplyStatus::Blocked);
     assert_eq!(safety.blocked_reason.as_deref(), Some("safety gate"));
-    assert_eq!(
-        safety.message.as_deref(),
-        Some("safety class not allowed")
-    );
+    assert_eq!(safety.message.as_deref(), Some("safety class not allowed"));
 
     let allowed = apply
         .results
@@ -521,7 +532,11 @@ fn execute_plan_from_contents_applies_only_allowed_and_fills_params() {
         SafetyClass::Safe,
         false,
         OpKind::TomlSet {
-            toml_path: vec!["package".to_string(), "metadata".to_string(), "flag".to_string()],
+            toml_path: vec![
+                "package".to_string(),
+                "metadata".to_string(),
+                "flag".to_string(),
+            ],
             value: serde_json::Value::Bool(true),
         },
         vec!["ignored".to_string()],
@@ -545,12 +560,11 @@ fn execute_plan_from_contents_applies_only_allowed_and_fills_params() {
     let mut before = BTreeMap::new();
     before.insert(
         Utf8PathBuf::from("Cargo.toml"),
-        "[package]\nname = \"demo\"\n\n[dependencies]\ndep = { path = \"../dep\" }\n"
-            .to_string(),
+        "[package]\nname = \"demo\"\n\n[dependencies]\ndep = { path = \"../dep\" }\n".to_string(),
     );
 
-    let changed = buildfix_edit::execute_plan_from_contents(&before, &plan, &opts)
-        .expect("execute");
+    let changed =
+        buildfix_edit::execute_plan_from_contents(&before, &plan, &opts).expect("execute");
     let out = changed.get(Utf8Path::new("Cargo.toml")).expect("changed");
     assert!(out.contains("edition = \"2021\""));
     assert!(out.contains("version = \"1.2.3\""));
@@ -596,11 +610,13 @@ fn apply_plan_handles_head_sha_mismatch() {
 
     let (apply, _patch) = apply_plan(&root, &plan, tool_info(), &opts).expect("apply");
     assert!(!apply.preconditions.verified);
-    assert!(apply
-        .preconditions
-        .mismatches
-        .iter()
-        .any(|m| m.path == "<git_head>"));
+    assert!(
+        apply
+            .preconditions
+            .mismatches
+            .iter()
+            .any(|m| m.path == "<git_head>")
+    );
 }
 
 #[test]
