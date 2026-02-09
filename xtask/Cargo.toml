@@ -17,3 +17,6 @@ jsonschema = { workspace = true }
 serde_json.workspace = true
 
 buildfix-types = { path = "../buildfix-types" }
+
+[dev-dependencies]
+tempfile.workspace = true

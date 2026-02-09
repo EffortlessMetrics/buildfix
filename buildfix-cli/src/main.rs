@@ -530,3 +530,55 @@ fn cmd_list_fixes(args: ListFixesArgs) -> anyhow::Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{validate_file_if_exists, ValidateOutcome};
+    use camino::Utf8PathBuf;
+    use tempfile::TempDir;
+
+    #[test]
+    fn validate_file_if_exists_missing_returns_missing() {
+        let temp = TempDir::new().expect("temp dir");
+        let path = Utf8PathBuf::from_path_buf(temp.path().join("missing.json")).expect("utf8");
+        let outcome = validate_file_if_exists(&path, r#"{"type": "object"}"#).expect("ok");
+        assert!(matches!(outcome, ValidateOutcome::Missing));
+    }
+
+    #[test]
+    fn validate_file_if_exists_reports_schema_errors() {
+        let temp = TempDir::new().expect("temp dir");
+        let path = Utf8PathBuf::from_path_buf(temp.path().join("payload.json")).expect("utf8");
+        std::fs::write(&path, r#"{"name": 123}"#).expect("write");
+
+        let schema = r#"{
+            "type": "object",
+            "required": ["name"],
+            "properties": { "name": { "type": "string" } }
+        }"#;
+
+        let outcome = validate_file_if_exists(&path, schema).expect("ok");
+        match outcome {
+            ValidateOutcome::SchemaErrors(errors) => {
+                assert!(!errors.is_empty());
+            }
+            _ => panic!("expected schema errors"),
+        }
+    }
+
+    #[test]
+    fn validate_file_if_exists_ok_for_valid_payload() {
+        let temp = TempDir::new().expect("temp dir");
+        let path = Utf8PathBuf::from_path_buf(temp.path().join("payload.json")).expect("utf8");
+        std::fs::write(&path, r#"{"name": "ok"}"#).expect("write");
+
+        let schema = r#"{
+            "type": "object",
+            "required": ["name"],
+            "properties": { "name": { "type": "string" } }
+        }"#;
+
+        let outcome = validate_file_if_exists(&path, schema).expect("ok");
+        assert!(matches!(outcome, ValidateOutcome::Ok));
+    }
+}

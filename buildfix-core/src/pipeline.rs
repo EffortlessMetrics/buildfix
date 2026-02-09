@@ -541,10 +541,58 @@ fn sha256_hex(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use buildfix_receipts::{LoadedReceipt, ReceiptLoadError};
     use buildfix_types::ops::{OpKind, OpTarget, SafetyClass};
     use buildfix_types::plan::{
         PlanOp, PlanPolicy, PlanSummary, Rationale, RepoInfo, SafetyCounts,
     };
+    use buildfix_types::receipt::{Finding, Location, ReceiptEnvelope, RunInfo, ToolInfo, Verdict};
+    use buildfix_types::wire::PlanV1;
+    use camino::{Utf8Path, Utf8PathBuf};
+    use crate::settings::RunMode;
+    use sha2::{Digest, Sha256};
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+    use tempfile::TempDir;
+
+    #[derive(Default)]
+    struct StubGitPort {
+        head: Option<String>,
+        dirty: Option<bool>,
+    }
+
+    impl GitPort for StubGitPort {
+        fn head_sha(&self, _repo_root: &Utf8Path) -> anyhow::Result<Option<String>> {
+            Ok(self.head.clone())
+        }
+
+        fn is_dirty(&self, _repo_root: &Utf8Path) -> anyhow::Result<Option<bool>> {
+            Ok(self.dirty)
+        }
+    }
+
+    #[derive(Default)]
+    struct MemWritePort {
+        files: Mutex<HashMap<String, Vec<u8>>>,
+        dirs: Mutex<Vec<String>>,
+    }
+
+    impl WritePort for MemWritePort {
+        fn write_file(&self, path: &Utf8Path, contents: &[u8]) -> anyhow::Result<()> {
+            let key = path.as_str().replace('\\', "/");
+            self.files
+                .lock()
+                .expect("lock files")
+                .insert(key, contents.to_vec());
+            Ok(())
+        }
+
+        fn create_dir_all(&self, path: &Utf8Path) -> anyhow::Result<()> {
+            let key = path.as_str().replace('\\', "/");
+            self.dirs.lock().expect("lock dirs").push(key);
+            Ok(())
+        }
+    }
 
     fn tool() -> ToolInfo {
         ToolInfo {
@@ -608,6 +656,84 @@ mod tests {
             },
             params_required: vec![],
             preview: None,
+        }
+    }
+
+    fn create_temp_repo(manifest_contents: &str) -> (TempDir, Utf8PathBuf) {
+        let temp = TempDir::new().expect("temp dir");
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8");
+        std::fs::write(root.join("Cargo.toml"), manifest_contents).expect("write manifest");
+        (temp, root)
+    }
+
+    fn resolver_receipt() -> LoadedReceipt {
+        let receipt = ReceiptEnvelope {
+            schema: "sensor.report.v1".to_string(),
+            tool: ToolInfo {
+                name: "builddiag".to_string(),
+                version: Some("1.0.0".to_string()),
+                repo: None,
+                commit: None,
+            },
+            run: RunInfo::default(),
+            verdict: Verdict::default(),
+            findings: vec![Finding {
+                severity: Default::default(),
+                check_id: Some("workspace.resolver_v2".to_string()),
+                code: Some("RESOLVER".to_string()),
+                message: None,
+                location: Some(Location {
+                    path: Utf8PathBuf::from("Cargo.toml"),
+                    line: Some(1),
+                    column: None,
+                }),
+                fingerprint: None,
+                data: None,
+            }],
+            capabilities: None,
+            data: None,
+        };
+
+        LoadedReceipt {
+            path: Utf8PathBuf::from("artifacts/builddiag/report.json"),
+            sensor_id: "builddiag".to_string(),
+            receipt: Ok(receipt),
+        }
+    }
+
+    fn build_plan_settings(root: &Utf8Path) -> PlanSettings {
+        PlanSettings {
+            repo_root: root.to_path_buf(),
+            artifacts_dir: root.join("artifacts"),
+            out_dir: root.join("artifacts/buildfix"),
+            allow: Vec::new(),
+            deny: Vec::new(),
+            allow_guarded: false,
+            allow_unsafe: false,
+            allow_dirty: false,
+            max_ops: None,
+            max_files: None,
+            max_patch_bytes: None,
+            params: HashMap::new(),
+            require_clean_hashes: true,
+            git_head_precondition: false,
+            backup_suffix: ".buildfix.bak".to_string(),
+            mode: RunMode::Standalone,
+        }
+    }
+
+    fn make_apply_settings(root: &Utf8Path, out_dir: &Utf8Path) -> ApplySettings {
+        ApplySettings {
+            repo_root: root.to_path_buf(),
+            out_dir: out_dir.to_path_buf(),
+            dry_run: true,
+            allow_guarded: false,
+            allow_unsafe: false,
+            allow_dirty: false,
+            params: HashMap::new(),
+            backup_enabled: false,
+            backup_suffix: ".buildfix.bak".to_string(),
+            mode: RunMode::Standalone,
         }
     }
 
@@ -812,5 +938,281 @@ mod tests {
         let apply_data = &data["buildfix"]["apply"];
 
         assert_eq!(apply_data["apply_performed"], serde_json::json!(false));
+    }
+
+    #[test]
+    fn report_from_plan_includes_input_failures_and_warn_status() {
+        let plan = make_plan(vec![], None);
+        let receipts = vec![LoadedReceipt {
+            path: Utf8PathBuf::from("artifacts/bad/report.json"),
+            sensor_id: "bad".to_string(),
+            receipt: Err(ReceiptLoadError::Io {
+                message: "missing".to_string(),
+            }),
+        }];
+
+        let report = report_from_plan(&plan, tool(), &receipts);
+        assert_eq!(report.verdict.status, ReportStatus::Warn);
+        assert_eq!(report.findings.len(), 1);
+        assert!(report.findings[0]
+            .message
+            .contains("Receipt failed to load"));
+        assert!(report
+            .capabilities
+            .as_ref()
+            .unwrap()
+            .inputs_failed
+            .iter()
+            .any(|f| f.path.contains("report.json")));
+    }
+
+    #[test]
+    fn report_from_apply_sets_status_for_failed_and_blocked() {
+        let mut apply = BuildfixApply::new(
+            tool(),
+            buildfix_types::apply::ApplyRepoInfo {
+                root: ".".into(),
+                head_sha_before: None,
+                head_sha_after: None,
+                dirty_before: None,
+                dirty_after: None,
+            },
+            buildfix_types::apply::PlanRef {
+                path: "plan.json".into(),
+                sha256: None,
+            },
+        );
+
+        apply.summary.failed = 1;
+        let report = report_from_apply(&apply, tool());
+        assert_eq!(report.verdict.status, ReportStatus::Fail);
+
+        apply.summary.failed = 0;
+        apply.summary.blocked = 1;
+        let report = report_from_apply(&apply, tool());
+        assert_eq!(report.verdict.status, ReportStatus::Warn);
+
+        apply.summary.blocked = 0;
+        apply.summary.applied = 1;
+        let report = report_from_apply(&apply, tool());
+        assert_eq!(report.verdict.status, ReportStatus::Pass);
+
+        apply.summary.applied = 0;
+        let report = report_from_apply(&apply, tool());
+        assert_eq!(report.verdict.status, ReportStatus::Warn);
+    }
+
+    #[test]
+    fn run_plan_attaches_preconditions_and_git_info() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let receipts = crate::adapters::InMemoryReceiptSource::new(vec![resolver_receipt()]);
+
+        let mut settings = build_plan_settings(&root);
+        settings.git_head_precondition = true;
+
+        let git = StubGitPort {
+            head: Some("deadbeef".to_string()),
+            dirty: Some(true),
+        };
+
+        let outcome = run_plan(&settings, &receipts, &git, tool()).expect("run_plan");
+        assert_eq!(outcome.plan.ops.len(), 1);
+
+        assert_eq!(outcome.plan.preconditions.files.len(), 1);
+        let pre = &outcome.plan.preconditions.files[0];
+        assert_eq!(pre.path, "Cargo.toml");
+
+        let mut hasher = Sha256::new();
+        hasher.update(b"[workspace]\nresolver = \"1\"\n");
+        let expected_sha = hex::encode(hasher.finalize());
+        assert_eq!(pre.sha256, expected_sha);
+
+        assert_eq!(outcome.plan.preconditions.head_sha.as_deref(), Some("deadbeef"));
+        assert_eq!(outcome.plan.preconditions.dirty, Some(true));
+        assert_eq!(outcome.plan.repo.head_sha.as_deref(), Some("deadbeef"));
+        assert_eq!(outcome.plan.repo.dirty, Some(true));
+    }
+
+    #[test]
+    fn run_plan_skips_file_preconditions_when_disabled() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let receipts = crate::adapters::InMemoryReceiptSource::new(vec![resolver_receipt()]);
+
+        let mut settings = build_plan_settings(&root);
+        settings.require_clean_hashes = false;
+        settings.git_head_precondition = true;
+
+        let git = StubGitPort {
+            head: Some("cafebabe".to_string()),
+            dirty: Some(false),
+        };
+
+        let outcome = run_plan(&settings, &receipts, &git, tool()).expect("run_plan");
+        assert!(outcome.plan.preconditions.files.is_empty());
+        assert_eq!(outcome.plan.preconditions.head_sha.as_deref(), Some("cafebabe"));
+        assert_eq!(outcome.plan.preconditions.dirty, Some(false));
+    }
+
+    #[test]
+    fn run_plan_blocks_when_patch_cap_exceeded() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let receipts = crate::adapters::InMemoryReceiptSource::new(vec![resolver_receipt()]);
+
+        let mut settings = build_plan_settings(&root);
+        settings.max_patch_bytes = Some(0);
+
+        let git = StubGitPort::default();
+        let outcome = run_plan(&settings, &receipts, &git, tool()).expect("run_plan");
+
+        assert!(outcome.plan.ops.iter().all(|o| o.blocked));
+        assert_eq!(outcome.plan.summary.ops_blocked, outcome.plan.ops.len() as u64);
+        assert_eq!(outcome.plan.summary.patch_bytes, Some(0));
+        assert!(outcome.patch.is_empty());
+        assert!(outcome.policy_block);
+
+        for op in &outcome.plan.ops {
+            assert_eq!(
+                op.blocked_reason_token.as_deref(),
+                Some(buildfix_types::plan::blocked_tokens::MAX_PATCH_BYTES)
+            );
+        }
+    }
+
+    #[test]
+    fn write_plan_artifacts_writes_expected_files() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let receipts = crate::adapters::InMemoryReceiptSource::new(vec![resolver_receipt()]);
+        let settings = build_plan_settings(&root);
+        let git = StubGitPort::default();
+
+        let outcome = run_plan(&settings, &receipts, &git, tool()).expect("run_plan");
+
+        let writer = MemWritePort::default();
+        let out_dir = Utf8PathBuf::from("out");
+        write_plan_artifacts(&outcome, &out_dir, &writer).expect("write artifacts");
+
+        let files = writer.files.lock().expect("files");
+        assert!(files.contains_key("out/plan.json"));
+        assert!(files.contains_key("out/plan.md"));
+        assert!(files.contains_key("out/comment.md"));
+        assert!(files.contains_key("out/patch.diff"));
+        assert!(files.contains_key("out/report.json"));
+        assert!(files.contains_key("out/extras/buildfix.report.v1.json"));
+
+        let extras = files
+            .get("out/extras/buildfix.report.v1.json")
+            .expect("extras json");
+        let json: serde_json::Value = serde_json::from_slice(extras).expect("parse extras");
+        assert_eq!(json["schema"], buildfix_types::schema::BUILDFIX_REPORT_V1);
+        assert_eq!(json["artifacts"]["comment"], "comment.md");
+    }
+
+    #[test]
+    fn run_apply_blocks_on_dirty_working_tree() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let out_dir = root.join("artifacts").join("buildfix");
+        std::fs::create_dir_all(&out_dir).expect("out dir");
+
+        let plan = make_plan(vec![make_op(SafetyClass::Safe, false, None)], None);
+        let plan_wire = PlanV1::try_from(&plan).expect("wire");
+        let plan_json = serde_json::to_string_pretty(&plan_wire).expect("plan json");
+        std::fs::write(out_dir.join("plan.json"), plan_json).expect("write plan");
+
+        let mut settings = make_apply_settings(&root, &out_dir);
+        settings.dry_run = false;
+
+        let git = StubGitPort {
+            head: Some("deadbeef".to_string()),
+            dirty: Some(true),
+        };
+
+        let outcome = run_apply(&settings, &git, tool()).expect("run_apply");
+        assert!(outcome.policy_block);
+        assert_eq!(outcome.apply.summary.blocked, plan.ops.len() as u64);
+        assert!(outcome.apply.results.iter().all(|r| r.status == buildfix_types::apply::ApplyStatus::Blocked));
+        assert!(!outcome.apply.preconditions.verified);
+        assert!(outcome
+            .apply
+            .preconditions
+            .mismatches
+            .iter()
+            .any(|m| m.path == "<working_tree>"));
+        assert!(outcome.patch.is_empty());
+        assert!(outcome.apply.plan_ref.sha256.as_deref().unwrap_or("").len() >= 64);
+    }
+
+    #[test]
+    fn run_apply_parses_raw_plan_json_and_runs_dry_run() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let out_dir = root.join("artifacts").join("buildfix");
+        std::fs::create_dir_all(&out_dir).expect("out dir");
+
+        let tool_no_version = ToolInfo {
+            name: "buildfix".to_string(),
+            version: None,
+            repo: None,
+            commit: None,
+        };
+        let repo = RepoInfo {
+            root: root.to_string(),
+            head_sha: None,
+            dirty: None,
+        };
+        let mut plan = BuildfixPlan::new(tool_no_version, repo, PlanPolicy::default());
+        plan.ops.push(make_op(SafetyClass::Safe, false, None));
+        plan.summary = PlanSummary {
+            ops_total: 1,
+            ops_blocked: 0,
+            files_touched: 1,
+            patch_bytes: None,
+            safety_counts: None,
+        };
+        let plan_json = serde_json::to_string_pretty(&plan).expect("plan json");
+        std::fs::write(out_dir.join("plan.json"), plan_json).expect("write plan");
+
+        let settings = make_apply_settings(&root, &out_dir);
+        let git = StubGitPort::default();
+
+        let outcome = run_apply(&settings, &git, tool()).expect("run_apply");
+        assert_eq!(outcome.apply.results.len(), 1);
+        assert_eq!(
+            outcome.apply.results[0].status,
+            buildfix_types::apply::ApplyStatus::Skipped
+        );
+        assert!(!outcome.patch.is_empty());
+        assert!(!outcome.policy_block);
+    }
+
+    #[test]
+    fn write_apply_artifacts_writes_expected_files() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let out_dir = root.join("artifacts").join("buildfix");
+        std::fs::create_dir_all(&out_dir).expect("out dir");
+
+        let plan = make_plan(vec![make_op(SafetyClass::Safe, false, None)], None);
+        let plan_wire = PlanV1::try_from(&plan).expect("wire");
+        let plan_json = serde_json::to_string_pretty(&plan_wire).expect("plan json");
+        std::fs::write(out_dir.join("plan.json"), plan_json).expect("write plan");
+
+        let settings = make_apply_settings(&root, &out_dir);
+        let git = StubGitPort::default();
+        let outcome = run_apply(&settings, &git, tool()).expect("run_apply");
+
+        let writer = MemWritePort::default();
+        let out_dir = Utf8PathBuf::from("out");
+        write_apply_artifacts(&outcome, &out_dir, &writer).expect("write apply artifacts");
+
+        let files = writer.files.lock().expect("files");
+        assert!(files.contains_key("out/apply.json"));
+        assert!(files.contains_key("out/apply.md"));
+        assert!(files.contains_key("out/patch.diff"));
+        assert!(files.contains_key("out/report.json"));
+        assert!(files.contains_key("out/extras/buildfix.report.v1.json"));
+
+        let extras = files
+            .get("out/extras/buildfix.report.v1.json")
+            .expect("extras json");
+        let json: serde_json::Value = serde_json::from_slice(extras).expect("parse extras");
+        assert_eq!(json["schema"], buildfix_types::schema::BUILDFIX_REPORT_V1);
     }
 }

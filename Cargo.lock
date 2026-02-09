@@ -3204,6 +3204,7 @@ dependencies = [
  "fs-err",
  "jsonschema",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]

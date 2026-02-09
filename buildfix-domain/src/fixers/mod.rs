@@ -51,3 +51,37 @@ pub fn builtin_fixers() -> Vec<Box<dyn Fixer>> {
 pub fn builtin_fixer_metas() -> Vec<FixerMeta> {
     builtin_fixers().iter().map(|f| f.meta()).collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn builtin_fixers_have_unique_keys() {
+        let fixers = builtin_fixers();
+        assert_eq!(fixers.len(), 5);
+
+        let mut keys = BTreeSet::new();
+        for fixer in fixers {
+            let meta = fixer.meta();
+            assert!(!meta.fix_key.is_empty());
+            assert!(!meta.description.is_empty());
+            keys.insert(meta.fix_key);
+        }
+
+        assert_eq!(keys.len(), 5);
+    }
+
+    #[test]
+    fn builtin_fixer_metas_matches_fixers() {
+        let metas = builtin_fixer_metas();
+        let keys: BTreeSet<&'static str> = metas.iter().map(|m| m.fix_key).collect();
+        assert_eq!(metas.len(), keys.len());
+        assert!(keys.contains("cargo.workspace_resolver_v2"));
+        assert!(keys.contains("cargo.path_dep_add_version"));
+        assert!(keys.contains("cargo.use_workspace_dependency"));
+        assert!(keys.contains("cargo.normalize_rust_version"));
+        assert!(keys.contains("cargo.normalize_edition"));
+    }
+}

@@ -268,6 +268,7 @@ pub fn parse_cli_params(params: &[String]) -> anyhow::Result<HashMap<String, Str
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
 
     #[test]
     fn test_parse_example_config() {
@@ -417,5 +418,47 @@ some_other = "value"
         let merged = ConfigMerger::new(config).merge_plan_args(&[], &[], false, &HashMap::new());
 
         assert_eq!(merged.params.get("rust_version"), Some(&"1.75".to_string()));
+    }
+
+    #[test]
+    fn test_parse_cli_params_valid() {
+        let params = vec!["key=value".to_string(), "other=two".to_string()];
+        let parsed = parse_cli_params(&params).expect("parse params");
+        assert_eq!(parsed.get("key"), Some(&"value".to_string()));
+        assert_eq!(parsed.get("other"), Some(&"two".to_string()));
+    }
+
+    #[test]
+    fn test_parse_cli_params_missing_key() {
+        let params = vec!["=value".to_string()];
+        let err = parse_cli_params(&params).expect_err("missing key");
+        assert!(err.to_string().contains("missing key"));
+    }
+
+    #[test]
+    fn test_parse_cli_params_missing_value() {
+        let params = vec!["key=".to_string()];
+        let err = parse_cli_params(&params).expect_err("missing value");
+        assert!(err.to_string().contains("missing value"));
+    }
+
+    #[test]
+    fn test_discover_config_some_and_none() {
+        let temp = TempDir::new().expect("temp dir");
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8");
+        assert!(discover_config(&root).is_none());
+
+        std::fs::write(root.join(CONFIG_FILE_NAME), "").expect("write config");
+        assert!(discover_config(&root).is_some());
+    }
+
+    #[test]
+    fn test_load_or_default_returns_default_when_missing() {
+        let temp = TempDir::new().expect("temp dir");
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8");
+        let cfg = load_or_default(&root).expect("load default");
+        assert!(cfg.policy.allow.is_empty());
+        assert!(cfg.policy.deny.is_empty());
+        assert!(cfg.backups.enabled);
     }
 }

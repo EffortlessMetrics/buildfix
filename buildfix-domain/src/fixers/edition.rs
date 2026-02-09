@@ -181,3 +181,207 @@ fn fix_key_for(f: &buildfix_types::plan::FindingRef) -> String {
     let check = f.check_id.clone().unwrap_or_else(|| "-".to_string());
     format!("{}/{}/{}", f.source, check, f.code)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::planner::{PlanContext, PlannerConfig, ReceiptSet};
+    use crate::ports::RepoView;
+    use buildfix_receipts::LoadedReceipt;
+    use buildfix_types::receipt::{Finding, Location, ReceiptEnvelope, RunInfo, ToolInfo, Verdict};
+    use camino::{Utf8Path, Utf8PathBuf};
+    use std::collections::HashMap;
+
+    struct TestRepo {
+        root: Utf8PathBuf,
+        files: HashMap<String, String>,
+    }
+
+    impl TestRepo {
+        fn new(files: &[(&str, &str)]) -> Self {
+            let mut map = HashMap::new();
+            for (path, contents) in files {
+                map.insert(path.to_string(), contents.to_string());
+            }
+            Self {
+                root: Utf8PathBuf::from("."),
+                files: map,
+            }
+        }
+
+        fn key_for(&self, rel: &Utf8Path) -> String {
+            if rel.is_absolute() {
+                rel.strip_prefix(&self.root)
+                    .unwrap_or(rel)
+                    .to_string()
+            } else {
+                rel.to_string()
+            }
+        }
+    }
+
+    impl RepoView for TestRepo {
+        fn root(&self) -> &Utf8Path {
+            &self.root
+        }
+
+        fn read_to_string(&self, rel: &Utf8Path) -> anyhow::Result<String> {
+            let key = self.key_for(rel);
+            self.files
+                .get(&key)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("missing {}", key))
+        }
+
+        fn exists(&self, rel: &Utf8Path) -> bool {
+            let key = self.key_for(rel);
+            self.files.contains_key(&key)
+        }
+    }
+
+    fn receipt_set_for(path: &str) -> ReceiptSet {
+        let receipt = ReceiptEnvelope {
+            schema: "sensor.report.v1".to_string(),
+            tool: ToolInfo {
+                name: "builddiag".to_string(),
+                version: None,
+                repo: None,
+                commit: None,
+            },
+            run: RunInfo::default(),
+            verdict: Verdict::default(),
+            findings: vec![Finding {
+                severity: Default::default(),
+                check_id: Some("edition.consistent".to_string()),
+                code: Some("EDITION".to_string()),
+                message: None,
+                location: Some(Location {
+                    path: Utf8PathBuf::from(path),
+                    line: Some(1),
+                    column: None,
+                }),
+                fingerprint: None,
+                data: None,
+            }],
+            capabilities: None,
+            data: None,
+        };
+
+        let loaded = vec![LoadedReceipt {
+            path: Utf8PathBuf::from("artifacts/builddiag/report.json"),
+            sensor_id: "builddiag".to_string(),
+            receipt: Ok(receipt),
+        }];
+        ReceiptSet::from_loaded(&loaded)
+    }
+
+    #[test]
+    fn canonical_edition_prefers_workspace_package() {
+        let repo = TestRepo::new(&[(
+            "Cargo.toml",
+            r#"
+                [workspace.package]
+                edition = "2021"
+
+                [package]
+                edition = "2018"
+            "#,
+        )]);
+        let edition = EditionUpgradeFixer::canonical_edition(&repo);
+        assert_eq!(edition.as_deref(), Some("2021"));
+    }
+
+    #[test]
+    fn canonical_edition_falls_back_to_package() {
+        let repo = TestRepo::new(&[(
+            "Cargo.toml",
+            r#"
+                [package]
+                edition = "2018"
+            "#,
+        )]);
+        let edition = EditionUpgradeFixer::canonical_edition(&repo);
+        assert_eq!(edition.as_deref(), Some("2018"));
+    }
+
+    #[test]
+    fn needs_change_detects_mismatch() {
+        let manifest = r#"
+            [package]
+            edition = "2018"
+        "#;
+        assert!(EditionUpgradeFixer::needs_change("not toml", "2021"));
+        assert!(EditionUpgradeFixer::needs_change("[workspace]", "2021"));
+        assert!(EditionUpgradeFixer::needs_change(manifest, "2021"));
+        assert!(!EditionUpgradeFixer::needs_change(manifest, "2018"));
+    }
+
+    #[test]
+    fn plan_emits_guarded_fix_with_canonical_edition() {
+        let repo = TestRepo::new(&[
+            (
+                "Cargo.toml",
+                r#"
+                    [workspace.package]
+                    edition = "2021"
+                "#,
+            ),
+            (
+                "crates/a/Cargo.toml",
+                r#"
+                    [package]
+                    name = "a"
+                    edition = "2018"
+                "#,
+            ),
+        ]);
+
+        let ctx = PlanContext {
+            repo_root: Utf8PathBuf::from("."),
+            artifacts_dir: Utf8PathBuf::from("artifacts"),
+            config: PlannerConfig::default(),
+        };
+
+        let receipt_set = receipt_set_for("crates/a/Cargo.toml");
+        let fixes = EditionUpgradeFixer
+            .plan(&ctx, &repo, &receipt_set)
+            .expect("plan");
+        assert_eq!(fixes.len(), 1);
+        let op = &fixes[0];
+        assert_eq!(op.safety, SafetyClass::Guarded);
+        assert!(op.params_required.is_empty());
+        match &op.kind {
+            OpKind::TomlTransform { rule_id, args } => {
+                assert_eq!(rule_id, "set_package_edition");
+                assert_eq!(args.as_ref().unwrap()["edition"], "2021");
+            }
+            _ => panic!("expected toml transform"),
+        }
+    }
+
+    #[test]
+    fn plan_emits_unsafe_fix_without_canonical_edition() {
+        let repo = TestRepo::new(&[(
+            "crates/a/Cargo.toml",
+            r#"
+                [package]
+                name = "a"
+            "#,
+        )]);
+
+        let ctx = PlanContext {
+            repo_root: Utf8PathBuf::from("."),
+            artifacts_dir: Utf8PathBuf::from("artifacts"),
+            config: PlannerConfig::default(),
+        };
+
+        let receipt_set = receipt_set_for("crates/a/Cargo.toml");
+        let fixes = EditionUpgradeFixer
+            .plan(&ctx, &repo, &receipt_set)
+            .expect("plan");
+        assert_eq!(fixes.len(), 1);
+        let op = &fixes[0];
+        assert_eq!(op.safety, SafetyClass::Unsafe);
+        assert_eq!(op.params_required, vec!["edition".to_string()]);
+    }
+}

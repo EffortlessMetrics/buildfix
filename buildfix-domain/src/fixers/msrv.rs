@@ -181,3 +181,207 @@ fn fix_key_for(f: &buildfix_types::plan::FindingRef) -> String {
     let check = f.check_id.clone().unwrap_or_else(|| "-".to_string());
     format!("{}/{}/{}", f.source, check, f.code)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::planner::{PlanContext, PlannerConfig, ReceiptSet};
+    use crate::ports::RepoView;
+    use buildfix_receipts::LoadedReceipt;
+    use buildfix_types::receipt::{Finding, Location, ReceiptEnvelope, RunInfo, ToolInfo, Verdict};
+    use camino::{Utf8Path, Utf8PathBuf};
+    use std::collections::HashMap;
+
+    struct TestRepo {
+        root: Utf8PathBuf,
+        files: HashMap<String, String>,
+    }
+
+    impl TestRepo {
+        fn new(files: &[(&str, &str)]) -> Self {
+            let mut map = HashMap::new();
+            for (path, contents) in files {
+                map.insert(path.to_string(), contents.to_string());
+            }
+            Self {
+                root: Utf8PathBuf::from("."),
+                files: map,
+            }
+        }
+
+        fn key_for(&self, rel: &Utf8Path) -> String {
+            if rel.is_absolute() {
+                rel.strip_prefix(&self.root)
+                    .unwrap_or(rel)
+                    .to_string()
+            } else {
+                rel.to_string()
+            }
+        }
+    }
+
+    impl RepoView for TestRepo {
+        fn root(&self) -> &Utf8Path {
+            &self.root
+        }
+
+        fn read_to_string(&self, rel: &Utf8Path) -> anyhow::Result<String> {
+            let key = self.key_for(rel);
+            self.files
+                .get(&key)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("missing {}", key))
+        }
+
+        fn exists(&self, rel: &Utf8Path) -> bool {
+            let key = self.key_for(rel);
+            self.files.contains_key(&key)
+        }
+    }
+
+    fn receipt_set_for(path: &str) -> ReceiptSet {
+        let receipt = ReceiptEnvelope {
+            schema: "sensor.report.v1".to_string(),
+            tool: ToolInfo {
+                name: "builddiag".to_string(),
+                version: None,
+                repo: None,
+                commit: None,
+            },
+            run: RunInfo::default(),
+            verdict: Verdict::default(),
+            findings: vec![Finding {
+                severity: Default::default(),
+                check_id: Some("msrv.consistent".to_string()),
+                code: Some("MSRV".to_string()),
+                message: None,
+                location: Some(Location {
+                    path: Utf8PathBuf::from(path),
+                    line: Some(1),
+                    column: None,
+                }),
+                fingerprint: None,
+                data: None,
+            }],
+            capabilities: None,
+            data: None,
+        };
+
+        let loaded = vec![LoadedReceipt {
+            path: Utf8PathBuf::from("artifacts/builddiag/report.json"),
+            sensor_id: "builddiag".to_string(),
+            receipt: Ok(receipt),
+        }];
+        ReceiptSet::from_loaded(&loaded)
+    }
+
+    #[test]
+    fn canonical_rust_version_prefers_workspace_package() {
+        let repo = TestRepo::new(&[(
+            "Cargo.toml",
+            r#"
+                [workspace.package]
+                rust-version = "1.70"
+
+                [package]
+                rust-version = "1.60"
+            "#,
+        )]);
+        let version = MsrvNormalizeFixer::canonical_rust_version(&repo);
+        assert_eq!(version.as_deref(), Some("1.70"));
+    }
+
+    #[test]
+    fn canonical_rust_version_falls_back_to_package() {
+        let repo = TestRepo::new(&[(
+            "Cargo.toml",
+            r#"
+                [package]
+                rust-version = "1.60"
+            "#,
+        )]);
+        let version = MsrvNormalizeFixer::canonical_rust_version(&repo);
+        assert_eq!(version.as_deref(), Some("1.60"));
+    }
+
+    #[test]
+    fn needs_change_detects_mismatch() {
+        let manifest = r#"
+            [package]
+            rust-version = "1.60"
+        "#;
+        assert!(MsrvNormalizeFixer::needs_change("not toml", "1.70"));
+        assert!(MsrvNormalizeFixer::needs_change("[workspace]", "1.70"));
+        assert!(MsrvNormalizeFixer::needs_change(manifest, "1.70"));
+        assert!(!MsrvNormalizeFixer::needs_change(manifest, "1.60"));
+    }
+
+    #[test]
+    fn plan_emits_guarded_fix_with_canonical_version() {
+        let repo = TestRepo::new(&[
+            (
+                "Cargo.toml",
+                r#"
+                    [workspace.package]
+                    rust-version = "1.70"
+                "#,
+            ),
+            (
+                "crates/a/Cargo.toml",
+                r#"
+                    [package]
+                    name = "a"
+                    rust-version = "1.60"
+                "#,
+            ),
+        ]);
+
+        let ctx = PlanContext {
+            repo_root: Utf8PathBuf::from("."),
+            artifacts_dir: Utf8PathBuf::from("artifacts"),
+            config: PlannerConfig::default(),
+        };
+
+        let receipt_set = receipt_set_for("crates/a/Cargo.toml");
+        let fixes = MsrvNormalizeFixer
+            .plan(&ctx, &repo, &receipt_set)
+            .expect("plan");
+        assert_eq!(fixes.len(), 1);
+        let op = &fixes[0];
+        assert_eq!(op.safety, SafetyClass::Guarded);
+        assert!(op.params_required.is_empty());
+        match &op.kind {
+            OpKind::TomlTransform { rule_id, args } => {
+                assert_eq!(rule_id, "set_package_rust_version");
+                assert_eq!(args.as_ref().unwrap()["rust_version"], "1.70");
+            }
+            _ => panic!("expected toml transform"),
+        }
+    }
+
+    #[test]
+    fn plan_emits_unsafe_fix_without_canonical_version() {
+        let repo = TestRepo::new(&[(
+            "crates/a/Cargo.toml",
+            r#"
+                [package]
+                name = "a"
+            "#,
+        )]);
+
+        let ctx = PlanContext {
+            repo_root: Utf8PathBuf::from("."),
+            artifacts_dir: Utf8PathBuf::from("artifacts"),
+            config: PlannerConfig::default(),
+        };
+
+        let receipt_set = receipt_set_for("crates/a/Cargo.toml");
+        let fixes = MsrvNormalizeFixer
+            .plan(&ctx, &repo, &receipt_set)
+            .expect("plan");
+        assert_eq!(fixes.len(), 1);
+        let op = &fixes[0];
+        assert_eq!(op.safety, SafetyClass::Unsafe);
+        assert_eq!(op.params_required, vec!["rust_version".to_string()]);
+    }
+}

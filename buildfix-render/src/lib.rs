@@ -191,9 +191,10 @@ fn status_label(s: &ApplyStatus) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use buildfix_types::apply::{ApplyFile, ApplyRepoInfo, ApplyResult, ApplyStatus, ApplySummary, BuildfixApply, PlanRef};
     use buildfix_types::ops::{OpKind, OpTarget};
     use buildfix_types::plan::{
-        PlanOp, PlanPolicy, PlanSummary, Rationale, RepoInfo, SafetyCounts,
+        FindingRef, PlanOp, PlanPolicy, PlanSummary, Rationale, RepoInfo, SafetyCounts,
     };
     use buildfix_types::receipt::ToolInfo;
 
@@ -302,5 +303,116 @@ mod tests {
         let md = render_comment_md(&plan);
         assert!(md.contains("[plan.md](plan.md)"));
         assert!(md.contains("[patch.diff](patch.diff)"));
+    }
+
+    #[test]
+    fn plan_md_includes_details_and_findings() {
+        let mut op = make_op(SafetyClass::Guarded, true, Some("denylist"));
+        op.blocked_reason = Some("denied by policy".to_string());
+        op.rationale.description = Some("Normalize resolver".to_string());
+        op.params_required = vec!["version".to_string()];
+        op.rationale.findings.push(FindingRef {
+            source: "builddiag".to_string(),
+            check_id: Some("workspace.resolver_v2".to_string()),
+            code: "RESOLVER".to_string(),
+            path: Some("Cargo.toml".to_string()),
+            line: Some(1),
+            fingerprint: None,
+        });
+
+        let plan = make_plan(
+            vec![op],
+            Some(SafetyCounts {
+                safe: 0,
+                guarded: 1,
+                unsafe_count: 0,
+            }),
+        );
+        let md = render_plan_md(&plan);
+        assert!(md.contains("# buildfix plan"));
+        assert!(md.contains("Ops: 1 (blocked 1)"));
+        assert!(md.contains("Safety: `guarded`"));
+        assert!(md.contains("Blocked: `true`"));
+        assert!(md.contains("Blocked reason: denied by policy"));
+        assert!(md.contains("Normalize resolver"));
+        assert!(md.contains("Params required: version"));
+        assert!(md.contains("Findings"));
+        assert!(md.contains("builddiag/workspace.resolver_v2"));
+        assert!(md.contains("Cargo.toml:1"));
+    }
+
+    #[test]
+    fn plan_md_handles_no_ops() {
+        let plan = make_plan(vec![], None);
+        let md = render_plan_md(&plan);
+        assert!(md.contains("_No ops planned._"));
+    }
+
+    #[test]
+    fn apply_md_includes_results_and_files() {
+        let mut apply = BuildfixApply::new(
+            tool(),
+            ApplyRepoInfo {
+                root: ".".into(),
+                head_sha_before: None,
+                head_sha_after: None,
+                dirty_before: None,
+                dirty_after: None,
+            },
+            PlanRef {
+                path: "plan.json".into(),
+                sha256: None,
+            },
+        );
+        apply.summary = ApplySummary {
+            attempted: 1,
+            applied: 1,
+            blocked: 0,
+            failed: 0,
+            files_modified: 1,
+        };
+        apply.results.push(ApplyResult {
+            op_id: "op1".to_string(),
+            status: ApplyStatus::Applied,
+            message: Some("ok".to_string()),
+            blocked_reason: None,
+            blocked_reason_token: None,
+            files: vec![ApplyFile {
+                path: "Cargo.toml".to_string(),
+                sha256_before: Some("before".to_string()),
+                sha256_after: Some("after".to_string()),
+                backup_path: None,
+            }],
+        });
+
+        let md = render_apply_md(&apply);
+        assert!(md.contains("# buildfix apply"));
+        assert!(md.contains("Attempted: 1"));
+        assert!(md.contains("Applied: 1"));
+        assert!(md.contains("Status: `applied`"));
+        assert!(md.contains("Message: ok"));
+        assert!(md.contains("Files changed"));
+        assert!(md.contains("Cargo.toml"));
+        assert!(md.contains("before → after"));
+    }
+
+    #[test]
+    fn apply_md_handles_no_results() {
+        let apply = BuildfixApply::new(
+            tool(),
+            ApplyRepoInfo {
+                root: ".".into(),
+                head_sha_before: None,
+                head_sha_after: None,
+                dirty_before: None,
+                dirty_after: None,
+            },
+            PlanRef {
+                path: "plan.json".into(),
+                sha256: None,
+            },
+        );
+        let md = render_apply_md(&apply);
+        assert!(md.contains("_No results._"));
     }
 }

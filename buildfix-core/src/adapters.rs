@@ -113,6 +113,9 @@ impl WritePort for FsWritePort {
 mod tests {
     use super::*;
     use buildfix_receipts::ReceiptLoadError;
+    use camino::Utf8Path;
+    use std::process::Command;
+    use tempfile::TempDir;
 
     fn make_receipt(path: &str) -> LoadedReceipt {
         LoadedReceipt {
@@ -255,5 +258,87 @@ mod tests {
                 "artifacts/z-sensor/report.json",
             ]
         );
+    }
+
+    fn run_git(root: &Utf8Path, args: &[&str]) {
+        let status = Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .status()
+            .expect("run git");
+        assert!(status.success(), "git {:?} failed", args);
+    }
+
+    fn valid_receipt_json() -> &'static str {
+        r#"{
+            "schema": "sensor.report.v1",
+            "tool": { "name": "builddiag", "version": "1.0.0" },
+            "verdict": { "status": "pass", "counts": { "findings": 0, "errors": 0, "warnings": 0 } },
+            "findings": []
+        }"#
+    }
+
+    #[test]
+    fn fs_receipt_source_loads_from_artifacts() {
+        let temp = TempDir::new().expect("temp dir");
+        let artifacts = Utf8PathBuf::from_path_buf(temp.path().join("artifacts")).expect("utf8");
+        std::fs::create_dir_all(artifacts.join("builddiag")).expect("mkdir");
+        std::fs::write(
+            artifacts.join("builddiag").join("report.json"),
+            valid_receipt_json(),
+        )
+        .expect("write receipt");
+
+        let source = FsReceiptSource::new(artifacts.clone());
+        let receipts = source.load_receipts().expect("load receipts");
+        assert_eq!(receipts.len(), 1);
+        assert_eq!(receipts[0].sensor_id, "builddiag");
+        assert!(receipts[0].receipt.is_ok());
+    }
+
+    #[test]
+    fn fs_write_port_writes_and_creates_dirs() {
+        let temp = TempDir::new().expect("temp dir");
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8");
+        let target = root.join("nested").join("file.txt");
+
+        let port = FsWritePort;
+        port.write_file(&target, b"hello").expect("write");
+
+        let contents = std::fs::read_to_string(&target).expect("read");
+        assert_eq!(contents, "hello");
+
+        let extra_dir = root.join("extra");
+        port.create_dir_all(&extra_dir).expect("mkdir");
+        assert!(extra_dir.exists());
+    }
+
+    #[test]
+    fn shell_git_port_returns_none_outside_repo() {
+        let temp = TempDir::new().expect("temp dir");
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8");
+        let port = ShellGitPort;
+        assert!(port.head_sha(&root).expect("head").is_none());
+        assert!(port.is_dirty(&root).expect("dirty").is_none());
+    }
+
+    #[test]
+    fn shell_git_port_reads_head_and_dirty() {
+        let temp = TempDir::new().expect("temp dir");
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8");
+        std::fs::write(root.join("Cargo.toml"), "[workspace]\n").expect("write");
+
+        run_git(&root, &["init"]);
+        run_git(&root, &["config", "user.email", "test@example.com"]);
+        run_git(&root, &["config", "user.name", "Test User"]);
+        run_git(&root, &["add", "."]);
+        run_git(&root, &["commit", "-m", "init"]);
+
+        let port = ShellGitPort;
+        assert!(port.head_sha(&root).expect("head").is_some());
+        assert_eq!(port.is_dirty(&root).expect("dirty"), Some(false));
+
+        std::fs::write(root.join("Cargo.toml"), "[workspace]\n# dirty\n").expect("write");
+        assert_eq!(port.is_dirty(&root).expect("dirty"), Some(true));
     }
 }

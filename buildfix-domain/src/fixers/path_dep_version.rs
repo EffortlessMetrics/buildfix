@@ -315,6 +315,298 @@ impl Fixer for PathDepVersionFixer {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::planner::{PlanContext, PlannerConfig, ReceiptSet};
+    use crate::ports::RepoView;
+    use buildfix_receipts::LoadedReceipt;
+    use buildfix_types::receipt::{Finding, Location, ReceiptEnvelope, RunInfo, ToolInfo, Verdict};
+    use camino::{Utf8Path, Utf8PathBuf};
+    use std::collections::HashMap;
+
+    struct TestRepo {
+        root: Utf8PathBuf,
+        files: HashMap<String, String>,
+    }
+
+    impl TestRepo {
+        fn new(files: &[(&str, &str)]) -> Self {
+            let mut map = HashMap::new();
+            for (path, contents) in files {
+                map.insert(path.to_string(), contents.to_string());
+            }
+            Self {
+                root: Utf8PathBuf::from("."),
+                files: map,
+            }
+        }
+
+        fn key_for(&self, rel: &Utf8Path) -> String {
+            let raw = if rel.is_absolute() {
+                rel.strip_prefix(&self.root)
+                    .unwrap_or(rel)
+                    .to_string()
+            } else {
+                rel.to_string()
+            };
+            raw.replace('\\', "/")
+        }
+    }
+
+    impl RepoView for TestRepo {
+        fn root(&self) -> &Utf8Path {
+            &self.root
+        }
+
+        fn read_to_string(&self, rel: &Utf8Path) -> anyhow::Result<String> {
+            let key = self.key_for(rel);
+            self.files
+                .get(&key)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("missing {}", key))
+        }
+
+        fn exists(&self, rel: &Utf8Path) -> bool {
+            let key = self.key_for(rel);
+            self.files.contains_key(&key)
+        }
+    }
+
+    fn receipt_set_for(path: &str) -> ReceiptSet {
+        let receipt = ReceiptEnvelope {
+            schema: "sensor.report.v1".to_string(),
+            tool: ToolInfo {
+                name: "depguard".to_string(),
+                version: None,
+                repo: None,
+                commit: None,
+            },
+            run: RunInfo::default(),
+            verdict: Verdict::default(),
+            findings: vec![Finding {
+                severity: Default::default(),
+                check_id: Some("deps.path_requires_version".to_string()),
+                code: Some("missing_version".to_string()),
+                message: None,
+                location: Some(Location {
+                    path: Utf8PathBuf::from(path),
+                    line: Some(1),
+                    column: None,
+                }),
+                fingerprint: None,
+                data: None,
+            }],
+            capabilities: None,
+            data: None,
+        };
+
+        let loaded = vec![LoadedReceipt {
+            path: Utf8PathBuf::from("artifacts/depguard/report.json"),
+            sensor_id: "depguard".to_string(),
+            receipt: Ok(receipt),
+        }];
+        ReceiptSet::from_loaded(&loaded)
+    }
+
+    #[test]
+    fn collect_path_deps_filters_expected_candidates() {
+        let doc = r#"
+            [dependencies]
+            foo = { path = "../foo" }
+            bar = { path = "../bar", version = "1.0" }
+            baz = "1.0"
+            qux = { path = "../qux", workspace = true }
+
+            [dev-dependencies]
+            devfoo = { path = "../devfoo" }
+
+            [target.'cfg(windows)'.dependencies]
+            winfoo = { path = "../winfoo" }
+        "#
+        .parse::<DocumentMut>()
+        .expect("parse");
+
+        let candidates = PathDepVersionFixer::collect_path_deps(&doc);
+        let paths: Vec<Vec<String>> =
+            candidates.iter().map(|c| c.toml_path.clone()).collect();
+
+        assert!(paths.contains(&vec!["dependencies".to_string(), "foo".to_string()]));
+        assert!(paths.contains(&vec!["dev-dependencies".to_string(), "devfoo".to_string()]));
+        assert!(paths.contains(&vec![
+            "target".to_string(),
+            "cfg(windows)".to_string(),
+            "dependencies".to_string(),
+            "winfoo".to_string()
+        ]));
+        assert_eq!(candidates.len(), 3);
+    }
+
+    #[test]
+    fn infer_dep_version_prefers_target_manifest() {
+        let repo = TestRepo::new(&[
+            ("crates/app/Cargo.toml", "[package]\nname = \"app\"\n"),
+            (
+                "crates/app/dep/Cargo.toml",
+                "[package]\nname = \"dep\"\nversion = \"0.2.0\"\n",
+            ),
+        ]);
+
+        let manifest = Utf8Path::new("crates/app/Cargo.toml");
+        let version = PathDepVersionFixer::infer_dep_version(&repo, manifest, "dep");
+        assert_eq!(version.as_deref(), Some("0.2.0"));
+    }
+
+    #[test]
+    fn infer_dep_version_falls_back_to_workspace_package() {
+        let repo = TestRepo::new(&[(
+            "Cargo.toml",
+            r#"
+                [workspace.package]
+                version = "1.5.0"
+            "#,
+        )]);
+
+        let manifest = Utf8Path::new("crates/app/Cargo.toml");
+        let version = PathDepVersionFixer::infer_dep_version(&repo, manifest, "../dep");
+        assert_eq!(version.as_deref(), Some("1.5.0"));
+    }
+
+    #[test]
+    fn plan_emits_guarded_fix_when_version_known() {
+        let repo = TestRepo::new(&[
+            ("Cargo.toml", "[workspace.package]\nversion = \"1.2.3\"\n"),
+            (
+                "crates/app/Cargo.toml",
+                "[package]\nname = \"app\"\n\n[dependencies]\ndep = { path = \"../dep\" }\n",
+            ),
+        ]);
+
+        let ctx = PlanContext {
+            repo_root: Utf8PathBuf::from("."),
+            artifacts_dir: Utf8PathBuf::from("artifacts"),
+            config: PlannerConfig::default(),
+        };
+
+        let receipt_set = receipt_set_for("crates/app/Cargo.toml");
+        let fixes = PathDepVersionFixer
+            .plan(&ctx, &repo, &receipt_set)
+            .expect("plan");
+        assert_eq!(fixes.len(), 1);
+        let op = &fixes[0];
+        assert_eq!(op.safety, SafetyClass::Safe);
+        assert!(matches!(op.kind, OpKind::TomlTransform { .. }));
+        if let OpKind::TomlTransform { rule_id, args } = &op.kind {
+            assert_eq!(rule_id, "ensure_path_dep_has_version");
+            assert_eq!(args.as_ref().unwrap()["version"], "1.2.3");
+        }
+    }
+
+    #[test]
+    fn plan_emits_unsafe_fix_when_version_unknown() {
+        let repo = TestRepo::new(&[(
+            "crates/app/Cargo.toml",
+            "[package]\nname = \"app\"\n\n[dependencies]\ndep = { path = \"../dep\" }\n",
+        )]);
+
+        let ctx = PlanContext {
+            repo_root: Utf8PathBuf::from("."),
+            artifacts_dir: Utf8PathBuf::from("artifacts"),
+            config: PlannerConfig::default(),
+        };
+
+        let receipt_set = receipt_set_for("crates/app/Cargo.toml");
+        let fixes = PathDepVersionFixer
+            .plan(&ctx, &repo, &receipt_set)
+            .expect("plan");
+        assert_eq!(fixes.len(), 1);
+        let op = &fixes[0];
+        assert_eq!(op.safety, SafetyClass::Unsafe);
+        assert_eq!(op.params_required, vec!["version".to_string()]);
+    }
+
+    #[test]
+    fn collect_path_deps_includes_table_style_and_skips_workspace() {
+        let doc = r#"
+            [dependencies.dep]
+            path = "../dep"
+
+            [dependencies.ws]
+            path = "../ws"
+            workspace = true
+        "#
+        .parse::<DocumentMut>()
+        .expect("parse");
+
+        let candidates = PathDepVersionFixer::collect_path_deps(&doc);
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(
+            candidates[0].toml_path,
+            vec!["dependencies".to_string(), "dep".to_string()]
+        );
+    }
+
+    #[test]
+    fn collect_path_deps_skips_non_table_target_entries() {
+        let doc = r#"
+            [target]
+            "cfg(windows)" = "noop"
+        "#
+        .parse::<DocumentMut>()
+        .expect("parse");
+
+        let candidates = PathDepVersionFixer::collect_path_deps(&doc);
+        assert!(candidates.is_empty());
+    }
+
+    #[test]
+    fn plan_skips_missing_or_invalid_manifest() {
+        let ctx = PlanContext {
+            repo_root: Utf8PathBuf::from("."),
+            artifacts_dir: Utf8PathBuf::from("artifacts"),
+            config: PlannerConfig::default(),
+        };
+
+        let repo_missing = TestRepo::new(&[]);
+        let receipt_set = receipt_set_for("crates/app/Cargo.toml");
+        let fixes = PathDepVersionFixer
+            .plan(&ctx, &repo_missing, &receipt_set)
+            .expect("plan");
+        assert!(fixes.is_empty());
+
+        let repo_invalid = TestRepo::new(&[("crates/app/Cargo.toml", "not toml = [")]);
+        let fixes = PathDepVersionFixer
+            .plan(&ctx, &repo_invalid, &receipt_set)
+            .expect("plan");
+        assert!(fixes.is_empty());
+    }
+
+    #[test]
+    fn test_repo_helpers_handle_absolute_paths() {
+        let root = Utf8PathBuf::from_path_buf(std::env::current_dir().expect("cwd"))
+            .expect("utf8");
+        let mut files = HashMap::new();
+        files.insert("crates/app/Cargo.toml".to_string(), "name = \"app\"".to_string());
+        let repo = TestRepo { root: root.clone(), files };
+        let abs = root.join("crates/app/Cargo.toml");
+        assert!(repo.exists(&abs));
+        assert_eq!(repo.read_to_string(&abs).unwrap(), "name = \"app\"");
+    }
+
+    #[test]
+    fn fix_key_for_handles_missing_check_id() {
+        let f = buildfix_types::plan::FindingRef {
+            source: "depguard".to_string(),
+            check_id: None,
+            code: "X".to_string(),
+            path: None,
+            line: None,
+            fingerprint: None,
+        };
+        assert_eq!(super::fix_key_for(&f), "depguard/-/X");
+    }
+}
+
 fn fix_key_for(f: &buildfix_types::plan::FindingRef) -> String {
     let check = f.check_id.clone().unwrap_or_else(|| "-".to_string());
     format!("{}/{}/{}", f.source, check, f.code)

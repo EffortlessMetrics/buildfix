@@ -34,3 +34,28 @@ impl std::fmt::Display for WireError {
 }
 
 impl std::error::Error for WireError {}
+
+#[cfg(test)]
+mod tests {
+    use super::{ToolInfoV1, WireError};
+
+    #[test]
+    fn tool_info_serializes_without_commit_when_none() {
+        let tool = ToolInfoV1 {
+            name: "buildfix".to_string(),
+            version: "1.2.3".to_string(),
+            commit: None,
+        };
+
+        let json = serde_json::to_string(&tool).expect("serialize");
+        assert!(json.contains("\"name\""));
+        assert!(json.contains("\"version\""));
+        assert!(!json.contains("commit"));
+    }
+
+    #[test]
+    fn wire_error_display_includes_context() {
+        let err = WireError::MissingToolVersion { context: "plan" };
+        assert_eq!(err.to_string(), "missing tool version for plan");
+    }
+}

@@ -458,3 +458,359 @@ fn fix_key_for(f: &buildfix_types::plan::FindingRef) -> String {
     let check = f.check_id.clone().unwrap_or_else(|| "-".to_string());
     format!("{}/{}/{}", f.source, check, f.code)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::planner::{PlanContext, PlannerConfig, ReceiptSet};
+    use crate::ports::RepoView;
+    use buildfix_receipts::LoadedReceipt;
+    use buildfix_types::receipt::{Finding, Location, ReceiptEnvelope, RunInfo, ToolInfo, Verdict};
+    use camino::{Utf8Path, Utf8PathBuf};
+    use std::collections::{BTreeMap, HashMap};
+
+    struct TestRepo {
+        root: Utf8PathBuf,
+        files: HashMap<String, String>,
+    }
+
+    impl TestRepo {
+        fn new(files: &[(&str, &str)]) -> Self {
+            let mut map = HashMap::new();
+            for (path, contents) in files {
+                map.insert(path.to_string(), contents.to_string());
+            }
+            Self {
+                root: Utf8PathBuf::from("."),
+                files: map,
+            }
+        }
+
+        fn key_for(&self, rel: &Utf8Path) -> String {
+            if rel.is_absolute() {
+                rel.strip_prefix(&self.root)
+                    .unwrap_or(rel)
+                    .to_string()
+            } else {
+                rel.to_string()
+            }
+        }
+    }
+
+    impl RepoView for TestRepo {
+        fn root(&self) -> &Utf8Path {
+            &self.root
+        }
+
+        fn read_to_string(&self, rel: &Utf8Path) -> anyhow::Result<String> {
+            let key = self.key_for(rel);
+            self.files
+                .get(&key)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("missing {}", key))
+        }
+
+        fn exists(&self, rel: &Utf8Path) -> bool {
+            let key = self.key_for(rel);
+            self.files.contains_key(&key)
+        }
+    }
+
+    fn receipt_set_for(path: &str) -> ReceiptSet {
+        let receipt = ReceiptEnvelope {
+            schema: "sensor.report.v1".to_string(),
+            tool: ToolInfo {
+                name: "depguard".to_string(),
+                version: None,
+                repo: None,
+                commit: None,
+            },
+            run: RunInfo::default(),
+            verdict: Verdict::default(),
+            findings: vec![Finding {
+                severity: Default::default(),
+                check_id: Some("deps.workspace_inheritance".to_string()),
+                code: Some("WS_INHERIT".to_string()),
+                message: None,
+                location: Some(Location {
+                    path: Utf8PathBuf::from(path),
+                    line: Some(1),
+                    column: None,
+                }),
+                fingerprint: None,
+                data: None,
+            }],
+            capabilities: None,
+            data: None,
+        };
+
+        let loaded = vec![LoadedReceipt {
+            path: Utf8PathBuf::from("artifacts/depguard/report.json"),
+            sensor_id: "depguard".to_string(),
+            receipt: Ok(receipt),
+        }];
+        ReceiptSet::from_loaded(&loaded)
+    }
+
+    #[test]
+    fn workspace_deps_parses_versions_and_paths() {
+        let repo = TestRepo::new(&[(
+            "Cargo.toml",
+            r#"
+                [workspace.dependencies]
+                serde = "1.0"
+                local = { path = "../local" }
+                gitdep = { git = "https://example.com/repo.git" }
+            "#,
+        )]);
+
+        let deps = WorkspaceInheritanceFixer::workspace_deps(&repo);
+        assert_eq!(deps.get("serde").unwrap().version.as_deref(), Some("1.0"));
+        assert!(!deps.get("serde").unwrap().is_path_or_git);
+        assert!(deps.get("local").unwrap().is_path_or_git);
+        assert!(deps.get("gitdep").unwrap().is_path_or_git);
+    }
+
+    #[test]
+    fn plan_emits_ops_with_expected_safety_and_preserved_fields() {
+        let repo = TestRepo::new(&[
+            (
+                "Cargo.toml",
+                r#"
+                    [workspace.dependencies]
+                    serde = "1.0"
+                    local = { path = "../local" }
+                "#,
+            ),
+            (
+                "crates/member/Cargo.toml",
+                r#"
+                    [package]
+                    name = "member"
+
+                    [dependencies]
+                    serde = "1.0"
+                    local = { version = "0.1", optional = true, features = ["std"] }
+                "#,
+            ),
+        ]);
+
+        let ctx = PlanContext {
+            repo_root: Utf8PathBuf::from("."),
+            artifacts_dir: Utf8PathBuf::from("artifacts"),
+            config: PlannerConfig::default(),
+        };
+
+        let receipt_set = receipt_set_for("crates/member/Cargo.toml");
+        let fixes = WorkspaceInheritanceFixer
+            .plan(&ctx, &repo, &receipt_set)
+            .expect("plan");
+        assert_eq!(fixes.len(), 2);
+
+        let mut by_dep: HashMap<String, &PlanOp> = HashMap::new();
+        for op in &fixes {
+            if let OpKind::TomlTransform { args: Some(args), .. } = &op.kind {
+                if let Some(dep) = args.get("dep").and_then(|d| d.as_str()) {
+                    by_dep.insert(dep.to_string(), op);
+                }
+            }
+        }
+
+        let serde_op = by_dep.get("serde").expect("serde op");
+        assert_eq!(serde_op.safety, SafetyClass::Safe);
+
+        let local_op = by_dep.get("local").expect("local op");
+        assert_eq!(local_op.safety, SafetyClass::Guarded);
+        if let OpKind::TomlTransform { args: Some(args), .. } = &local_op.kind {
+            let preserved = &args["preserved"];
+            assert_eq!(preserved["optional"], serde_json::json!(true));
+            assert_eq!(preserved["features"], serde_json::json!(["std"]));
+        } else {
+            panic!("expected transform");
+        }
+    }
+
+    #[test]
+    fn workspace_deps_returns_empty_for_missing_or_invalid() {
+        let repo_missing = TestRepo::new(&[]);
+        assert!(WorkspaceInheritanceFixer::workspace_deps(&repo_missing).is_empty());
+
+        let repo_invalid = TestRepo::new(&[("Cargo.toml", "not toml = [")]);
+        assert!(WorkspaceInheritanceFixer::workspace_deps(&repo_invalid).is_empty());
+
+        let repo_no_ws = TestRepo::new(&[("Cargo.toml", "[package]\nname = \"demo\"")]);
+        assert!(WorkspaceInheritanceFixer::workspace_deps(&repo_no_ws).is_empty());
+
+        let repo_no_deps = TestRepo::new(&[("Cargo.toml", "[workspace]\n")]);
+        assert!(WorkspaceInheritanceFixer::workspace_deps(&repo_no_deps).is_empty());
+    }
+
+    #[test]
+    fn collect_candidates_includes_target_dependencies() {
+        let doc = r#"
+            [target."cfg(windows)".dependencies]
+            serde = "1.0"
+        "#
+        .parse::<DocumentMut>()
+        .expect("parse");
+
+        let mut ws = BTreeMap::new();
+        ws.insert(
+            "serde".to_string(),
+            WorkspaceDepSpec {
+                version: Some("1.0".to_string()),
+                is_path_or_git: false,
+            },
+        );
+
+        let cands = WorkspaceInheritanceFixer::collect_candidates(&doc, &ws);
+        assert!(cands.iter().any(|c| {
+            c.toml_path
+                == vec![
+                    "target".to_string(),
+                    "cfg(windows)".to_string(),
+                    "dependencies".to_string(),
+                    "serde".to_string(),
+                ]
+        }));
+    }
+
+    #[test]
+    fn collect_candidates_skips_workspace_and_path_deps() {
+        let doc = r#"
+            [dependencies]
+            workspace_dep = { workspace = true }
+            local = { path = "../local" }
+        "#
+        .parse::<DocumentMut>()
+        .expect("parse");
+
+        let mut ws = BTreeMap::new();
+        ws.insert(
+            "workspace_dep".to_string(),
+            WorkspaceDepSpec {
+                version: Some("1.0".to_string()),
+                is_path_or_git: false,
+            },
+        );
+        ws.insert(
+            "local".to_string(),
+            WorkspaceDepSpec {
+                version: None,
+                is_path_or_git: true,
+            },
+        );
+
+        let cands = WorkspaceInheritanceFixer::collect_candidates(&doc, &ws);
+        assert!(cands.is_empty());
+    }
+
+    #[test]
+    fn collect_candidates_preserves_table_style_fields() {
+        let doc = r#"
+            [dependencies.dep]
+            version = "1.0"
+            package = "dep-pkg"
+            optional = true
+            default-features = false
+            features = ["std", "serde"]
+        "#
+        .parse::<DocumentMut>()
+        .expect("parse");
+
+        let mut ws = BTreeMap::new();
+        ws.insert(
+            "dep".to_string(),
+            WorkspaceDepSpec {
+                version: Some("1.0".to_string()),
+                is_path_or_git: false,
+            },
+        );
+
+        let cands = WorkspaceInheritanceFixer::collect_candidates(&doc, &ws);
+        assert_eq!(cands.len(), 1);
+        let cand = &cands[0];
+        assert_eq!(cand.preserved.package.as_deref(), Some("dep-pkg"));
+        assert_eq!(cand.preserved.optional, Some(true));
+        assert_eq!(cand.preserved.default_features, Some(false));
+        assert_eq!(cand.preserved.features, vec!["std".to_string(), "serde".to_string()]);
+    }
+
+    #[test]
+    fn plan_marks_guarded_for_version_mismatch() {
+        let repo = TestRepo::new(&[
+            (
+                "Cargo.toml",
+                r#"
+                    [workspace.dependencies]
+                    serde = "1.0"
+                "#,
+            ),
+            (
+                "crates/member/Cargo.toml",
+                r#"
+                    [package]
+                    name = "member"
+
+                    [dependencies]
+                    serde = "2.0"
+                "#,
+            ),
+        ]);
+
+        let ctx = PlanContext {
+            repo_root: Utf8PathBuf::from("."),
+            artifacts_dir: Utf8PathBuf::from("artifacts"),
+            config: PlannerConfig::default(),
+        };
+
+        let receipt_set = receipt_set_for("crates/member/Cargo.toml");
+        let fixes = WorkspaceInheritanceFixer
+            .plan(&ctx, &repo, &receipt_set)
+            .expect("plan");
+        assert_eq!(fixes.len(), 1);
+        assert_eq!(fixes[0].safety, SafetyClass::Guarded);
+    }
+
+    #[test]
+    fn plan_skips_missing_or_invalid_manifest() {
+        let repo_missing = TestRepo::new(&[(
+            "Cargo.toml",
+            "[workspace]\nmembers = [\"crates/member\"]\n",
+        )]);
+
+        let ctx = PlanContext {
+            repo_root: Utf8PathBuf::from("."),
+            artifacts_dir: Utf8PathBuf::from("artifacts"),
+            config: PlannerConfig::default(),
+        };
+
+        let receipt_set = receipt_set_for("crates/member/Cargo.toml");
+        let fixes = WorkspaceInheritanceFixer
+            .plan(&ctx, &repo_missing, &receipt_set)
+            .expect("plan");
+        assert!(fixes.is_empty());
+
+        let repo_invalid = TestRepo::new(&[
+            ("Cargo.toml", "[workspace]\n"),
+            ("crates/member/Cargo.toml", "not toml = ["),
+        ]);
+        let fixes = WorkspaceInheritanceFixer
+            .plan(&ctx, &repo_invalid, &receipt_set)
+            .expect("plan");
+        assert!(fixes.is_empty());
+    }
+
+    #[test]
+    fn fix_key_for_handles_missing_check_id() {
+        let f = buildfix_types::plan::FindingRef {
+            source: "depguard".to_string(),
+            check_id: None,
+            code: "X".to_string(),
+            path: None,
+            line: None,
+            fingerprint: None,
+        };
+        assert_eq!(fix_key_for(&f), "depguard/-/X");
+    }
+}

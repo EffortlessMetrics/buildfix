@@ -103,3 +103,44 @@ impl Default for ApplySettings {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plan_settings_default_values() {
+        let settings = PlanSettings::default();
+        assert_eq!(settings.repo_root.as_str(), ".");
+        assert_eq!(settings.artifacts_dir.as_str(), "artifacts");
+        assert_eq!(settings.out_dir.as_str(), "artifacts/buildfix");
+        assert!(settings.allow.is_empty());
+        assert!(settings.deny.is_empty());
+        assert!(!settings.allow_guarded);
+        assert!(!settings.allow_unsafe);
+        assert!(!settings.allow_dirty);
+        assert!(settings.max_ops.is_none());
+        assert!(settings.max_files.is_none());
+        assert!(settings.max_patch_bytes.is_none());
+        assert!(settings.params.is_empty());
+        assert!(settings.require_clean_hashes);
+        assert!(!settings.git_head_precondition);
+        assert_eq!(settings.backup_suffix, ".buildfix.bak");
+        assert_eq!(settings.mode, RunMode::Standalone);
+    }
+
+    #[test]
+    fn apply_settings_default_values() {
+        let settings = ApplySettings::default();
+        assert_eq!(settings.repo_root.as_str(), ".");
+        assert_eq!(settings.out_dir.as_str(), "artifacts/buildfix");
+        assert!(settings.dry_run);
+        assert!(!settings.allow_guarded);
+        assert!(!settings.allow_unsafe);
+        assert!(!settings.allow_dirty);
+        assert!(settings.params.is_empty());
+        assert!(settings.backup_enabled);
+        assert_eq!(settings.backup_suffix, ".buildfix.bak");
+        assert_eq!(settings.mode, RunMode::Standalone);
+    }
+}

@@ -69,3 +69,35 @@ impl EditError {
 
 /// Result type alias using EditError.
 pub type EditResult<T> = Result<T, EditError>;
+
+#[cfg(test)]
+mod tests {
+    use super::{EditError, PolicyBlockError};
+
+    #[test]
+    fn policy_block_reports_exit_code_2() {
+        let err = EditError::from(PolicyBlockError::PreconditionMismatch {
+            message: "oops".to_string(),
+        });
+        assert!(err.is_policy_block());
+        assert_eq!(err.exit_code(), 2);
+        assert!(err.to_string().contains("policy block"));
+    }
+
+    #[test]
+    fn runtime_error_reports_exit_code_1() {
+        let err = EditError::from(anyhow::anyhow!("boom"));
+        assert!(!err.is_policy_block());
+        assert_eq!(err.exit_code(), 1);
+        assert!(err.to_string().contains("runtime error"));
+    }
+
+    #[test]
+    fn policy_block_display_includes_variant() {
+        let err = PolicyBlockError::SafetyGateDenial {
+            message: "guarded".to_string(),
+        };
+        assert!(err.to_string().contains("safety gate denial"));
+        assert!(err.to_string().contains("guarded"));
+    }
+}

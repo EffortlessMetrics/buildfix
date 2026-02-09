@@ -123,6 +123,24 @@ fn test_missing_schema_field() {
 }
 
 #[test]
+fn test_report_json_directory_yields_io_error() {
+    let temp = create_temp_dir();
+    let artifacts = artifacts_path(&temp);
+
+    let sensor_dir = artifacts.join("weird");
+    fs::create_dir_all(&sensor_dir).unwrap();
+    // Create report.json as a directory to force an IO error on read.
+    fs::create_dir_all(sensor_dir.join("report.json")).unwrap();
+
+    let receipts = load_receipts(&artifacts).unwrap();
+    assert_eq!(receipts.len(), 1);
+    assert!(matches!(
+        receipts[0].receipt,
+        Err(ReceiptLoadError::Io { .. })
+    ));
+}
+
+#[test]
 fn test_extra_fields_tolerated() {
     let temp = create_temp_dir();
     let artifacts = artifacts_path(&temp);
