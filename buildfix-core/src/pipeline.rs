@@ -594,6 +594,14 @@ mod tests {
         }
     }
 
+    struct FailingReceiptSource;
+
+    impl ReceiptSource for FailingReceiptSource {
+        fn load_receipts(&self) -> anyhow::Result<Vec<LoadedReceipt>> {
+            Err(anyhow::anyhow!("receipt load failed"))
+        }
+    }
+
     fn tool() -> ToolInfo {
         ToolInfo {
             name: "buildfix".into(),
@@ -756,6 +764,14 @@ mod tests {
     }
 
     #[test]
+    fn report_from_plan_passes_when_no_ops_and_no_failures() {
+        let plan = make_plan(vec![], None);
+        let report = report_from_plan(&plan, tool(), &[]);
+        assert_eq!(report.verdict.status, ReportStatus::Pass);
+        assert_eq!(report.verdict.counts.warn, 0);
+    }
+
+    #[test]
     fn report_plan_data_plan_available_false_when_empty() {
         let plan = make_plan(vec![], None);
 
@@ -764,6 +780,15 @@ mod tests {
         let plan_data = &data["buildfix"]["plan"];
 
         assert_eq!(plan_data["plan_available"], serde_json::json!(false));
+    }
+
+    #[test]
+    fn report_from_plan_uses_unknown_version_when_missing() {
+        let plan = make_plan(vec![], None);
+        let mut t = tool();
+        t.version = None;
+        let report = report_from_plan(&plan, t, &[]);
+        assert_eq!(report.tool.version, "unknown");
     }
 
     #[test]
@@ -1088,6 +1113,23 @@ mod tests {
                 op.blocked_reason_token.as_deref(),
                 Some(buildfix_types::plan::blocked_tokens::MAX_PATCH_BYTES)
             );
+        }
+    }
+
+    #[test]
+    fn run_plan_propagates_receipt_load_errors() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let settings = build_plan_settings(&root);
+        let git = StubGitPort::default();
+
+        let err = run_plan(&settings, &FailingReceiptSource, &git, tool())
+            .err()
+            .expect("run_plan");
+        match err {
+            ToolError::Internal(e) => {
+                assert!(e.to_string().contains("receipt load failed"));
+            }
+            ToolError::PolicyBlock => panic!("expected internal error"),
         }
     }
 

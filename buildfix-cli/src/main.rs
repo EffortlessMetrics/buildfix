@@ -581,4 +581,16 @@ mod tests {
         let outcome = validate_file_if_exists(&path, schema).expect("ok");
         assert!(matches!(outcome, ValidateOutcome::Ok));
     }
+
+    #[test]
+    fn validate_file_if_exists_reports_parse_error() {
+        let temp = TempDir::new().expect("temp dir");
+        let path = Utf8PathBuf::from_path_buf(temp.path().join("payload.json")).expect("utf8");
+        std::fs::write(&path, r#"{ invalid json }"#).expect("write");
+
+        let err = validate_file_if_exists(&path, r#"{"type": "object"}"#)
+            .err()
+            .expect("parse json");
+        assert!(err.to_string().contains("parse json"));
+    }
 }

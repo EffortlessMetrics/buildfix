@@ -414,6 +414,12 @@ mod tests {
     }
 
     #[test]
+    fn test_lookup_by_fix_id_suffix() {
+        let fix = lookup_fix("workspace_resolver_v2").expect("should match suffix");
+        assert_eq!(fix.key, "resolver-v2");
+    }
+
+    #[test]
     fn test_all_fixes_registered() {
         assert_eq!(FIX_REGISTRY.len(), 5);
         assert!(lookup_fix("resolver-v2").is_some());
@@ -421,5 +427,67 @@ mod tests {
         assert!(lookup_fix("workspace-inheritance").is_some());
         assert!(lookup_fix("msrv").is_some());
         assert!(lookup_fix("edition").is_some());
+    }
+
+    #[test]
+    fn test_list_fix_keys_matches_registry() {
+        let keys = list_fix_keys();
+        assert_eq!(keys.len(), FIX_REGISTRY.len());
+        assert!(keys.contains(&"resolver-v2"));
+        assert!(keys.contains(&"path-dep-version"));
+        assert!(keys.contains(&"workspace-inheritance"));
+        assert!(keys.contains(&"msrv"));
+        assert!(keys.contains(&"edition"));
+    }
+
+    #[test]
+    fn test_policy_keys_sorted_and_deduped() {
+        static TRIGGERS: &[TriggerPattern] = &[
+            TriggerPattern {
+                sensor: "alpha",
+                check_id: "beta",
+                code: Some("c"),
+            },
+            TriggerPattern {
+                sensor: "alpha",
+                check_id: "beta",
+                code: Some("c"),
+            },
+            TriggerPattern {
+                sensor: "alpha",
+                check_id: "aardvark",
+                code: None,
+            },
+        ];
+
+        let fix = FixExplanation {
+            key: "test",
+            fix_id: "test.fix",
+            title: "Test",
+            safety: SafetyClass::Safe,
+            description: "",
+            safety_rationale: "",
+            remediation: "",
+            triggers: TRIGGERS,
+        };
+
+        let keys = policy_keys(&fix);
+        assert_eq!(keys, vec!["alpha/aardvark/*", "alpha/beta/c"]);
+    }
+
+    #[test]
+    fn test_format_safety_class_labels() {
+        assert_eq!(format_safety_class(SafetyClass::Safe), "Safe");
+        assert_eq!(format_safety_class(SafetyClass::Guarded), "Guarded");
+        assert_eq!(format_safety_class(SafetyClass::Unsafe), "Unsafe");
+    }
+
+    #[test]
+    fn test_safety_class_meaning_messages() {
+        assert!(safety_class_meaning(SafetyClass::Safe).contains("SAFE fixes"));
+        assert!(
+            safety_class_meaning(SafetyClass::Guarded).contains("GUARDED fixes")
+        );
+        assert!(safety_class_meaning(SafetyClass::Unsafe).contains("UNSAFE fixes"));
     }
 }

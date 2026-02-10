@@ -686,6 +686,49 @@ mod tests {
     }
 
     #[test]
+    fn apply_allow_deny_allows_when_allowlist_matches() {
+        let mut ops = vec![make_op(
+            "cargo.workspace_resolver_v2",
+            "Cargo.toml",
+            OpKind::TomlRemove {
+                toml_path: vec!["workspace".to_string()],
+            },
+        )];
+
+        apply_allow_deny(&vec!["cargo.*".to_string()], &[], &mut ops);
+        assert!(!ops[0].blocked);
+        assert!(ops[0].blocked_reason.is_none());
+        assert!(ops[0].blocked_reason_token.is_none());
+    }
+
+    #[test]
+    fn apply_allow_deny_does_not_override_existing_block() {
+        let mut ops = vec![make_op(
+            "cargo.workspace_resolver_v2",
+            "Cargo.toml",
+            OpKind::TomlRemove {
+                toml_path: vec!["workspace".to_string()],
+            },
+        )];
+        ops[0].blocked = true;
+        ops[0].blocked_reason = Some("preblocked".to_string());
+        ops[0].blocked_reason_token = Some("custom_token".to_string());
+
+        apply_allow_deny(
+            &vec!["cargo.*".to_string()],
+            &vec!["cargo.*".to_string()],
+            &mut ops,
+        );
+
+        assert!(ops[0].blocked);
+        assert_eq!(ops[0].blocked_reason.as_deref(), Some("preblocked"));
+        assert_eq!(
+            ops[0].blocked_reason_token.as_deref(),
+            Some("custom_token")
+        );
+    }
+
+    #[test]
     fn enforce_caps_blocks_all_ops() {
         let mut ops = vec![
             make_op(
@@ -817,5 +860,55 @@ mod tests {
         assert_eq!(findings.len(), 2);
         assert_eq!(findings[0].path.as_deref(), Some("a/Cargo.toml"));
         assert_eq!(findings[1].path.as_deref(), Some("b/Cargo.toml"));
+    }
+
+    #[test]
+    fn receipt_set_matches_when_filters_empty() {
+        let receipt = ReceiptEnvelope {
+            schema: "sensor.report.v1".to_string(),
+            tool: ToolInfo {
+                name: "builddiag".to_string(),
+                version: None,
+                repo: None,
+                commit: None,
+            },
+            run: RunInfo::default(),
+            verdict: Verdict::default(),
+            findings: vec![Finding {
+                severity: Default::default(),
+                check_id: Some("check".to_string()),
+                code: Some("code".to_string()),
+                message: None,
+                location: Some(Location {
+                    path: Utf8PathBuf::from("Cargo.toml"),
+                    line: Some(1),
+                    column: None,
+                }),
+                fingerprint: None,
+                data: None,
+            }],
+            capabilities: None,
+            data: None,
+        };
+
+        let loaded = vec![LoadedReceipt {
+            path: Utf8PathBuf::from("artifacts/builddiag/report.json"),
+            sensor_id: "builddiag".to_string(),
+            receipt: Ok(receipt),
+        }];
+
+        let set = ReceiptSet::from_loaded(&loaded);
+
+        let all = set.matching_findings(&["builddiag"], &[], &[]);
+        assert_eq!(all.len(), 1);
+
+        let check_only = set.matching_findings(&["builddiag"], &["check"], &[]);
+        assert_eq!(check_only.len(), 1);
+
+        let code_only = set.matching_findings(&["builddiag"], &[], &["code"]);
+        assert_eq!(code_only.len(), 1);
+
+        let mismatch = set.matching_findings(&["builddiag"], &[], &["other"]);
+        assert!(mismatch.is_empty());
     }
 }

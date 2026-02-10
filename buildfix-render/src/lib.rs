@@ -417,4 +417,89 @@ mod tests {
         let md = render_apply_md(&apply);
         assert!(md.contains("_No results._"));
     }
+
+    #[test]
+    fn plan_md_renders_remove_and_transform_kinds() {
+        let mut remove_op = make_op(SafetyClass::Safe, false, None);
+        remove_op.kind = OpKind::TomlRemove {
+            toml_path: vec!["package".to_string(), "name".to_string()],
+        };
+        remove_op.id = "remove".to_string();
+
+        let mut transform_op = make_op(SafetyClass::Safe, false, None);
+        transform_op.kind = OpKind::TomlTransform {
+            rule_id: "custom_rule".to_string(),
+            args: None,
+        };
+        transform_op.id = "transform".to_string();
+
+        let plan = make_plan(vec![remove_op, transform_op], None);
+        let md = render_plan_md(&plan);
+        assert!(md.contains("Kind: `toml_remove`"));
+        assert!(md.contains("Kind: `custom_rule`"));
+    }
+
+    #[test]
+    fn apply_md_renders_all_statuses_and_reasons() {
+        let mut apply = BuildfixApply::new(
+            tool(),
+            ApplyRepoInfo {
+                root: ".".into(),
+                head_sha_before: None,
+                head_sha_after: None,
+                dirty_before: None,
+                dirty_after: None,
+            },
+            PlanRef {
+                path: "plan.json".into(),
+                sha256: None,
+            },
+        );
+        apply.summary = ApplySummary {
+            attempted: 4,
+            applied: 1,
+            blocked: 1,
+            failed: 1,
+            files_modified: 1,
+        };
+        apply.results.push(ApplyResult {
+            op_id: "applied".to_string(),
+            status: ApplyStatus::Applied,
+            message: None,
+            blocked_reason: None,
+            blocked_reason_token: None,
+            files: vec![],
+        });
+        apply.results.push(ApplyResult {
+            op_id: "blocked".to_string(),
+            status: ApplyStatus::Blocked,
+            message: Some("blocked".to_string()),
+            blocked_reason: Some("reason".to_string()),
+            blocked_reason_token: None,
+            files: vec![],
+        });
+        apply.results.push(ApplyResult {
+            op_id: "failed".to_string(),
+            status: ApplyStatus::Failed,
+            message: Some("failed".to_string()),
+            blocked_reason: None,
+            blocked_reason_token: None,
+            files: vec![],
+        });
+        apply.results.push(ApplyResult {
+            op_id: "skipped".to_string(),
+            status: ApplyStatus::Skipped,
+            message: Some("skipped".to_string()),
+            blocked_reason: None,
+            blocked_reason_token: None,
+            files: vec![],
+        });
+
+        let md = render_apply_md(&apply);
+        assert!(md.contains("Status: `applied`"));
+        assert!(md.contains("Status: `blocked`"));
+        assert!(md.contains("Status: `failed`"));
+        assert!(md.contains("Status: `skipped`"));
+        assert!(md.contains("Blocked reason: reason"));
+    }
 }
