@@ -1,0 +1,59 @@
+{
+  "plan_ref": {
+    "path": "<PLAN_PATH>"
+  },
+  "preconditions": {
+    "mismatches": [],
+    "verified": true
+  },
+  "repo": {
+    "root": "<REPO_ROOT>"
+  },
+  "results": [
+    {
+      "files": [
+        {
+          "path": "Cargo.toml",
+          "sha256_after": "63a7d6fc8dabea557f3d23cdc19aa2b9e05e4cda1d6679ddd0e0985d4968f19b",
+          "sha256_before": "c4c8d16e51952141166a9b5b2cb25cd9e429e4e5153f40343366f93b13670521"
+        }
+      ],
+      "op_id": "ab9ced5a-84ab-52fb-9080-73eece088fd5",
+      "status": "applied"
+    },
+    {
+      "files": [
+        {
+          "path": "crates/a/Cargo.toml",
+          "sha256_after": "fb0529a8d92f766bd6d39e7e96b7652a6e8bce965a89bd488d284c8924932e4b",
+          "sha256_before": "f533ab1aae3ad95a7682102fa0b8220118ffbb73e93c3e98267e1e38a60517d5"
+        }
+      ],
+      "op_id": "cca08d34-3186-5420-9b9e-56f75695ef63",
+      "status": "applied"
+    },
+    {
+      "files": [
+        {
+          "path": "crates/a/Cargo.toml",
+          "sha256_after": "d80ba9bf826622138a7cf47b39962b92983f5c9c0186d5d338e42067c9738151",
+          "sha256_before": "fb0529a8d92f766bd6d39e7e96b7652a6e8bce965a89bd488d284c8924932e4b"
+        }
+      ],
+      "op_id": "482bf98c-2e65-5de5-a8ef-5fdf1e64c52f",
+      "status": "applied"
+    }
+  ],
+  "schema": "buildfix.apply.v1",
+  "summary": {
+    "applied": 3,
+    "attempted": 3,
+    "blocked": 0,
+    "failed": 0,
+    "files_modified": 2
+  },
+  "tool": {
+    "name": "buildfix",
+    "version": "test"
+  }
+}

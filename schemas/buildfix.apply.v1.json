@@ -188,6 +188,9 @@
         "blocked_reason": {
           "type": "string"
         },
+        "blocked_reason_token": {
+          "type": "string"
+        },
         "files": {
           "type": "array",
           "items": {

@@ -6,4 +6,5 @@
 
 mod load;
 
-pub use load::{load_receipts, LoadedReceipt, ReceiptLoadError};
+pub use buildfix_types::receipt::ReceiptEnvelope;
+pub use load::{LoadedReceipt, ReceiptLoadError, load_receipts};

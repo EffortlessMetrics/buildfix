@@ -1,0 +1,32 @@
+{
+  "schema": "builddiag.report.v1",
+  "tool": {
+    "name": "builddiag",
+    "version": "0.0.0"
+  },
+  "verdict": {
+    "status": "fail",
+    "counts": {
+      "findings": 1,
+      "errors": 1,
+      "warnings": 0
+    }
+  },
+  "findings": [
+    {
+      "severity": "error",
+      "check_id": "rust.msrv_consistent",
+      "code": "msrv_mismatch",
+      "message": "crate MSRV does not match workspace",
+      "location": {
+        "path": "crates/a/Cargo.toml",
+        "line": 5,
+        "column": 1
+      },
+      "data": {
+        "crate_msrv": "1.65",
+        "workspace_msrv": "1.70"
+      }
+    }
+  ]
+}

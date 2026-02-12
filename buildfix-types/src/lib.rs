@@ -10,10 +10,14 @@ pub mod ops;
 pub mod plan;
 pub mod receipt;
 pub mod report;
+pub mod wire;
 
 /// Schema identifiers.
 pub mod schema {
     pub const BUILDFIX_PLAN_V1: &str = "buildfix.plan.v1";
     pub const BUILDFIX_APPLY_V1: &str = "buildfix.apply.v1";
     pub const BUILDFIX_REPORT_V1: &str = "buildfix.report.v1";
+
+    /// Universal sensor envelope schema (Cockpit ecosystem).
+    pub const SENSOR_REPORT_V1: &str = "sensor.report.v1";
 }

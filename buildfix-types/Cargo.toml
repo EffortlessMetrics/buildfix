@@ -1,8 +1,15 @@
 [package]
 name = "buildfix-types"
 version = "0.1.0"
+publish = false
 edition.workspace = true
 license.workspace = true
+description = "Shared DTOs and schemas for buildfix repair plans"
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["cargo", "workspace", "types", "repair"]
+categories = ["development-tools"]
 
 [features]
 default = []

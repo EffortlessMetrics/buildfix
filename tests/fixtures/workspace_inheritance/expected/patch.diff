@@ -1,0 +1,11 @@
+diff --git a/crates/a/Cargo.toml b/crates/a/Cargo.toml
+--- a/crates/a/Cargo.toml
++++ b/crates/a/Cargo.toml
+--- original
++++ modified
+@@ -4,4 +4,4 @@
+ edition = "2021"
+
+ [dependencies]
+-serde = "1.0"
++serde = { workspace = true }

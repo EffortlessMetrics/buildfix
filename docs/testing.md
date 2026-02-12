@@ -13,9 +13,10 @@ This plan uses four layers:
 BDD expresses the safety posture and user workflow: plan/apply, preconditions, allowlists, unsafe blocks.
 
 Files live in:
-- `tests/features/*.feature`
+- `buildfix-bdd/features/*.feature` - Gherkin scenarios
+- `buildfix-bdd/tests/cucumber.rs` - Step definitions
 
-Step definitions should route through the CLI or a thin harness that exercises the same ports/adapters.
+The BDD harness uses `cucumber-rs` and `assert_cmd` to invoke the CLI in isolated temp directories. Step definitions create workspaces, synthetic receipts, run commands, and validate outputs.
 
 ## 2) Golden fixtures (the determinism anchor)
 For each fixer:

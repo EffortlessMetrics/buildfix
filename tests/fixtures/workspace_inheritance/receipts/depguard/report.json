@@ -1,0 +1,32 @@
+{
+  "schema": "depguard.report.v1",
+  "tool": {
+    "name": "depguard",
+    "version": "0.0.0"
+  },
+  "verdict": {
+    "status": "fail",
+    "counts": {
+      "findings": 1,
+      "errors": 1,
+      "warnings": 0
+    }
+  },
+  "findings": [
+    {
+      "severity": "error",
+      "check_id": "deps.workspace_inheritance",
+      "code": "should_use_workspace",
+      "message": "dependency should use workspace inheritance",
+      "location": {
+        "path": "crates/a/Cargo.toml",
+        "line": 7,
+        "column": 1
+      },
+      "data": {
+        "dep": "serde",
+        "toml_path": ["dependencies", "serde"]
+      }
+    }
+  ]
+}

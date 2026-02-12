@@ -1,0 +1,3 @@
+# Policy variant fixture: tests that MSRV normalization works when --allow-guarded is used
+[policy]
+allow_guarded = true

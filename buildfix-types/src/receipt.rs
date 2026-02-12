@@ -26,9 +26,33 @@ pub struct ReceiptEnvelope {
     #[serde(default)]
     pub findings: Vec<Finding>,
 
+    /// Capabilities block for "No Green By Omission" pattern.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<ReceiptCapabilities>,
+
     /// Optional, tool-specific payload.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data: Option<serde_json::Value>,
+}
+
+/// Capabilities block describing what the sensor can/did check.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReceiptCapabilities {
+    /// List of check_ids this sensor can emit.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub check_ids: Vec<String>,
+
+    /// Scopes this sensor covers (e.g., "workspace", "crate").
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scopes: Vec<String>,
+
+    /// True if some inputs could not be processed.
+    #[serde(default)]
+    pub partial: bool,
+
+    /// Reason for partial results, if applicable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,6 +76,11 @@ pub struct RunInfo {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ended_at: Option<DateTime<Utc>>,
+
+    /// Git HEAD SHA at the time this run was created.
+    /// Used to verify the plan is applied to the same repo state it was generated from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub git_head_sha: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -66,19 +95,14 @@ pub struct Verdict {
     pub reasons: Vec<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum VerdictStatus {
     Pass,
     Warn,
     Fail,
+    #[default]
     Unknown,
-}
-
-impl Default for VerdictStatus {
-    fn default() -> Self {
-        VerdictStatus::Unknown
-    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -119,18 +143,13 @@ pub struct Finding {
     pub data: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Severity {
+    #[default]
     Info,
-    Warning,
+    Warn,
     Error,
-}
-
-impl Default for Severity {
-    fn default() -> Self {
-        Severity::Info
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

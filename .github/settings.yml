@@ -1,0 +1,5 @@
+# .github/settings.yml
+repository:
+  description: "Receipt-driven repair tool for common Cargo workspace hygiene issues."
+  homepage: "https://github.com/EffortlessMetrics/buildfix"
+  topics: rust, cargo, build-tool, automation, fixer, developer-experience
