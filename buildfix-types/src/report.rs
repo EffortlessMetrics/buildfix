@@ -40,6 +40,9 @@ pub struct ReportRunInfo {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<u64>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub git_head_sha: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -109,6 +112,22 @@ pub struct ReportLocation {
 /// Capabilities block for "No Green By Omission" pattern.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ReportCapabilities {
+    /// List of check_ids this sensor can emit.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub check_ids: Vec<String>,
+
+    /// Scopes this sensor covers, e.g. ['workspace', 'crate'].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scopes: Vec<String>,
+
+    /// True if some inputs could not be processed.
+    #[serde(default)]
+    pub partial: bool,
+
+    /// Reason for partial results, if applicable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+
     /// Successfully loaded input paths/receipts.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub inputs_available: Vec<String>,
@@ -136,7 +155,4 @@ pub struct ReportArtifacts {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub patch: Option<String>,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub comment: Option<String>,
 }

@@ -174,9 +174,6 @@ pub fn write_plan_artifacts(
     writer.create_dir_all(&extras_dir)?;
     let mut extras_report = outcome.report.clone();
     extras_report.schema = buildfix_types::schema::BUILDFIX_REPORT_V1.to_string();
-    if let Some(ref mut artifacts) = extras_report.artifacts {
-        artifacts.comment = Some("comment.md".to_string());
-    }
     let extras_wire = ReportV1::from(&extras_report);
     let extras_json =
         serde_json::to_string_pretty(&extras_wire).context("serialize extras report")?;
@@ -375,6 +372,7 @@ pub(crate) fn report_from_plan(
             started_at: Utc::now().to_rfc3339(),
             ended_at: Some(Utc::now().to_rfc3339()),
             duration_ms: Some(0),
+            git_head_sha: plan.repo.head_sha.clone(),
         },
         verdict: ReportVerdict {
             status,
@@ -391,7 +389,6 @@ pub(crate) fn report_from_plan(
             plan: Some("plan.json".to_string()),
             apply: None,
             patch: Some("patch.diff".to_string()),
-            comment: None,
         }),
         data: Some({
             let ops_applicable = plan
@@ -452,6 +449,14 @@ fn build_capabilities(receipts: &[LoadedReceipt]) -> ReportCapabilities {
     }
 
     ReportCapabilities {
+        check_ids: vec![], // TODO: populate from planner
+        scopes: vec![],    // TODO: populate from planner
+        partial: !inputs_failed.is_empty(),
+        reason: if !inputs_failed.is_empty() {
+            Some("some receipts failed to load".to_string())
+        } else {
+            None
+        },
         inputs_available,
         inputs_failed,
     }
@@ -479,6 +484,7 @@ pub(crate) fn report_from_apply(apply: &BuildfixApply, tool: ToolInfo) -> Buildf
             started_at: Utc::now().to_rfc3339(),
             ended_at: Some(Utc::now().to_rfc3339()),
             duration_ms: Some(0),
+            git_head_sha: apply.repo.head_sha_after.clone(),
         },
         verdict: ReportVerdict {
             status,
@@ -495,7 +501,6 @@ pub(crate) fn report_from_apply(apply: &BuildfixApply, tool: ToolInfo) -> Buildf
             plan: Some("plan.json".to_string()),
             apply: Some("apply.json".to_string()),
             patch: Some("patch.diff".to_string()),
-            comment: None,
         }),
         data: Some(serde_json::json!({
             "buildfix": {

@@ -65,6 +65,18 @@ jobs:
       - run: cargo build -p buildfix
       - run: cargo test -p buildfix-bdd
 
+  conform:
+    name: Conformance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Generate artifacts
+        run: cargo run -p buildfix -- plan --repo-root tests/fixtures/msrv_normalize/repo --artifacts-dir tests/fixtures/msrv_normalize/receipts --out-dir temp_artifacts
+      - name: Run conformance check
+        run: cargo run -p xtask -- conform --artifacts-dir temp_artifacts
+
   doc:
     name: Documentation
     runs-on: ubuntu-latest

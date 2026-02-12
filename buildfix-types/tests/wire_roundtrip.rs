@@ -153,6 +153,7 @@ fn report_wire_from_buildfix_report() {
             started_at: "2025-01-01T00:00:00Z".to_string(),
             ended_at: None,
             duration_ms: None,
+            git_head_sha: None,
         },
         verdict: ReportVerdict {
             status: ReportStatus::Pass,

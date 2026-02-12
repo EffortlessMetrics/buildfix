@@ -80,6 +80,7 @@ fn report_omits_optional_sections_when_none() {
             started_at: "2025-01-01T00:00:00Z".to_string(),
             ended_at: None,
             duration_ms: None,
+            git_head_sha: None,
         },
         verdict: ReportVerdict {
             status: ReportStatus::Pass,
@@ -111,6 +112,7 @@ fn report_capabilities_serializes_empty_lists_as_empty_object() {
             started_at: "2025-01-01T00:00:00Z".to_string(),
             ended_at: None,
             duration_ms: None,
+            git_head_sha: None,
         },
         verdict: ReportVerdict {
             status: ReportStatus::Warn,
