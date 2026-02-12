@@ -663,7 +663,7 @@ mod tests {
                 toml_path: vec!["workspace".to_string()],
             },
         )];
-        apply_allow_deny(&[], &vec!["cargo.*".to_string()], &mut ops);
+        apply_allow_deny(&[], &["cargo.*".to_string()], &mut ops);
         assert!(ops[0].blocked);
         assert_eq!(
             ops[0].blocked_reason_token.as_deref(),
@@ -677,7 +677,7 @@ mod tests {
                 toml_path: vec!["workspace".to_string()],
             },
         )];
-        apply_allow_deny(&vec!["depguard.*".to_string()], &[], &mut ops);
+        apply_allow_deny(&["depguard.*".to_string()], &[], &mut ops);
         assert!(ops[0].blocked);
         assert_eq!(
             ops[0].blocked_reason_token.as_deref(),
@@ -695,7 +695,7 @@ mod tests {
             },
         )];
 
-        apply_allow_deny(&vec!["cargo.*".to_string()], &[], &mut ops);
+        apply_allow_deny(&["cargo.*".to_string()], &[], &mut ops);
         assert!(!ops[0].blocked);
         assert!(ops[0].blocked_reason.is_none());
         assert!(ops[0].blocked_reason_token.is_none());
@@ -714,18 +714,11 @@ mod tests {
         ops[0].blocked_reason = Some("preblocked".to_string());
         ops[0].blocked_reason_token = Some("custom_token".to_string());
 
-        apply_allow_deny(
-            &vec!["cargo.*".to_string()],
-            &vec!["cargo.*".to_string()],
-            &mut ops,
-        );
+        apply_allow_deny(&["cargo.*".to_string()], &["cargo.*".to_string()], &mut ops);
 
         assert!(ops[0].blocked);
         assert_eq!(ops[0].blocked_reason.as_deref(), Some("preblocked"));
-        assert_eq!(
-            ops[0].blocked_reason_token.as_deref(),
-            Some("custom_token")
-        );
+        assert_eq!(ops[0].blocked_reason_token.as_deref(), Some("custom_token"));
     }
 
     #[test]

@@ -389,6 +389,7 @@ pub(crate) fn report_from_plan(
             plan: Some("plan.json".to_string()),
             apply: None,
             patch: Some("patch.diff".to_string()),
+            comment: Some("comment.md".to_string()),
         }),
         data: Some({
             let ops_applicable = plan
@@ -501,6 +502,7 @@ pub(crate) fn report_from_apply(apply: &BuildfixApply, tool: ToolInfo) -> Buildf
             plan: Some("plan.json".to_string()),
             apply: Some("apply.json".to_string()),
             patch: Some("patch.diff".to_string()),
+            comment: None,
         }),
         data: Some(serde_json::json!({
             "buildfix": {

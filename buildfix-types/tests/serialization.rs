@@ -172,10 +172,7 @@ fn receipt_finding_defaults_and_location_serialization() {
         data: None,
     };
     let value = serde_json::to_value(&finding).expect("serialize finding");
-    assert_eq!(
-        value["location"]["path"],
-        serde_json::json!("src/lib.rs")
-    );
+    assert_eq!(value["location"]["path"], serde_json::json!("src/lib.rs"));
 }
 
 #[test]

@@ -52,6 +52,10 @@
         "duration_ms": {
           "type": "integer",
           "minimum": 0
+        },
+        "git_head_sha": {
+          "type": "string",
+          "description": "Git HEAD SHA at run time"
         }
       }
     },
@@ -162,6 +166,29 @@
       "additionalProperties": false,
       "description": "Capabilities block for 'No Green By Omission' pattern",
       "properties": {
+        "check_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of check_ids this sensor can emit"
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Scopes this sensor covers, e.g. ['workspace', 'crate']"
+        },
+        "partial": {
+          "type": "boolean",
+          "default": false,
+          "description": "True if some inputs could not be processed"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Reason for partial results, if applicable"
+        },
         "inputs_available": {
           "type": "array",
           "items": {

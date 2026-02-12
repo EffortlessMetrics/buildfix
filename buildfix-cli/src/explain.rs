@@ -485,9 +485,7 @@ mod tests {
     #[test]
     fn test_safety_class_meaning_messages() {
         assert!(safety_class_meaning(SafetyClass::Safe).contains("SAFE fixes"));
-        assert!(
-            safety_class_meaning(SafetyClass::Guarded).contains("GUARDED fixes")
-        );
+        assert!(safety_class_meaning(SafetyClass::Guarded).contains("GUARDED fixes"));
         assert!(safety_class_meaning(SafetyClass::Unsafe).contains("UNSAFE fixes"));
     }
 }

@@ -315,6 +315,11 @@ impl Fixer for PathDepVersionFixer {
     }
 }
 
+fn fix_key_for(f: &buildfix_types::plan::FindingRef) -> String {
+    let check = f.check_id.clone().unwrap_or_else(|| "-".to_string());
+    format!("{}/{}/{}", f.source, check, f.code)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -607,9 +612,4 @@ mod tests {
         };
         assert_eq!(super::fix_key_for(&f), "depguard/-/X");
     }
-}
-
-fn fix_key_for(f: &buildfix_types::plan::FindingRef) -> String {
-    let check = f.check_id.clone().unwrap_or_else(|| "-".to_string());
-    format!("{}/{}/{}", f.source, check, f.code)
 }

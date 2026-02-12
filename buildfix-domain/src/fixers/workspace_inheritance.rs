@@ -610,10 +610,9 @@ mod tests {
             if let OpKind::TomlTransform {
                 args: Some(args), ..
             } = &op.kind
+                && let Some(dep) = args.get("dep").and_then(|d| d.as_str())
             {
-                if let Some(dep) = args.get("dep").and_then(|d| d.as_str()) {
-                    by_dep.insert(dep.to_string(), op);
-                }
+                by_dep.insert(dep.to_string(), op);
             }
         }
 

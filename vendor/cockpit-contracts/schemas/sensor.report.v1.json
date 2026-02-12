@@ -270,6 +270,10 @@
         "patch": {
           "type": "string",
           "description": "Path to patch.diff relative to report"
+        },
+        "comment": {
+          "type": "string",
+          "description": "Path to comment.md relative to report"
         }
       }
     },

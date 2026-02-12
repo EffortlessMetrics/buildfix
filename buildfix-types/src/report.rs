@@ -155,4 +155,7 @@ pub struct ReportArtifacts {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub patch: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
 }
