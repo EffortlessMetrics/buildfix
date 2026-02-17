@@ -13,6 +13,7 @@ Complete reference of all buildfix fixes, their triggers, safety classes, and be
 | [Unused Dependency Removal](#unused-dependency-removal) | `remove-unused-deps` | Unsafe | Remove sensor-reported unused dependencies |
 | [MSRV Normalization](#msrv-normalization) | `msrv` | Guarded | Normalize rust-version |
 | [Edition Normalization](#edition-normalization) | `edition` | Guarded | Normalize edition |
+| [License Normalization](#license-normalization) | `license` | Guarded | Normalize package.license |
 
 ## Workspace Resolver V2
 
@@ -419,6 +420,68 @@ Fix is skipped when:
 builddiag/rust.edition_consistent/*
 cargo/cargo.edition_consistent/*
 cargo/edition.consistent/*
+```
+
+---
+
+## License Normalization
+
+**Key**: `license`
+**Fix ID**: `cargo.normalize_license`
+**Safety**: Guarded (Unsafe when no workspace license is defined)
+
+### Description
+
+Normalizes per-crate `package.license` to match the workspace canonical license.
+
+Canonical license is determined from:
+1. `[workspace.package].license` in root Cargo.toml
+2. `[package].license` in root Cargo.toml
+
+When no canonical license can be determined, the fix is classified as **Unsafe**
+and requires `--param license=<expression>`.
+
+### Triggering Findings
+
+| Sensor | Check ID | Code |
+|--------|----------|------|
+| cargo-deny | licenses.unlicensed | * |
+| cargo-deny | licenses.missing_license | * |
+| deny | licenses.unlicensed | * |
+| deny | licenses.missing_license | * |
+
+### Example Edit
+
+```diff
+ [package]
+ name = "my-crate"
+ version = "0.1.0"
+-license = "MIT"
++license = "MIT OR Apache-2.0"
+```
+
+### Why Guarded?
+
+This fix is **Guarded** because license metadata has legal and compliance impact.
+The edit is deterministic, but review is recommended before apply.
+
+### Apply Command
+
+```bash
+# When workspace canonical license exists:
+buildfix apply --apply --allow-guarded
+
+# When no canonical license exists:
+buildfix apply --apply --allow-unsafe --param license="MIT OR Apache-2.0"
+```
+
+### Policy Keys
+
+```
+cargo-deny/licenses.unlicensed/*
+cargo-deny/licenses.missing_license/*
+deny/licenses.unlicensed/*
+deny/licenses.missing_license/*
 ```
 
 ---

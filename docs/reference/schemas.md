@@ -122,6 +122,10 @@ Schema: `buildfix.plan.v1`
 
 - `toml_set` with `toml_path` and `value`
 - `toml_remove` with `toml_path`
+- `json_set` with `json_path` and `value`
+- `json_remove` with `json_path`
+- `yaml_set` with `yaml_path` and `value`
+- `yaml_remove` with `yaml_path`
 - `toml_transform` with `rule_id` and optional `args`
 - `text_replace_anchored` with `find`, `replace`, optional anchors, and optional `max_replacements`
 

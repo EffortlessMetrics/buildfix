@@ -344,11 +344,27 @@
           "enum": [
             "toml_set",
             "toml_remove",
+            "json_set",
+            "json_remove",
+            "yaml_set",
+            "yaml_remove",
             "toml_transform",
             "text_replace_anchored"
           ]
         },
         "toml_path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "json_path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "yaml_path": {
           "type": "array",
           "items": {
             "type": "string"
@@ -409,6 +425,64 @@
           "then": {
             "required": [
               "toml_path"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "json_set"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "json_path",
+              "value"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "json_remove"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "json_path"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "yaml_set"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "yaml_path",
+              "value"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "yaml_remove"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "yaml_path"
             ]
           }
         },

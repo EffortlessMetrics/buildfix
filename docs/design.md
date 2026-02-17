@@ -47,6 +47,10 @@ The smallest reversible action.
 Op vocabulary:
 - `OpTarget { path }` + `OpKind::TomlSet { toml_path, value }`
 - `OpTarget { path }` + `OpKind::TomlRemove { toml_path }`
+- `OpTarget { path }` + `OpKind::JsonSet { json_path, value }`
+- `OpTarget { path }` + `OpKind::JsonRemove { json_path }`
+- `OpTarget { path }` + `OpKind::YamlSet { yaml_path, value }`
+- `OpTarget { path }` + `OpKind::YamlRemove { yaml_path }`
 - `OpTarget { path }` + `OpKind::TomlTransform { rule_id, args }`
 
 Op invariants:
@@ -141,7 +145,7 @@ New fixers must satisfy:
 - buildfix-types: DTOs + schema ids (wire format for all artifacts)
 - buildfix-receipts: receipt envelope ingestion + normalization
 - buildfix-domain: registry + policy + planner + ordering + Fixer trait
-- buildfix-edit: TOML editing + diff preview generation + preconditions
+- buildfix-edit: deterministic edit engine (TOML + JSON/YAML path edits + anchored text replace) + diff preview generation + preconditions
 - buildfix-render: plan.md + apply.md rendering
 - buildfix-cli: clap + filesystem wiring + config loading + explain
 - buildfix-bdd: cucumber BDD tests for workflow contracts

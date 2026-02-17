@@ -6,6 +6,7 @@ use serde::Serialize;
 
 mod duplicate_deps;
 mod edition;
+mod license;
 mod msrv;
 mod path_dep_version;
 mod remove_unused_deps;
@@ -48,6 +49,7 @@ pub fn builtin_fixers() -> Vec<Box<dyn Fixer>> {
         Box::new(remove_unused_deps::RemoveUnusedDepsFixer),
         Box::new(msrv::MsrvNormalizeFixer),
         Box::new(edition::EditionUpgradeFixer),
+        Box::new(license::LicenseNormalizeFixer),
     ]
 }
 
@@ -64,7 +66,7 @@ mod tests {
     #[test]
     fn builtin_fixers_have_unique_keys() {
         let fixers = builtin_fixers();
-        assert_eq!(fixers.len(), 7);
+        assert_eq!(fixers.len(), 8);
 
         let mut keys = BTreeSet::new();
         for fixer in fixers {
@@ -74,7 +76,7 @@ mod tests {
             keys.insert(meta.fix_key);
         }
 
-        assert_eq!(keys.len(), 7);
+        assert_eq!(keys.len(), 8);
     }
 
     #[test]
@@ -89,5 +91,6 @@ mod tests {
         assert!(keys.contains("cargo.remove_unused_deps"));
         assert!(keys.contains("cargo.normalize_rust_version"));
         assert!(keys.contains("cargo.normalize_edition"));
+        assert!(keys.contains("cargo.normalize_license"));
     }
 }

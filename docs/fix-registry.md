@@ -65,6 +65,19 @@ Unsafe rationale:
 - Sensor coverage can miss feature/platform-specific usage
 - Manual confirmation is required before apply (`--allow-unsafe`)
 
+### 6) License normalization
+- Fix key: `cargo-deny / licenses.unlicensed / *` (also `deny`)
+- Safety: guarded (unsafe when no canonical workspace license exists)
+- Target: crate `Cargo.toml` reported by cargo-deny finding
+- Edit: set `package.license` to workspace canonical license
+
+Canonical source-of-truth:
+- `[workspace.package].license` in root `Cargo.toml`
+- fallback: `[package].license` in root `Cargo.toml`
+
+Unsafe fallback:
+- If no canonical license is declared, operation requires `--param license=...`.
+
 ## buildfix-internal codes
 
 These are buildfix’s own finding codes (for buildfix.report.v1):

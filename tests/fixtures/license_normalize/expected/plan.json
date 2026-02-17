@@ -1,0 +1,72 @@
+{
+  "inputs": [
+    {
+      "path": "<ARTIFACTS>/cargo-deny/report.json",
+      "schema": "cargo-deny.report.v1",
+      "tool": "cargo-deny"
+    }
+  ],
+  "ops": [
+    {
+      "blocked": false,
+      "id": "54c07fcf-11fc-5d08-86f2-0da50f659785",
+      "kind": {
+        "args": {
+          "license": "MIT OR Apache-2.0"
+        },
+        "rule_id": "set_package_license",
+        "type": "toml_transform"
+      },
+      "rationale": {
+        "description": "Normalizes per-crate package.license to workspace canonical license",
+        "findings": [
+          {
+            "check_id": "licenses.unlicensed",
+            "code": "missing_license",
+            "line": 5,
+            "path": "crates/a/Cargo.toml",
+            "source": "cargo-deny"
+          }
+        ],
+        "fix_key": "cargo-deny/licenses.unlicensed/missing_license"
+      },
+      "safety": "guarded",
+      "target": {
+        "path": "crates/a/Cargo.toml"
+      }
+    }
+  ],
+  "policy": {
+    "allow": [],
+    "allow_dirty": false,
+    "allow_guarded": false,
+    "allow_unsafe": false,
+    "deny": []
+  },
+  "preconditions": {
+    "files": [
+      {
+        "path": "crates/a/Cargo.toml",
+        "sha256": "<SHA256>"
+      }
+    ]
+  },
+  "repo": {
+    "root": "<REPO_ROOT>"
+  },
+  "schema": "buildfix.plan.v1",
+  "summary": {
+    "files_touched": 1,
+    "ops_blocked": 0,
+    "ops_total": 1,
+    "safety_counts": {
+      "guarded": 1,
+      "safe": 0,
+      "unsafe": 0
+    }
+  },
+  "tool": {
+    "name": "buildfix",
+    "version": "test"
+  }
+}

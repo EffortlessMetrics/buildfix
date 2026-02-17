@@ -191,6 +191,7 @@ buildfix explain resolver-v2
 buildfix explain path-dep-version
 buildfix explain workspace-inheritance
 buildfix explain msrv
+buildfix explain license
 ```
 
 This shows:

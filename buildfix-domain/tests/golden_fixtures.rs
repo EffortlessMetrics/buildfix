@@ -415,3 +415,8 @@ fn golden_duplicate_dependency_consolidation() {
 fn golden_remove_unused_deps() {
     run_fixture_test("remove_unused_deps");
 }
+
+#[test]
+fn golden_license_normalize() {
+    run_fixture_test("license_normalize");
+}

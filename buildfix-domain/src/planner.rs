@@ -205,6 +205,12 @@ fn fill_op_param(op: &mut PlanOp, key: &str, value: &str) {
                 serde_json::Value::String(value.to_string()),
             );
         }
+        ("set_package_license", "license") => {
+            map.insert(
+                key.to_string(),
+                serde_json::Value::String(value.to_string()),
+            );
+        }
         ("ensure_path_dep_has_version", "version") => {
             map.insert(
                 key.to_string(),
@@ -470,6 +476,18 @@ fn op_sort_key(op: &PlanOp) -> String {
         }
         OpKind::TomlSet { toml_path, .. } => format!("set|{}", toml_path.join(".")),
         OpKind::TomlRemove { toml_path } => format!("remove|{}", toml_path.join(".")),
+        OpKind::JsonSet { json_path, value } => format!(
+            "json_set|{}|{}",
+            json_path.join("."),
+            args_fingerprint(&Some(value.clone()))
+        ),
+        OpKind::JsonRemove { json_path } => format!("json_remove|{}", json_path.join(".")),
+        OpKind::YamlSet { yaml_path, value } => format!(
+            "yaml_set|{}|{}",
+            yaml_path.join("."),
+            args_fingerprint(&Some(value.clone()))
+        ),
+        OpKind::YamlRemove { yaml_path } => format!("yaml_remove|{}", yaml_path.join(".")),
         OpKind::TextReplaceAnchored {
             find,
             replace,
@@ -500,11 +518,29 @@ fn deterministic_op_id(op: &PlanOp) -> Uuid {
         OpKind::TomlTransform { rule_id, .. } => rule_id.as_str(),
         OpKind::TomlSet { .. } => "toml_set",
         OpKind::TomlRemove { .. } => "toml_remove",
+        OpKind::JsonSet { .. } => "json_set",
+        OpKind::JsonRemove { .. } => "json_remove",
+        OpKind::YamlSet { .. } => "yaml_set",
+        OpKind::YamlRemove { .. } => "yaml_remove",
         OpKind::TextReplaceAnchored { .. } => "text_replace_anchored",
     };
 
     let kind_fingerprint = match &op.kind {
         OpKind::TomlTransform { args, .. } => args_fingerprint(args),
+        OpKind::JsonSet { json_path, value } => args_fingerprint(&Some(serde_json::json!({
+            "json_path": json_path,
+            "value": value,
+        }))),
+        OpKind::JsonRemove { json_path } => args_fingerprint(&Some(serde_json::json!({
+            "json_path": json_path,
+        }))),
+        OpKind::YamlSet { yaml_path, value } => args_fingerprint(&Some(serde_json::json!({
+            "yaml_path": yaml_path,
+            "value": value,
+        }))),
+        OpKind::YamlRemove { yaml_path } => args_fingerprint(&Some(serde_json::json!({
+            "yaml_path": yaml_path,
+        }))),
         OpKind::TextReplaceAnchored {
             find,
             replace,

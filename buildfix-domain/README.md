@@ -21,6 +21,7 @@ This crate decides **what** should change from receipts plus repository state. I
 - `cargo.remove_unused_deps`
 - `cargo.normalize_rust_version`
 - `cargo.normalize_edition`
+- `cargo.normalize_license`
 
 Use `builtin_fixer_metas()` for stable metadata used by docs/listing surfaces.
 

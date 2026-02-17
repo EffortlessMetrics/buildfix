@@ -442,6 +442,12 @@ fn fill_op_param(kind: &mut OpKind, key: &str, value: &str) {
                 serde_json::Value::String(value.to_string()),
             );
         }
+        ("set_package_license", "license") => {
+            map.insert(
+                key.to_string(),
+                serde_json::Value::String(value.to_string()),
+            );
+        }
         ("ensure_path_dep_has_version", "version") => {
             map.insert(
                 key.to_string(),
@@ -636,16 +642,18 @@ fn render_patch(
 /// TOML, applies the [`OpKind`] transformation, and returns the modified string
 /// preserving formatting.
 pub fn apply_op_to_content(contents: &str, kind: &OpKind) -> anyhow::Result<String> {
-    let mut doc = contents
-        .parse::<DocumentMut>()
-        .unwrap_or_else(|_| DocumentMut::new());
-
     match kind {
-        OpKind::TomlSet { toml_path, value } => {
-            set_toml_path(&mut doc, toml_path, value.clone());
+        OpKind::JsonSet { json_path, value } => {
+            return apply_json_set(contents, json_path, value.clone());
         }
-        OpKind::TomlRemove { toml_path } => {
-            remove_toml_path(&mut doc, toml_path);
+        OpKind::JsonRemove { json_path } => {
+            return apply_json_remove(contents, json_path);
+        }
+        OpKind::YamlSet { yaml_path, value } => {
+            return apply_yaml_set(contents, yaml_path, value.clone());
+        }
+        OpKind::YamlRemove { yaml_path } => {
+            return apply_yaml_remove(contents, yaml_path);
         }
         OpKind::TextReplaceAnchored {
             find,
@@ -663,6 +671,25 @@ pub fn apply_op_to_content(contents: &str, kind: &OpKind) -> anyhow::Result<Stri
                 *max_replacements,
             );
         }
+        _ => {}
+    }
+
+    let mut doc = contents
+        .parse::<DocumentMut>()
+        .unwrap_or_else(|_| DocumentMut::new());
+
+    match kind {
+        OpKind::TomlSet { toml_path, value } => {
+            set_toml_path(&mut doc, toml_path, value.clone());
+        }
+        OpKind::TomlRemove { toml_path } => {
+            remove_toml_path(&mut doc, toml_path);
+        }
+        OpKind::JsonSet { .. }
+        | OpKind::JsonRemove { .. }
+        | OpKind::YamlSet { .. }
+        | OpKind::YamlRemove { .. }
+        | OpKind::TextReplaceAnchored { .. } => unreachable!("handled above"),
         OpKind::TomlTransform { rule_id, args } => match rule_id.as_str() {
             "ensure_workspace_resolver_v2" => {
                 doc["workspace"]["resolver"] = value("2");
@@ -682,6 +709,14 @@ pub fn apply_op_to_content(contents: &str, kind: &OpKind) -> anyhow::Result<Stri
                     .and_then(|v| v.as_str())
                     .context("missing edition param")?;
                 doc["package"]["edition"] = value(edition);
+            }
+            "set_package_license" => {
+                let license = args
+                    .as_ref()
+                    .and_then(|v| v.get("license"))
+                    .and_then(|v| v.as_str())
+                    .context("missing license param")?;
+                doc["package"]["license"] = value(license);
             }
             "ensure_path_dep_has_version" => {
                 let args = args.as_ref().context("missing args")?;
@@ -937,6 +972,317 @@ fn apply_text_replace_anchored(
     }
 
     Ok(out)
+}
+
+fn apply_json_set(
+    contents: &str,
+    json_path: &[String],
+    value: serde_json::Value,
+) -> anyhow::Result<String> {
+    let trailing_newline = contents.ends_with('\n');
+    let mut root = parse_or_init_json(contents)?;
+    set_json_path(&mut root, json_path, value);
+    serialize_json_with_newline(&root, trailing_newline)
+}
+
+fn apply_json_remove(contents: &str, json_path: &[String]) -> anyhow::Result<String> {
+    let trailing_newline = contents.ends_with('\n');
+    let mut root = parse_or_init_json(contents)?;
+    remove_json_path(&mut root, json_path);
+    serialize_json_with_newline(&root, trailing_newline)
+}
+
+fn parse_or_init_json(contents: &str) -> anyhow::Result<serde_json::Value> {
+    if contents.trim().is_empty() {
+        return Ok(serde_json::Value::Object(serde_json::Map::new()));
+    }
+    serde_json::from_str(contents).context("parse json")
+}
+
+fn set_json_path(root: &mut serde_json::Value, path: &[String], value: serde_json::Value) {
+    if path.is_empty() {
+        *root = value;
+        return;
+    }
+
+    let mut current = root;
+    for (idx, seg) in path.iter().enumerate() {
+        let last = idx + 1 == path.len();
+        let index_seg = parse_index_segment(seg);
+
+        if let Some(i) = index_seg {
+            let default_next = if last {
+                serde_json::Value::Null
+            } else {
+                default_json_container(&path[idx + 1])
+            };
+            let arr = ensure_json_array(current);
+            while arr.len() <= i {
+                arr.push(default_next.clone());
+            }
+            if last {
+                arr[i] = value;
+                return;
+            }
+            current = &mut arr[i];
+            continue;
+        }
+
+        if last {
+            let obj = ensure_json_object(current);
+            obj.insert(seg.clone(), value);
+            return;
+        }
+
+        let default_next = default_json_container(&path[idx + 1]);
+        let obj = ensure_json_object(current);
+        current = obj.entry(seg.clone()).or_insert(default_next);
+    }
+}
+
+fn remove_json_path(root: &mut serde_json::Value, path: &[String]) -> bool {
+    if path.is_empty() {
+        *root = serde_json::Value::Null;
+        return true;
+    }
+
+    let mut current = root;
+    for seg in &path[..path.len() - 1] {
+        if let Some(i) = parse_index_segment(seg) {
+            let Some(arr) = current.as_array_mut() else {
+                return false;
+            };
+            if i >= arr.len() {
+                return false;
+            }
+            current = &mut arr[i];
+            continue;
+        }
+
+        let Some(obj) = current.as_object_mut() else {
+            return false;
+        };
+        let Some(next) = obj.get_mut(seg) else {
+            return false;
+        };
+        current = next;
+    }
+
+    let last = &path[path.len() - 1];
+    if let Some(i) = parse_index_segment(last) {
+        let Some(arr) = current.as_array_mut() else {
+            return false;
+        };
+        if i >= arr.len() {
+            return false;
+        }
+        arr.remove(i);
+        return true;
+    }
+
+    let Some(obj) = current.as_object_mut() else {
+        return false;
+    };
+    obj.remove(last).is_some()
+}
+
+fn default_json_container(next_seg: &str) -> serde_json::Value {
+    if parse_index_segment(next_seg).is_some() {
+        serde_json::Value::Array(Vec::new())
+    } else {
+        serde_json::Value::Object(serde_json::Map::new())
+    }
+}
+
+fn ensure_json_object(
+    value: &mut serde_json::Value,
+) -> &mut serde_json::Map<String, serde_json::Value> {
+    if !value.is_object() {
+        *value = serde_json::Value::Object(serde_json::Map::new());
+    }
+    value.as_object_mut().expect("json object")
+}
+
+fn ensure_json_array(value: &mut serde_json::Value) -> &mut Vec<serde_json::Value> {
+    if !value.is_array() {
+        *value = serde_json::Value::Array(Vec::new());
+    }
+    value.as_array_mut().expect("json array")
+}
+
+fn serialize_json_with_newline(
+    value: &serde_json::Value,
+    trailing_newline: bool,
+) -> anyhow::Result<String> {
+    let mut out = serde_json::to_string_pretty(value).context("serialize json")?;
+    if trailing_newline && !out.ends_with('\n') {
+        out.push('\n');
+    }
+    Ok(out)
+}
+
+fn apply_yaml_set(
+    contents: &str,
+    yaml_path: &[String],
+    value: serde_json::Value,
+) -> anyhow::Result<String> {
+    let trailing_newline = contents.ends_with('\n');
+    let mut root = parse_or_init_yaml(contents)?;
+    let yaml_value = serde_yaml::to_value(value).context("convert value to yaml")?;
+    set_yaml_path(&mut root, yaml_path, yaml_value);
+    serialize_yaml_with_newline(&root, trailing_newline)
+}
+
+fn apply_yaml_remove(contents: &str, yaml_path: &[String]) -> anyhow::Result<String> {
+    let trailing_newline = contents.ends_with('\n');
+    let mut root = parse_or_init_yaml(contents)?;
+    remove_yaml_path(&mut root, yaml_path);
+    serialize_yaml_with_newline(&root, trailing_newline)
+}
+
+fn parse_or_init_yaml(contents: &str) -> anyhow::Result<serde_yaml::Value> {
+    if contents.trim().is_empty() {
+        return Ok(serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
+    }
+    serde_yaml::from_str(contents).context("parse yaml")
+}
+
+fn set_yaml_path(root: &mut serde_yaml::Value, path: &[String], value: serde_yaml::Value) {
+    if path.is_empty() {
+        *root = value;
+        return;
+    }
+
+    let mut current = root;
+    for (idx, seg) in path.iter().enumerate() {
+        let last = idx + 1 == path.len();
+        let index_seg = parse_index_segment(seg);
+
+        if let Some(i) = index_seg {
+            let default_next = if last {
+                serde_yaml::Value::Null
+            } else {
+                default_yaml_container(&path[idx + 1])
+            };
+            let seq = ensure_yaml_sequence(current);
+            while seq.len() <= i {
+                seq.push(default_next.clone());
+            }
+            if last {
+                seq[i] = value;
+                return;
+            }
+            current = &mut seq[i];
+            continue;
+        }
+
+        if last {
+            let map = ensure_yaml_mapping(current);
+            map.insert(yaml_key(seg), value);
+            return;
+        }
+
+        let default_next = default_yaml_container(&path[idx + 1]);
+        let map = ensure_yaml_mapping(current);
+        current = map.entry(yaml_key(seg)).or_insert(default_next);
+    }
+}
+
+fn remove_yaml_path(root: &mut serde_yaml::Value, path: &[String]) -> bool {
+    if path.is_empty() {
+        *root = serde_yaml::Value::Null;
+        return true;
+    }
+
+    let mut current = root;
+    for seg in &path[..path.len() - 1] {
+        if let Some(i) = parse_index_segment(seg) {
+            let Some(seq) = current.as_sequence_mut() else {
+                return false;
+            };
+            if i >= seq.len() {
+                return false;
+            }
+            current = &mut seq[i];
+            continue;
+        }
+
+        let Some(map) = current.as_mapping_mut() else {
+            return false;
+        };
+        let key = yaml_key(seg);
+        let Some(next) = map.get_mut(&key) else {
+            return false;
+        };
+        current = next;
+    }
+
+    let last = &path[path.len() - 1];
+    if let Some(i) = parse_index_segment(last) {
+        let Some(seq) = current.as_sequence_mut() else {
+            return false;
+        };
+        if i >= seq.len() {
+            return false;
+        }
+        seq.remove(i);
+        return true;
+    }
+
+    let Some(map) = current.as_mapping_mut() else {
+        return false;
+    };
+    map.remove(yaml_key(last)).is_some()
+}
+
+fn default_yaml_container(next_seg: &str) -> serde_yaml::Value {
+    if parse_index_segment(next_seg).is_some() {
+        serde_yaml::Value::Sequence(Vec::new())
+    } else {
+        serde_yaml::Value::Mapping(serde_yaml::Mapping::new())
+    }
+}
+
+fn ensure_yaml_mapping(value: &mut serde_yaml::Value) -> &mut serde_yaml::Mapping {
+    if !value.is_mapping() {
+        *value = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+    }
+    value.as_mapping_mut().expect("yaml mapping")
+}
+
+fn ensure_yaml_sequence(value: &mut serde_yaml::Value) -> &mut Vec<serde_yaml::Value> {
+    if !value.is_sequence() {
+        *value = serde_yaml::Value::Sequence(Vec::new());
+    }
+    value.as_sequence_mut().expect("yaml sequence")
+}
+
+fn yaml_key(key: &str) -> serde_yaml::Value {
+    serde_yaml::Value::String(key.to_string())
+}
+
+fn serialize_yaml_with_newline(
+    value: &serde_yaml::Value,
+    trailing_newline: bool,
+) -> anyhow::Result<String> {
+    let mut out = serde_yaml::to_string(value).context("serialize yaml")?;
+    if trailing_newline {
+        if !out.ends_with('\n') {
+            out.push('\n');
+        }
+    } else {
+        while out.ends_with('\n') {
+            out.pop();
+        }
+    }
+    Ok(out)
+}
+
+fn parse_index_segment(seg: &str) -> Option<usize> {
+    if seg.is_empty() {
+        return None;
+    }
+    seg.parse::<usize>().ok()
 }
 
 fn before_context_matches(lines: &[String], idx: usize, anchors: &[String]) -> bool {

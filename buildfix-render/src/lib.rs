@@ -42,6 +42,10 @@ pub fn render_plan_md(plan: &BuildfixPlan) -> String {
             match &op.kind {
                 buildfix_types::ops::OpKind::TomlSet { .. } => "toml_set",
                 buildfix_types::ops::OpKind::TomlRemove { .. } => "toml_remove",
+                buildfix_types::ops::OpKind::JsonSet { .. } => "json_set",
+                buildfix_types::ops::OpKind::JsonRemove { .. } => "json_remove",
+                buildfix_types::ops::OpKind::YamlSet { .. } => "yaml_set",
+                buildfix_types::ops::OpKind::YamlRemove { .. } => "yaml_remove",
                 buildfix_types::ops::OpKind::TomlTransform { rule_id, .. } => rule_id,
                 buildfix_types::ops::OpKind::TextReplaceAnchored { .. } => "text_replace_anchored",
             }
@@ -434,10 +438,28 @@ mod tests {
         };
         transform_op.id = "transform".to_string();
 
-        let plan = make_plan(vec![remove_op, transform_op], None);
+        let mut json_set_op = make_op(SafetyClass::Safe, false, None);
+        json_set_op.kind = OpKind::JsonSet {
+            json_path: vec!["tool".to_string(), "version".to_string()],
+            value: serde_json::json!("1.0.0"),
+        };
+        json_set_op.id = "json_set".to_string();
+
+        let mut yaml_remove_op = make_op(SafetyClass::Safe, false, None);
+        yaml_remove_op.kind = OpKind::YamlRemove {
+            yaml_path: vec!["tool".to_string(), "name".to_string()],
+        };
+        yaml_remove_op.id = "yaml_remove".to_string();
+
+        let plan = make_plan(
+            vec![remove_op, transform_op, json_set_op, yaml_remove_op],
+            None,
+        );
         let md = render_plan_md(&plan);
         assert!(md.contains("Kind: `toml_remove`"));
         assert!(md.contains("Kind: `custom_rule`"));
+        assert!(md.contains("Kind: `json_set`"));
+        assert!(md.contains("Kind: `yaml_remove`"));
     }
 
     #[test]

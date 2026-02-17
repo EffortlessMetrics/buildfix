@@ -4,11 +4,11 @@ This document outlines the planned features and improvements for buildfix.
 
 ## Current Status
 
-buildfix is feature-complete with seven built-in fixers:
+buildfix is feature-complete with eight built-in fixers:
 - Receipt-driven planning from sensor outputs
 - Safe, deterministic TOML editing
 - Precondition verification and backup system
-- Six built-in fixers covering common Cargo workspace issues
+- Eight built-in fixers covering common Cargo workspace issues
 - Wire format with versioned JSON schemas (V1)
 - Capabilities block for sensor capability negotiation
 
@@ -35,26 +35,18 @@ buildfix is feature-complete with seven built-in fixers:
 
 - **Auto-Commit Mode**: Optional `buildfix apply --apply --auto-commit` flow with clean-tree enforcement and structured commit metadata in apply artifacts.
 
+### v0.6
+
+- **License Normalization Fixer** (`cargo.normalize_license`): Normalizes per-crate `package.license` to workspace canonical license when triggered by `cargo-deny` findings. Guarded safety by default; falls back to Unsafe with explicit `--param license=...` when no canonical value exists.
+- **JSON/YAML Op Types**: Added `json_set`, `json_remove`, `yaml_set`, and `yaml_remove` for deterministic mechanical non-TOML edits.
+- **First-party cargo-deny integration**: New receipt routing for license compliance findings.
+
 ## Planned Features
-
-### Medium-Term (v0.4)
-
-#### Additional Op Types
-- **Anchored text replace**: Support for non-TOML file edits with strict constraints
-- **Pattern**: Line-based replacements with context anchors for safety
 
 ### Long-Term (v0.5+)
 
 #### Additional File Format Support
-- Support for file types beyond TOML when edits are provably mechanical
-- Examples: JSON, YAML configuration files
-- Requires format-preserving parsers
-
-#### Sensor Integrations
-- First-party integrations with common Rust ecosystem tools:
-  - cargo-udeps (unused dependencies)
-  - cargo-deny (license compliance)
-  - cargo-machete (unused dependencies)
+- Expand beyond current TOML/JSON/YAML support for additional file types when edits are provably mechanical.
 
 ## Design Principles
 

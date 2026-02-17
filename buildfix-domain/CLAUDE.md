@@ -45,6 +45,7 @@ trait Fixer {
 | `RemoveUnusedDepsFixer` | `cargo.remove_unused_deps` | Unsafe | Removes dependencies reported as unused by sensors |
 | `MsrvNormalizeFixer` | `cargo.normalize_rust_version` | Guarded | Normalizes crate MSRV to workspace value |
 | `EditionUpgradeFixer` | `cargo.normalize_edition` | Guarded | Normalizes crate edition to workspace value |
+| `LicenseNormalizeFixer` | `cargo.normalize_license` | Guarded | Normalizes crate license metadata to workspace value |
 
 ## Key Types
 

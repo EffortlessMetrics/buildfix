@@ -348,6 +348,20 @@ foo = { path = "../foo" }
 }
 
 #[test]
+fn apply_op_to_content_sets_package_license() {
+    let contents = "[package]\nname = \"demo\"\n";
+    let kind = OpKind::TomlTransform {
+        rule_id: "set_package_license".to_string(),
+        args: Some(serde_json::json!({
+            "license": "MIT OR Apache-2.0"
+        })),
+    };
+
+    let out = apply_op_to_content(contents, &kind).expect("apply");
+    assert!(out.contains("license = \"MIT OR Apache-2.0\""));
+}
+
+#[test]
 fn apply_op_to_content_ensures_workspace_dependency_version() {
     let contents = r#"
 [workspace]
@@ -544,6 +558,70 @@ fn apply_op_to_content_use_workspace_dependency_preserves_fields() {
     assert!(out.contains("optional = true"));
     assert!(out.contains("default-features = false"));
     assert!(out.contains("features = [\"std\", \"derive\"]"));
+}
+
+#[test]
+fn apply_op_to_content_json_set_and_remove_paths() {
+    let input = r#"{
+  "tool": {
+    "name": "buildfix"
+  },
+  "items": [
+    {
+      "enabled": false
+    }
+  ]
+}
+"#;
+
+    let set_version = OpKind::JsonSet {
+        json_path: vec!["tool".to_string(), "version".to_string()],
+        value: serde_json::json!("1.0.0"),
+    };
+    let out = apply_op_to_content(input, &set_version).expect("json set version");
+    assert!(out.contains("\"version\": \"1.0.0\""));
+
+    let set_indexed = OpKind::JsonSet {
+        json_path: vec!["items".to_string(), "0".to_string(), "enabled".to_string()],
+        value: serde_json::json!(true),
+    };
+    let out = apply_op_to_content(&out, &set_indexed).expect("json set indexed");
+    assert!(out.contains("\"enabled\": true"));
+
+    let remove_name = OpKind::JsonRemove {
+        json_path: vec!["tool".to_string(), "name".to_string()],
+    };
+    let out = apply_op_to_content(&out, &remove_name).expect("json remove");
+    assert!(!out.contains("\"name\""));
+}
+
+#[test]
+fn apply_op_to_content_yaml_set_and_remove_paths() {
+    let input = r#"tool:
+  name: buildfix
+items:
+  - enabled: false
+"#;
+
+    let set_version = OpKind::YamlSet {
+        yaml_path: vec!["tool".to_string(), "version".to_string()],
+        value: serde_json::json!("1.0.0"),
+    };
+    let out = apply_op_to_content(input, &set_version).expect("yaml set version");
+    assert!(out.contains("version: 1.0.0"));
+
+    let set_indexed = OpKind::YamlSet {
+        yaml_path: vec!["items".to_string(), "0".to_string(), "enabled".to_string()],
+        value: serde_json::json!(true),
+    };
+    let out = apply_op_to_content(&out, &set_indexed).expect("yaml set indexed");
+    assert!(out.contains("enabled: true"));
+
+    let remove_name = OpKind::YamlRemove {
+        yaml_path: vec!["tool".to_string(), "name".to_string()],
+    };
+    let out = apply_op_to_content(&out, &remove_name).expect("yaml remove");
+    assert!(!out.contains("name: buildfix"));
 }
 
 #[test]

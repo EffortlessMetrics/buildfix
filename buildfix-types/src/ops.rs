@@ -37,6 +37,20 @@ pub enum OpKind {
     TomlRemove {
         toml_path: Vec<String>,
     },
+    JsonSet {
+        json_path: Vec<String>,
+        value: serde_json::Value,
+    },
+    JsonRemove {
+        json_path: Vec<String>,
+    },
+    YamlSet {
+        yaml_path: Vec<String>,
+        value: serde_json::Value,
+    },
+    YamlRemove {
+        yaml_path: Vec<String>,
+    },
     TomlTransform {
         rule_id: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]

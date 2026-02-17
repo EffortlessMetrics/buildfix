@@ -1,0 +1,28 @@
+{
+  "schema": "cargo-deny.report.v1",
+  "tool": {
+    "name": "cargo-deny",
+    "version": "0.18.5"
+  },
+  "verdict": {
+    "status": "fail",
+    "counts": {
+      "findings": 1,
+      "errors": 1,
+      "warnings": 0
+    }
+  },
+  "findings": [
+    {
+      "severity": "error",
+      "check_id": "licenses.unlicensed",
+      "code": "missing_license",
+      "message": "crate has no approved license metadata",
+      "location": {
+        "path": "crates/a/Cargo.toml",
+        "line": 5,
+        "column": 1
+      }
+    }
+  ]
+}

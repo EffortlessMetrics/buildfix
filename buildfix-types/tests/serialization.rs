@@ -233,6 +233,28 @@ fn opkind_serializes_remove_and_transform() {
         serde_json::json!(["[workspace]"])
     );
     assert_eq!(anchored_value["max_replacements"], serde_json::json!(1));
+
+    let json_set = OpKind::JsonSet {
+        json_path: vec!["tool".to_string(), "version".to_string()],
+        value: serde_json::json!("1.0.0"),
+    };
+    let json_set_value = serde_json::to_value(&json_set).expect("serialize json_set");
+    assert_eq!(json_set_value["type"], "json_set");
+    assert_eq!(
+        json_set_value["json_path"],
+        serde_json::json!(["tool", "version"])
+    );
+    assert_eq!(json_set_value["value"], serde_json::json!("1.0.0"));
+
+    let yaml_remove = OpKind::YamlRemove {
+        yaml_path: vec!["tool".to_string(), "name".to_string()],
+    };
+    let yaml_remove_value = serde_json::to_value(&yaml_remove).expect("serialize yaml_remove");
+    assert_eq!(yaml_remove_value["type"], "yaml_remove");
+    assert_eq!(
+        yaml_remove_value["yaml_path"],
+        serde_json::json!(["tool", "name"])
+    );
 }
 
 #[test]

@@ -169,6 +169,66 @@ Feature: Plan and apply
     Then the apply preconditions are not verified
 
   # ============================================================================
+  # License normalization (cargo-deny)
+  # ============================================================================
+
+  Scenario: License normalization requires guarded opt-in
+    Given a repo with missing crate license and workspace canonical license
+    And a cargo-deny receipt for missing crate license
+    When I run buildfix plan
+    Then the plan contains a license normalization fix
+    When I run buildfix apply with --apply expecting policy block
+    Then the crate-a Cargo.toml has no license field
+    When I run buildfix apply with --apply --allow-guarded
+    Then the crate-a Cargo.toml has license "MIT OR Apache-2.0"
+
+  Scenario: License normalization falls back to unsafe params when canonical is missing
+    Given a repo with missing crate license and no workspace canonical license
+    And a cargo-deny receipt for missing crate license
+    When I run buildfix plan expecting policy block
+    Then the license normalization op is blocked for missing params
+    When I run buildfix apply with --apply --allow-unsafe --param license "Apache-2.0"
+    Then the crate-a Cargo.toml has license "Apache-2.0"
+
+  # ============================================================================
+  # Auto-commit
+  # ============================================================================
+
+  Scenario: Auto-commit writes commit metadata after successful apply
+    Given a repo missing workspace resolver v2
+    And a builddiag receipt for resolver v2
+    And the repo is a clean git repo
+    When I run buildfix plan
+    And the repo is a clean git repo
+    And I record git HEAD
+    When I run buildfix apply with --apply --auto-commit and commit message "buildfix: apply plan"
+    Then the root Cargo.toml sets workspace resolver to "2"
+    And apply.json records a successful auto-commit
+    And apply.json auto-commit message is "buildfix: apply plan"
+    And git HEAD changed
+
+  Scenario: Auto-commit is blocked on dirty working tree
+    Given a repo missing workspace resolver v2
+    And a builddiag receipt for resolver v2
+    And the repo is a clean git repo
+    When I run buildfix plan
+    And I dirty the working tree
+    When I run buildfix apply with --apply --auto-commit expecting policy block
+    Then the apply results show auto-commit blocked by dirty tree
+
+  # ============================================================================
+  # Non-TOML op kinds
+  # ============================================================================
+
+  Scenario: Apply executes json yaml and anchored text operations
+    Given a repo with non-toml files
+    And a handcrafted plan with json yaml and anchored text ops
+    When I run buildfix apply with --apply
+    Then config.json has service enabled true and no legacy field
+    And config.yaml has service enabled true and no legacy field
+    And README.md contains anchored replacement "new line"
+
+  # ============================================================================
   # Multiple fixes and determinism
   # ============================================================================
 

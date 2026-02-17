@@ -16,10 +16,22 @@ pub struct BuildfixWorld {
     repo_root: Option<Utf8PathBuf>,
     explain_output: Option<String>,
     saved_plan_json: Option<String>,
+    saved_git_head: Option<String>,
 }
 
 fn repo_root(world: &BuildfixWorld) -> &Utf8PathBuf {
     world.repo_root.as_ref().expect("repo_root set")
+}
+
+fn git_head_of_repo(root: &Utf8PathBuf) -> String {
+    let output = StdCommand::new("git")
+        .arg("rev-parse")
+        .arg("HEAD")
+        .current_dir(root.as_str())
+        .output()
+        .expect("git rev-parse HEAD");
+    assert!(output.status.success(), "git rev-parse HEAD failed");
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
 }
 
 fn plan_ops(plan: &serde_json::Value) -> &Vec<serde_json::Value> {
@@ -701,6 +713,176 @@ async fn assert_crate_a_has_edition(world: &mut BuildfixWorld, expected: String)
     );
 }
 
+// ============================================================================
+// Scenario: License normalization
+// ============================================================================
+
+#[given("a repo with missing crate license and workspace canonical license")]
+async fn repo_with_missing_license_and_workspace_canonical(world: &mut BuildfixWorld) {
+    let td = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(td.path().to_path_buf()).unwrap();
+
+    fs::create_dir_all(root.join("crates").join("crate-a")).unwrap();
+
+    fs::write(
+        root.join("Cargo.toml"),
+        r#"
+[workspace]
+members = ["crates/crate-a"]
+resolver = "2"
+
+[workspace.package]
+license = "MIT OR Apache-2.0"
+"#,
+    )
+    .unwrap();
+
+    fs::write(
+        root.join("crates").join("crate-a").join("Cargo.toml"),
+        r#"
+[package]
+name = "crate-a"
+version = "0.1.0"
+edition = "2021"
+"#,
+    )
+    .unwrap();
+
+    world.temp = Some(td);
+    world.repo_root = Some(root);
+}
+
+#[given("a repo with missing crate license and no workspace canonical license")]
+async fn repo_with_missing_license_no_workspace_canonical(world: &mut BuildfixWorld) {
+    let td = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(td.path().to_path_buf()).unwrap();
+
+    fs::create_dir_all(root.join("crates").join("crate-a")).unwrap();
+
+    fs::write(
+        root.join("Cargo.toml"),
+        r#"
+[workspace]
+members = ["crates/crate-a"]
+resolver = "2"
+"#,
+    )
+    .unwrap();
+
+    fs::write(
+        root.join("crates").join("crate-a").join("Cargo.toml"),
+        r#"
+[package]
+name = "crate-a"
+version = "0.1.0"
+edition = "2021"
+"#,
+    )
+    .unwrap();
+
+    world.temp = Some(td);
+    world.repo_root = Some(root);
+}
+
+#[given("a cargo-deny receipt for missing crate license")]
+async fn cargo_deny_receipt_missing_license(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let artifacts = root.join("artifacts").join("cargo-deny");
+    fs::create_dir_all(&artifacts).unwrap();
+
+    let receipt = serde_json::json!({
+        "schema": "cargo-deny.report.v1",
+        "tool": { "name": "cargo-deny", "version": "0.0.0" },
+        "verdict": { "status": "fail", "counts": { "findings": 1, "errors": 1, "warnings": 0 } },
+        "findings": [{
+            "severity": "error",
+            "check_id": "licenses.unlicensed",
+            "code": "missing_license",
+            "message": "crate has no approved license metadata",
+            "location": { "path": "crates/crate-a/Cargo.toml", "line": 1, "column": 1 }
+        }]
+    });
+
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
+}
+
+#[then("the plan contains a license normalization fix")]
+async fn assert_plan_contains_license_fix(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    assert!(
+        plan_has_rule(&v, "set_package_license"),
+        "expected a license normalization op"
+    );
+}
+
+#[then("the license normalization op is blocked for missing params")]
+async fn assert_license_op_blocked_for_missing_params(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    let op = plan_ops(&v)
+        .iter()
+        .find(|op| {
+            op["kind"]["type"] == "toml_transform" && op["kind"]["rule_id"] == "set_package_license"
+        })
+        .expect("license normalization op");
+
+    assert_eq!(op["blocked"].as_bool(), Some(true));
+    assert_eq!(op["safety"].as_str(), Some("unsafe"));
+    let reason = op["blocked_reason"].as_str().unwrap_or("");
+    assert!(
+        reason.contains("missing params"),
+        "expected missing params reason, got: {}",
+        reason
+    );
+    let params = op["params_required"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    assert!(
+        params.iter().any(|v| v.as_str() == Some("license")),
+        "expected params_required to contain license"
+    );
+}
+
+#[then("the crate-a Cargo.toml has no license field")]
+async fn assert_crate_a_has_no_license_field(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let contents = fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml"))
+        .context("read crate-a Cargo.toml")
+        .unwrap();
+    assert!(
+        !contents.contains("license ="),
+        "expected no license field in crate-a Cargo.toml, got:\n{}",
+        contents
+    );
+}
+
+#[then(expr = "the crate-a Cargo.toml has license {string}")]
+async fn assert_crate_a_has_license(world: &mut BuildfixWorld, expected: String) {
+    let root = repo_root(world).clone();
+    let contents = fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml"))
+        .context("read crate-a Cargo.toml")
+        .unwrap();
+    let expected_line = format!("license = \"{}\"", expected);
+    assert!(
+        contents.contains(&expected_line),
+        "expected {}, got:\n{}",
+        expected_line,
+        contents
+    );
+}
+
 #[when("I run buildfix apply with --apply --allow-guarded")]
 async fn run_apply_allow_guarded(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
@@ -725,6 +907,34 @@ async fn run_apply_allow_unsafe(world: &mut BuildfixWorld) {
         .success();
 }
 
+#[when(expr = "I run buildfix apply with --apply --allow-unsafe --param license {string}")]
+async fn run_apply_allow_unsafe_with_license_param(world: &mut BuildfixWorld, license: String) {
+    let root = repo_root(world).clone();
+    let mut cmd = Command::cargo_bin("buildfix").expect("buildfix binary");
+    cmd.current_dir(root.as_str())
+        .arg("apply")
+        .arg("--apply")
+        .arg("--allow-unsafe")
+        .arg("--param")
+        .arg(format!("license={}", license))
+        .assert()
+        .success();
+}
+
+#[when(expr = "I run buildfix apply with --apply --auto-commit and commit message {string}")]
+async fn run_apply_auto_commit_with_message(world: &mut BuildfixWorld, message: String) {
+    let root = repo_root(world).clone();
+    let mut cmd = Command::cargo_bin("buildfix").expect("buildfix binary");
+    cmd.current_dir(root.as_str())
+        .arg("apply")
+        .arg("--apply")
+        .arg("--auto-commit")
+        .arg("--commit-message")
+        .arg(message)
+        .assert()
+        .success();
+}
+
 #[when("I run buildfix apply with --apply --allow-dirty")]
 async fn run_apply_allow_dirty(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
@@ -735,6 +945,18 @@ async fn run_apply_allow_dirty(world: &mut BuildfixWorld) {
         .arg("--allow-dirty")
         .assert()
         .success();
+}
+
+#[when("I run buildfix apply with --apply --auto-commit expecting policy block")]
+async fn run_apply_auto_commit_expect_policy_block(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let mut cmd = Command::cargo_bin("buildfix").expect("buildfix binary");
+    cmd.current_dir(root.as_str())
+        .arg("apply")
+        .arg("--apply")
+        .arg("--auto-commit")
+        .assert()
+        .code(2);
 }
 
 #[then(expr = "the crate-a Cargo.toml has rust-version {string}")]
@@ -1127,6 +1349,17 @@ async fn repo_is_clean_git_repo(world: &mut BuildfixWorld) {
     assert!(status.success(), "git commit failed");
 }
 
+#[when("the repo is a clean git repo")]
+async fn when_repo_is_clean_git_repo(world: &mut BuildfixWorld) {
+    repo_is_clean_git_repo(world).await;
+}
+
+#[when("I record git HEAD")]
+async fn record_git_head(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    world.saved_git_head = Some(git_head_of_repo(&root));
+}
+
 #[when("I dirty the working tree")]
 async fn dirty_working_tree(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
@@ -1186,6 +1419,26 @@ async fn assert_apply_preconditions_dirty_mismatch(world: &mut BuildfixWorld) {
     );
 }
 
+#[then("the apply results show auto-commit blocked by dirty tree")]
+async fn assert_apply_results_auto_commit_blocked_dirty(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let apply_path = root.join("artifacts").join("buildfix").join("apply.json");
+    let apply_str = fs::read_to_string(&apply_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&apply_str).unwrap();
+
+    let results = v["results"].as_array().cloned().unwrap_or_default();
+    assert!(!results.is_empty(), "expected apply results, got 0");
+    let found = results.iter().any(|r| {
+        r["status"].as_str() == Some("blocked")
+            && r["blocked_reason"].as_str() == Some("auto-commit requires clean git working tree")
+    });
+    assert!(
+        found,
+        "expected blocked result for dirty auto-commit, got {:?}",
+        results
+    );
+}
+
 #[then("the apply results show unsafe fix blocked by safety gate")]
 async fn assert_apply_results_unsafe_blocked(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
@@ -1211,9 +1464,243 @@ async fn assert_apply_results_unsafe_blocked(world: &mut BuildfixWorld) {
     );
 }
 
+#[then("apply.json records a successful auto-commit")]
+async fn assert_apply_json_records_successful_auto_commit(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let apply_path = root.join("artifacts").join("buildfix").join("apply.json");
+    let apply_str = fs::read_to_string(&apply_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&apply_str).unwrap();
+
+    let auto = &v["auto_commit"];
+    assert_eq!(auto["enabled"].as_bool(), Some(true));
+    assert_eq!(auto["attempted"].as_bool(), Some(true));
+    assert_eq!(auto["committed"].as_bool(), Some(true));
+
+    let sha = auto["commit_sha"].as_str().unwrap_or("");
+    assert!(
+        !sha.is_empty(),
+        "expected auto_commit.commit_sha to be non-empty, got {}",
+        auto
+    );
+}
+
+#[then(expr = "apply.json auto-commit message is {string}")]
+async fn assert_apply_json_auto_commit_message(world: &mut BuildfixWorld, expected: String) {
+    let root = repo_root(world).clone();
+    let apply_path = root.join("artifacts").join("buildfix").join("apply.json");
+    let apply_str = fs::read_to_string(&apply_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&apply_str).unwrap();
+
+    assert_eq!(
+        v["auto_commit"]["message"].as_str(),
+        Some(expected.as_str())
+    );
+}
+
+#[then("git HEAD changed")]
+async fn assert_git_head_changed(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let before = world
+        .saved_git_head
+        .as_ref()
+        .expect("saved git head before apply");
+    let after = git_head_of_repo(&root);
+    assert_ne!(before, &after, "expected git HEAD to change");
+}
+
 #[then("the plan command fails")]
 async fn assert_plan_fails(_world: &mut BuildfixWorld) {
     // The failure is asserted in the when step
+}
+
+// ============================================================================
+// Scenario: Apply executes json/yaml/text operations
+// ============================================================================
+
+#[given("a repo with non-toml files")]
+async fn repo_with_non_toml_files(world: &mut BuildfixWorld) {
+    let td = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(td.path().to_path_buf()).unwrap();
+
+    fs::write(
+        root.join("config.json"),
+        r#"{
+  "service": {
+    "enabled": false,
+    "legacy": true
+  }
+}
+"#,
+    )
+    .unwrap();
+
+    fs::write(
+        root.join("config.yaml"),
+        r#"service:
+  enabled: false
+  legacy: true
+"#,
+    )
+    .unwrap();
+
+    fs::write(
+        root.join("README.md"),
+        r#"alpha
+BEGIN
+old line
+END
+omega
+"#,
+    )
+    .unwrap();
+
+    world.temp = Some(td);
+    world.repo_root = Some(root);
+}
+
+#[given("a handcrafted plan with json yaml and anchored text ops")]
+async fn handcrafted_plan_with_non_toml_ops(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let out_dir = root.join("artifacts").join("buildfix");
+    fs::create_dir_all(&out_dir).unwrap();
+
+    let plan = serde_json::json!({
+        "schema": "buildfix.plan.v1",
+        "tool": { "name": "buildfix", "version": "0.0.0" },
+        "repo": { "root": root.to_string() },
+        "inputs": [],
+        "policy": {
+            "allow": [],
+            "deny": [],
+            "allow_guarded": false,
+            "allow_unsafe": false,
+            "allow_dirty": false
+        },
+        "preconditions": { "files": [] },
+        "ops": [
+            {
+                "id": "json-set",
+                "safety": "safe",
+                "blocked": false,
+                "target": { "path": "config.json" },
+                "kind": {
+                    "type": "json_set",
+                    "json_path": ["service", "enabled"],
+                    "value": true
+                },
+                "rationale": { "fix_key": "manual/json_set", "findings": [] }
+            },
+            {
+                "id": "json-remove",
+                "safety": "safe",
+                "blocked": false,
+                "target": { "path": "config.json" },
+                "kind": {
+                    "type": "json_remove",
+                    "json_path": ["service", "legacy"]
+                },
+                "rationale": { "fix_key": "manual/json_remove", "findings": [] }
+            },
+            {
+                "id": "yaml-set",
+                "safety": "safe",
+                "blocked": false,
+                "target": { "path": "config.yaml" },
+                "kind": {
+                    "type": "yaml_set",
+                    "yaml_path": ["service", "enabled"],
+                    "value": true
+                },
+                "rationale": { "fix_key": "manual/yaml_set", "findings": [] }
+            },
+            {
+                "id": "yaml-remove",
+                "safety": "safe",
+                "blocked": false,
+                "target": { "path": "config.yaml" },
+                "kind": {
+                    "type": "yaml_remove",
+                    "yaml_path": ["service", "legacy"]
+                },
+                "rationale": { "fix_key": "manual/yaml_remove", "findings": [] }
+            },
+            {
+                "id": "text-replace",
+                "safety": "safe",
+                "blocked": false,
+                "target": { "path": "README.md" },
+                "kind": {
+                    "type": "text_replace_anchored",
+                    "find": "old line",
+                    "replace": "new line",
+                    "anchor_before": ["BEGIN"],
+                    "anchor_after": ["END"],
+                    "max_replacements": 1
+                },
+                "rationale": { "fix_key": "manual/text_replace_anchored", "findings": [] }
+            }
+        ],
+        "summary": {
+            "ops_total": 5,
+            "ops_blocked": 0,
+            "files_touched": 3
+        }
+    });
+
+    fs::write(
+        out_dir.join("plan.json"),
+        serde_json::to_string_pretty(&plan).unwrap(),
+    )
+    .unwrap();
+}
+
+#[then("config.json has service enabled true and no legacy field")]
+async fn assert_config_json_state(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let json_str = fs::read_to_string(root.join("config.json")).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+
+    assert_eq!(v["service"]["enabled"], serde_json::json!(true));
+    assert!(
+        v["service"]["legacy"].is_null(),
+        "expected service.legacy to be removed, got {}",
+        v
+    );
+}
+
+#[then("config.yaml has service enabled true and no legacy field")]
+async fn assert_config_yaml_state(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let yaml = fs::read_to_string(root.join("config.yaml")).unwrap();
+
+    assert!(
+        yaml.contains("enabled: true"),
+        "expected YAML to include enabled: true, got:\n{}",
+        yaml
+    );
+    assert!(
+        !yaml.contains("legacy:"),
+        "expected YAML to remove legacy field, got:\n{}",
+        yaml
+    );
+}
+
+#[then(expr = "README.md contains anchored replacement {string}")]
+async fn assert_readme_contains_anchored_replacement(world: &mut BuildfixWorld, expected: String) {
+    let root = repo_root(world).clone();
+    let readme = fs::read_to_string(root.join("README.md")).unwrap();
+
+    assert!(
+        readme.contains(&expected),
+        "expected README to contain '{}', got:\n{}",
+        expected,
+        readme
+    );
+    assert!(
+        !readme.contains("old line"),
+        "expected README to no longer contain old line, got:\n{}",
+        readme
+    );
 }
 
 // ============================================================================

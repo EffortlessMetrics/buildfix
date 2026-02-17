@@ -11,7 +11,7 @@ buildfix-receipts   Tolerant receipt loader
        ↓
 buildfix-domain     Core planning logic (what to fix)
        ↓
-buildfix-edit       TOML editing engine (how to fix)
+buildfix-edit       Deterministic edit engine (how to fix)
        ↓
 buildfix-render     Markdown artifact rendering
        ↓
@@ -46,11 +46,14 @@ Core planning logic. Decides *what* should change based on receipts.
 - `PathDepVersionFixer` - Add version to path deps
 - `WorkspaceInheritanceFixer` - Use workspace = true
 - `DuplicateDepsConsolidationFixer` - Consolidate duplicate dep versions
+- `RemoveUnusedDepsFixer` - Remove sensor-reported unused deps
 - `MsrvNormalizeFixer` - Normalize MSRV
 - `EditionUpgradeFixer` - Normalize edition
+- `LicenseNormalizeFixer` - Normalize package.license from workspace
 
 ### buildfix-edit
-TOML editing engine using `toml_edit`. Decides *how* to modify files.
+Deterministic edit engine for TOML, anchored text replacements, and mechanical
+JSON/YAML path edits. Decides *how* to modify files.
 
 **Key functions:**
 - `attach_preconditions()` - Add SHA256 + git HEAD checks

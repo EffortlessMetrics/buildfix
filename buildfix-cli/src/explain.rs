@@ -432,6 +432,64 @@ Consider using cargo fix to automatically migrate code between editions."#,
             },
         ],
     },
+    // 8) License normalization
+    FixExplanation {
+        key: "license",
+        fix_id: "cargo.normalize_license",
+        title: "License Normalization",
+        safety: SafetyClass::Guarded,
+        description: r#"Normalizes per-crate `package.license` declarations to match the workspace
+canonical license.
+
+When cargo-deny reports missing or unlicensed crate manifests, this fix sets
+`package.license` on the affected crate's Cargo.toml using the workspace
+standard from the root manifest.
+
+Canonical license lookup order:
+1. [workspace.package].license in root Cargo.toml
+2. [package].license in root Cargo.toml"#,
+        safety_rationale: r#"This fix is classified as GUARDED because:
+- License metadata has legal/compliance impact
+- A wrong license string can violate distribution policy
+- Manual review is recommended before applying to all crates
+
+If no workspace canonical license exists, the fix becomes UNSAFE and requires
+`--param license=<expression>` to provide an explicit value."#,
+        remediation: r#"To manually apply this fix:
+
+1. Set the workspace canonical license in root Cargo.toml:
+    [workspace.package]
+    license = "MIT OR Apache-2.0"
+
+2. Set each affected crate:
+    [package]
+    license = "MIT OR Apache-2.0"
+
+If no canonical value is available and you still want buildfix to apply:
+    buildfix apply --apply --allow-unsafe --param license="MIT OR Apache-2.0""#,
+        triggers: &[
+            TriggerPattern {
+                sensor: "cargo-deny",
+                check_id: "licenses.unlicensed",
+                code: None,
+            },
+            TriggerPattern {
+                sensor: "cargo-deny",
+                check_id: "licenses.missing_license",
+                code: None,
+            },
+            TriggerPattern {
+                sensor: "deny",
+                check_id: "licenses.unlicensed",
+                code: None,
+            },
+            TriggerPattern {
+                sensor: "deny",
+                check_id: "licenses.missing_license",
+                code: None,
+            },
+        ],
+    },
 ];
 
 /// Look up a fix explanation by key or fix_id.
@@ -529,7 +587,7 @@ mod tests {
 
     #[test]
     fn test_all_fixes_registered() {
-        assert_eq!(FIX_REGISTRY.len(), 7);
+        assert_eq!(FIX_REGISTRY.len(), 8);
         assert!(lookup_fix("resolver-v2").is_some());
         assert!(lookup_fix("path-dep-version").is_some());
         assert!(lookup_fix("workspace-inheritance").is_some());
@@ -537,6 +595,7 @@ mod tests {
         assert!(lookup_fix("remove-unused-deps").is_some());
         assert!(lookup_fix("msrv").is_some());
         assert!(lookup_fix("edition").is_some());
+        assert!(lookup_fix("license").is_some());
     }
 
     #[test]
@@ -550,6 +609,7 @@ mod tests {
         assert!(keys.contains(&"remove-unused-deps"));
         assert!(keys.contains(&"msrv"));
         assert!(keys.contains(&"edition"));
+        assert!(keys.contains(&"license"));
     }
 
     #[test]
