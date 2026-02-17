@@ -344,7 +344,8 @@
           "enum": [
             "toml_set",
             "toml_remove",
-            "toml_transform"
+            "toml_transform",
+            "text_replace_anchored"
           ]
         },
         "toml_path": {
@@ -357,7 +358,29 @@
         "rule_id": {
           "type": "string"
         },
-        "args": {}
+        "args": {},
+        "find": {
+          "type": "string"
+        },
+        "replace": {
+          "type": "string"
+        },
+        "anchor_before": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "anchor_after": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "max_replacements": {
+          "type": "integer",
+          "minimum": 1
+        }
       },
       "allOf": [
         {
@@ -400,6 +423,21 @@
           "then": {
             "required": [
               "rule_id"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "text_replace_anchored"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "find",
+              "replace"
             ]
           }
         }

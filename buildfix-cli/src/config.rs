@@ -23,6 +23,9 @@ pub struct BuildfixConfig {
     /// Backup settings.
     pub backups: BackupsConfig,
 
+    /// Auto-commit settings.
+    pub commit: CommitConfig,
+
     /// Parameters for unsafe fixes.
     pub params: HashMap<String, String>,
 }
@@ -75,6 +78,17 @@ impl Default for BackupsConfig {
             suffix: ".buildfix.bak".to_string(),
         }
     }
+}
+
+/// Auto-commit section of the config.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct CommitConfig {
+    /// Whether to auto-commit after successful apply.
+    pub enabled: bool,
+
+    /// Optional commit message override.
+    pub message: Option<String>,
 }
 
 /// Discover the buildfix.toml config file.
@@ -150,6 +164,12 @@ pub struct MergedConfig {
     /// Backup settings.
     pub backups: BackupsConfig,
 
+    /// Auto-commit setting for apply.
+    pub auto_commit: bool,
+
+    /// Optional auto-commit message override.
+    pub commit_message: Option<String>,
+
     /// Parameters for unsafe fixes.
     pub params: HashMap<String, String>,
 }
@@ -207,6 +227,8 @@ impl ConfigMerger {
             max_files: self.config.policy.max_files,
             max_patch_bytes: self.config.policy.max_patch_bytes,
             backups: self.config.backups.clone(),
+            auto_commit: self.config.commit.enabled,
+            commit_message: self.config.commit.message.clone(),
             params,
         }
     }
@@ -218,11 +240,17 @@ impl ConfigMerger {
         self,
         cli_allow_guarded: bool,
         cli_allow_unsafe: bool,
+        cli_auto_commit: bool,
+        cli_commit_message: Option<&str>,
         cli_params: &HashMap<String, String>,
     ) -> MergedConfig {
         // CLI flags override config when set to true
         let allow_guarded = cli_allow_guarded || self.config.policy.allow_guarded;
         let allow_unsafe = cli_allow_unsafe || self.config.policy.allow_unsafe;
+        let auto_commit = cli_auto_commit || self.config.commit.enabled;
+        let commit_message = cli_commit_message
+            .map(|s| s.to_string())
+            .or_else(|| self.config.commit.message.clone());
 
         let mut params = self.config.params.clone();
         for (k, v) in cli_params {
@@ -240,6 +268,8 @@ impl ConfigMerger {
             max_files: self.config.policy.max_files,
             max_patch_bytes: self.config.policy.max_patch_bytes,
             backups: self.config.backups.clone(),
+            auto_commit,
+            commit_message,
             params,
         }
     }
@@ -303,6 +333,7 @@ suffix = ".buildfix.bak"
         assert_eq!(config.policy.max_patch_bytes, Some(250000));
         assert!(config.backups.enabled);
         assert_eq!(config.backups.suffix, ".buildfix.bak");
+        assert!(!config.commit.enabled);
     }
 
     #[test]
@@ -327,6 +358,7 @@ allow = ["some/pattern/*"]
         let config = parse_config(contents).unwrap();
         assert!(config.policy.allow.is_empty());
         assert!(config.policy.deny.is_empty());
+        assert!(!config.commit.enabled);
     }
 
     #[test]
@@ -378,7 +410,8 @@ allow = ["some/pattern/*"]
             ..Default::default()
         };
 
-        let merged = ConfigMerger::new(config).merge_apply_args(true, true, &HashMap::new());
+        let merged =
+            ConfigMerger::new(config).merge_apply_args(true, true, false, None, &HashMap::new());
 
         assert!(merged.allow_guarded);
         assert!(merged.allow_unsafe);
@@ -396,11 +429,26 @@ allow = ["some/pattern/*"]
         };
 
         // CLI flags are false, but config has true
-        let merged = ConfigMerger::new(config).merge_apply_args(false, false, &HashMap::new());
+        let merged =
+            ConfigMerger::new(config).merge_apply_args(false, false, false, None, &HashMap::new());
 
         // Config values should be used
         assert!(merged.allow_guarded);
         assert!(merged.allow_unsafe);
+    }
+
+    #[test]
+    fn test_merge_apply_args_auto_commit_cli_and_message() {
+        let config = BuildfixConfig::default();
+        let merged = ConfigMerger::new(config).merge_apply_args(
+            false,
+            false,
+            true,
+            Some("buildfix: custom"),
+            &HashMap::new(),
+        );
+        assert!(merged.auto_commit);
+        assert_eq!(merged.commit_message.as_deref(), Some("buildfix: custom"));
     }
 
     #[test]

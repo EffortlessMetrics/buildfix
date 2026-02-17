@@ -92,6 +92,7 @@ fn apply_wire_requires_tool_version() {
         preconditions: ApplyPreconditions::default(),
         results: vec![],
         summary: ApplySummary::default(),
+        auto_commit: None,
         errors: vec![],
     };
 
@@ -129,6 +130,7 @@ fn apply_wire_roundtrip_preserves_tool_version() {
         preconditions: ApplyPreconditions::default(),
         results: vec![],
         summary: ApplySummary::default(),
+        auto_commit: None,
         errors: vec![],
     };
 

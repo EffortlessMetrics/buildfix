@@ -348,6 +348,65 @@ foo = { path = "../foo" }
 }
 
 #[test]
+fn apply_op_to_content_ensures_workspace_dependency_version() {
+    let contents = r#"
+[workspace]
+members = ["crates/a"]
+
+[workspace.dependencies]
+serde = "1.0.0"
+"#;
+
+    let kind = OpKind::TomlTransform {
+        rule_id: "ensure_workspace_dependency_version".to_string(),
+        args: Some(serde_json::json!({
+            "dep": "serde",
+            "version": "1.0.1"
+        })),
+    };
+
+    let out = apply_op_to_content(contents, &kind).expect("apply");
+    assert!(out.contains("serde = \"1.0.1\""));
+}
+
+#[test]
+fn apply_op_to_content_ensures_workspace_dependency_version_skips_path_or_git_entries() {
+    let contents = r#"
+[workspace]
+members = ["crates/a"]
+
+[workspace.dependencies]
+local = { path = "../local", version = "0.1.0" }
+remote = { git = "https://example.invalid/repo.git", version = "0.2.0" }
+"#;
+
+    let kind = OpKind::TomlTransform {
+        rule_id: "ensure_workspace_dependency_version".to_string(),
+        args: Some(serde_json::json!({
+            "dep": "local",
+            "version": "9.9.9"
+        })),
+    };
+
+    let out = apply_op_to_content(contents, &kind).expect("apply");
+    assert!(out.contains("local = { path = \"../local\", version = \"0.1.0\" }"));
+
+    let kind = OpKind::TomlTransform {
+        rule_id: "ensure_workspace_dependency_version".to_string(),
+        args: Some(serde_json::json!({
+            "dep": "remote",
+            "version": "9.9.9"
+        })),
+    };
+    let out = apply_op_to_content(&out, &kind).expect("apply");
+    assert!(
+        out.contains(
+            "remote = { git = \"https://example.invalid/repo.git\", version = \"0.2.0\" }"
+        )
+    );
+}
+
+#[test]
 fn check_policy_block_classifies_cases() {
     let mut apply = BuildfixApply::new(
         tool_info(),
@@ -745,4 +804,50 @@ fn apply_op_to_content_errors_for_short_toml_paths() {
     };
     let err = apply_op_to_content("", &kind_target_short).expect_err("short target path");
     assert!(err.to_string().contains("dependency not found"));
+}
+
+#[test]
+fn apply_op_to_content_text_replace_anchored_replaces_with_context() {
+    let input = "[workspace]\nresolver = \"1\"\nmembers = [\"crates/a\"]\n";
+    let kind = OpKind::TextReplaceAnchored {
+        find: "resolver = \"1\"".to_string(),
+        replace: "resolver = \"2\"".to_string(),
+        anchor_before: vec!["[workspace]".to_string()],
+        anchor_after: vec!["members = [\"crates/a\"]".to_string()],
+        max_replacements: Some(1),
+    };
+
+    let out = apply_op_to_content(input, &kind).expect("apply anchored replace");
+    assert!(out.contains("resolver = \"2\""));
+    assert!(!out.contains("resolver = \"1\""));
+}
+
+#[test]
+fn apply_op_to_content_text_replace_anchored_respects_max_replacements() {
+    let input = "line = \"1\"\nline = \"1\"\n";
+    let kind = OpKind::TextReplaceAnchored {
+        find: "line = \"1\"".to_string(),
+        replace: "line = \"2\"".to_string(),
+        anchor_before: vec![],
+        anchor_after: vec![],
+        max_replacements: Some(1),
+    };
+
+    let err = apply_op_to_content(input, &kind).expect_err("max replacements exceeded");
+    assert!(err.to_string().contains("max_replacements"));
+}
+
+#[test]
+fn apply_op_to_content_text_replace_anchored_no_match_is_noop() {
+    let input = "resolver = \"1\"\n";
+    let kind = OpKind::TextReplaceAnchored {
+        find: "resolver = \"2\"".to_string(),
+        replace: "resolver = \"3\"".to_string(),
+        anchor_before: vec![],
+        anchor_after: vec![],
+        max_replacements: Some(1),
+    };
+
+    let out = apply_op_to_content(input, &kind).expect("no-op");
+    assert_eq!(out, input);
 }

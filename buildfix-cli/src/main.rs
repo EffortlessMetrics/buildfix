@@ -130,6 +130,14 @@ struct ApplyArgs {
     #[arg(long)]
     param: Vec<String>,
 
+    /// Auto-commit after successful apply (maintainer workflow).
+    #[arg(long, default_value_t = false)]
+    auto_commit: bool,
+
+    /// Custom commit message for --auto-commit.
+    #[arg(long)]
+    commit_message: Option<String>,
+
     /// Run mode. In cockpit mode, policy blocks (exit 2) are mapped to exit 0.
     #[arg(long, value_enum, default_value = "standalone")]
     mode: CliRunMode,
@@ -298,15 +306,29 @@ fn cmd_apply(args: ApplyArgs) -> anyhow::Result<ExitCode> {
     let merged = ConfigMerger::new(file_config).merge_apply_args(
         args.allow_guarded,
         args.allow_unsafe,
+        args.auto_commit,
+        args.commit_message.as_deref(),
         &cli_params,
     );
 
     let allow_dirty = args.allow_dirty || merged.allow_dirty;
     let mode: RunMode = args.mode.into();
 
+    if args.commit_message.is_some() && !merged.auto_commit {
+        anyhow::bail!(
+            "--commit-message requires auto-commit (set --auto-commit or [commit].enabled = true)"
+        );
+    }
+    if merged.auto_commit && !args.apply {
+        anyhow::bail!("--auto-commit requires --apply");
+    }
+    if merged.auto_commit && allow_dirty {
+        anyhow::bail!("--auto-commit requires a clean working tree (do not set --allow-dirty)");
+    }
+
     debug!(
-        "merged config: allow_guarded={}, allow_unsafe={}, allow_dirty={}",
-        merged.allow_guarded, merged.allow_unsafe, allow_dirty
+        "merged config: allow_guarded={}, allow_unsafe={}, allow_dirty={}, auto_commit={}",
+        merged.allow_guarded, merged.allow_unsafe, allow_dirty, merged.auto_commit
     );
 
     let settings = ApplySettings {
@@ -317,6 +339,8 @@ fn cmd_apply(args: ApplyArgs) -> anyhow::Result<ExitCode> {
         allow_unsafe: merged.allow_unsafe,
         allow_dirty,
         params: merged.params.clone(),
+        auto_commit: merged.auto_commit,
+        commit_message: merged.commit_message.clone(),
         backup_enabled: merged.backups.enabled,
         backup_suffix: merged.backups.suffix.clone(),
         mode,

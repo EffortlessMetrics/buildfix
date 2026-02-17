@@ -405,3 +405,13 @@ fn golden_msrv_normalize_guarded_allowed() {
 fn golden_multi_fix_with_deny() {
     run_fixture_test("multi_fix_with_deny");
 }
+
+#[test]
+fn golden_duplicate_dependency_consolidation() {
+    run_fixture_test("duplicate_dependency_consolidation");
+}
+
+#[test]
+fn golden_remove_unused_deps() {
+    run_fixture_test("remove_unused_deps");
+}

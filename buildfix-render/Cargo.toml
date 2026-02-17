@@ -1,14 +1,15 @@
 [package]
 name = "buildfix-render"
-version = "0.1.0"
+version = "0.2.0"
 publish = false
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
-description = "Markdown rendering for buildfix plan artifacts"
+description = "Markdown renderers for buildfix plan, apply, and comment artifacts"
 repository.workspace = true
 homepage.workspace = true
 readme = "README.md"
-keywords = ["cargo", "markdown", "render", "report"]
+keywords = ["cargo", "markdown", "reporting", "artifacts", "render"]
 categories = ["development-tools"]
 
 [dependencies]

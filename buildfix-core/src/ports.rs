@@ -12,6 +12,9 @@ pub trait ReceiptSource {
 pub trait GitPort {
     fn head_sha(&self, repo_root: &Utf8Path) -> anyhow::Result<Option<String>>;
     fn is_dirty(&self, repo_root: &Utf8Path) -> anyhow::Result<Option<bool>>;
+    fn commit_all(&self, _repo_root: &Utf8Path, _message: &str) -> anyhow::Result<Option<String>> {
+        Ok(None)
+    }
 }
 
 /// File-system write operations.

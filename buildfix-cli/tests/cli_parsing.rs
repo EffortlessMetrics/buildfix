@@ -370,6 +370,62 @@ fn test_apply_with_both_guarded_and_unsafe() {
 }
 
 #[test]
+fn test_apply_auto_commit_requires_apply_flag() {
+    let temp = create_temp_repo();
+
+    buildfix()
+        .current_dir(temp.path())
+        .arg("plan")
+        .assert()
+        .success();
+
+    buildfix()
+        .current_dir(temp.path())
+        .args(["apply", "--auto-commit"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("--auto-commit requires --apply"));
+}
+
+#[test]
+fn test_apply_commit_message_requires_auto_commit() {
+    let temp = create_temp_repo();
+
+    buildfix()
+        .current_dir(temp.path())
+        .arg("plan")
+        .assert()
+        .success();
+
+    buildfix()
+        .current_dir(temp.path())
+        .args(["apply", "--apply", "--commit-message", "buildfix: test"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains(
+            "--commit-message requires auto-commit",
+        ));
+}
+
+#[test]
+fn test_apply_auto_commit_disallows_allow_dirty() {
+    let temp = create_temp_repo();
+
+    buildfix()
+        .current_dir(temp.path())
+        .arg("plan")
+        .assert()
+        .success();
+
+    buildfix()
+        .current_dir(temp.path())
+        .args(["apply", "--apply", "--auto-commit", "--allow-dirty"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("requires a clean working tree"));
+}
+
+#[test]
 fn test_validate_with_no_artifacts() {
     let temp = create_temp_repo();
 

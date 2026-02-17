@@ -9,6 +9,8 @@ Complete reference of all buildfix fixes, their triggers, safety classes, and be
 | [Workspace Resolver V2](#workspace-resolver-v2) | `resolver-v2` | Safe | Set resolver = "2" |
 | [Path Dependency Version](#path-dependency-version) | `path-dep-version` | Safe | Add version to path deps |
 | [Workspace Inheritance](#workspace-dependency-inheritance) | `workspace-inheritance` | Safe | Use workspace = true |
+| [Duplicate Dependency Consolidation](#duplicate-dependency-consolidation) | `duplicate-deps` | Safe | Consolidate duplicate versions into workspace.dependencies |
+| [Unused Dependency Removal](#unused-dependency-removal) | `remove-unused-deps` | Unsafe | Remove sensor-reported unused dependencies |
 | [MSRV Normalization](#msrv-normalization) | `msrv` | Guarded | Normalize rust-version |
 | [Edition Normalization](#edition-normalization) | `edition` | Guarded | Normalize edition |
 
@@ -154,6 +156,125 @@ The fix preserves these per-crate overrides:
 ```
 depguard/deps.workspace_inheritance/*
 depguard/cargo.workspace_inheritance/*
+```
+
+---
+
+## Duplicate Dependency Consolidation
+
+**Key**: `duplicate-deps`
+**Fix ID**: `cargo.consolidate_duplicate_deps`
+**Safety**: Safe
+
+### Description
+
+Consolidates duplicate dependency versions across workspace members into
+`[workspace.dependencies]`.
+
+When depguard reports the same dependency at multiple versions, this fix:
+- Ensures the selected canonical version exists at workspace scope
+- Rewrites reported member dependency entries to `{ workspace = true }`
+- Preserves per-crate override keys (`features`, `optional`, `default-features`, `package`)
+
+### Triggering Findings
+
+| Sensor | Check ID | Code |
+|--------|----------|------|
+| depguard | deps.duplicate_dependency_versions | * |
+| depguard | cargo.duplicate_dependency_versions | * |
+| depguard | deps.duplicate_versions | * |
+| depguard | cargo.duplicate_versions | * |
+
+### Example Edit
+
+```diff
+ [workspace]
+ members = ["crates/a", "crates/b"]
+
++[workspace.dependencies]
++serde = "1.0.210"
+```
+
+```diff
+ [dependencies]
+-serde = "1.0.180"
++serde = { workspace = true }
+```
+
+### Preconditions
+
+- Receipt includes dependency name, selected version, and TOML path
+- Dependency entry is a registry dependency (not path/git)
+- Conflicting selected versions for the same dependency are not present
+
+### Policy Keys
+
+```
+depguard/deps.duplicate_dependency_versions/*
+depguard/cargo.duplicate_dependency_versions/*
+depguard/deps.duplicate_versions/*
+depguard/cargo.duplicate_versions/*
+```
+
+---
+
+## Unused Dependency Removal
+
+**Key**: `remove-unused-deps`
+**Fix ID**: `cargo.remove_unused_deps`
+**Safety**: Unsafe
+
+### Description
+
+Removes dependency entries in Cargo.toml that sensors report as unused.
+
+This fix consumes sensor-provided TOML locations and emits `toml_remove` operations.
+It only removes reported dependency keys (for example `dependencies.serde`).
+
+### Triggering Findings
+
+| Sensor | Check ID | Code |
+|--------|----------|------|
+| cargo-udeps | deps.unused_dependency | * |
+| udeps | deps.unused_dependency | * |
+| cargo-machete | deps.unused_dependency | * |
+| machete | deps.unused_dependency | * |
+
+### Example Edit
+
+```diff
+ [dependencies]
+-serde = "1.0"
+```
+
+### Why Unsafe?
+
+This fix is classified as **Unsafe** because dependency usage can be subtle:
+
+- Feature-gated or platform-specific code may still require the dependency
+- Build scripts and optional runtime paths may not be visible to the sensor run
+- Removing a dependency can change behavior outside the scanned configuration
+
+Manual confirmation is required before apply.
+
+### Apply Command
+
+```bash
+buildfix apply --apply --allow-unsafe
+```
+
+### Preconditions
+
+- Receipt includes a valid dependency TOML path (`dependencies`, `dev-dependencies`, `build-dependencies`, or target-specific equivalent)
+- Target dependency entry exists in the manifest at apply time
+
+### Policy Keys
+
+```
+cargo-udeps/deps.unused_dependency/*
+udeps/deps.unused_dependency/*
+cargo-machete/deps.unused_dependency/*
+machete/deps.unused_dependency/*
 ```
 
 ---

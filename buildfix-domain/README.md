@@ -1,49 +1,40 @@
 # buildfix-domain
 
-Core planning logic for buildfix. This crate decides *what* should change based on sensor receipts.
+Deterministic planning logic for buildfix.
 
-## Architecture
+This crate decides **what** should change from receipts plus repository state. It does not write files.
 
-Follows hexagonal architecture: domain logic is isolated from I/O via the `RepoView` trait.
+## Core concepts
 
-### RepoView Port
-```rust
-trait RepoView {
-    fn root(&self) -> &Path;
-    fn read_to_string(&self, path: &Path) -> io::Result<String>;
-    fn exists(&self, path: &Path) -> bool;
-}
-```
+- `Planner`: orchestrates fixers and builds `BuildfixPlan`
+- `PlanContext`: repo/artifact paths + planner policy
+- `PlannerConfig`: allow/deny rules, safety gates, and operation caps
+- `RepoView`: filesystem abstraction for domain logic
+- `ReceiptSet`: indexed lookup over loaded receipts
 
-### Fixer Trait
-```rust
-trait Fixer {
-    fn meta(&self) -> FixerMeta;
-    fn plan(&self, ctx: &PlanContext, repo: &dyn RepoView, receipts: &ReceiptSet) -> Vec<PlanOp>;
-}
-```
+## Built-in fixers
 
-## Built-in Fixers
+- `cargo.workspace_resolver_v2`
+- `cargo.path_dep_add_version`
+- `cargo.use_workspace_dependency`
+- `cargo.consolidate_duplicate_deps`
+- `cargo.remove_unused_deps`
+- `cargo.normalize_rust_version`
+- `cargo.normalize_edition`
 
-| Fixer | Fix Key | Safety | Description |
-|-------|---------|--------|-------------|
-| `ResolverV2Fixer` | `cargo.workspace_resolver_v2` | Safe | Sets workspace resolver = "2" |
-| `PathDepVersionFixer` | `cargo.path_dep_add_version` | Safe | Adds version to path deps |
-| `WorkspaceInheritanceFixer` | `cargo.use_workspace_dependency` | Safe | Converts to workspace = true |
-| `MsrvNormalizeFixer` | `cargo.normalize_rust_version` | Guarded | Normalizes MSRV to workspace |
+Use `builtin_fixer_metas()` for stable metadata used by docs/listing surfaces.
 
-## Key Types
+## Determinism guarantees
 
-- `Planner` - Orchestrates all fixers to produce a `BuildfixPlan`
-- `PlanContext` - Contains repo_root, artifacts_dir, and config
-- `PlannerConfig` - Allow/deny lists, policy caps, params
-- `ReceiptSet` - Helper for accessing receipts by tool/check_id
-- `FsRepoView` - Filesystem implementation of `RepoView`
+- Stable fixer ordering
+- Stable operation sorting
+- Deterministic IDs
+- Normalized path handling (repo-relative, forward slashes)
 
-## Determinism
+## Boundaries
 
-- Ops sorted by a stable op sort key (manifest path + rule id + args)
-- Deterministic UUIDs via `Uuid::new_v5` hashing
-- All collections sorted for byte-stable output
+- No direct markdown rendering
+- No direct file mutation
+- No CLI concerns
 
-This crate is part of the [buildfix](https://github.com/EffortlessMetrics/buildfix) workspace.
+This crate is internal to the workspace (`publish = false`).

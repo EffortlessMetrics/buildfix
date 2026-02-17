@@ -16,9 +16,13 @@ exclude = ["fuzz"]
 [workspace.package]
 edition = "2024"
 license = "MIT OR Apache-2.0"
+description = "Receipt-driven planner and applicator for Cargo workspace hygiene."
 repository = "https://github.com/EffortlessMetrics/buildfix"
 homepage = "https://github.com/EffortlessMetrics/buildfix"
+keywords = ["cargo", "workspace", "repair", "toml", "automation"]
+categories = ["development-tools"]
 rust-version = "1.92"
+readme = "README.md"
 
 [workspace.dependencies]
 anyhow = "1.0.101"

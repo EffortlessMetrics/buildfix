@@ -1,9 +1,16 @@
 [package]
 name = "buildfix-bdd"
-version = "0.1.0"
+version = "0.2.0"
 publish = false
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+description = "Cucumber acceptance suite for buildfix plan/apply workflows"
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["bdd", "cucumber", "cargo", "acceptance", "workflow"]
+categories = ["development-tools"]
 
 [[test]]
 name = "cucumber"

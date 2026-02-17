@@ -647,6 +647,22 @@ pub fn apply_op_to_content(contents: &str, kind: &OpKind) -> anyhow::Result<Stri
         OpKind::TomlRemove { toml_path } => {
             remove_toml_path(&mut doc, toml_path);
         }
+        OpKind::TextReplaceAnchored {
+            find,
+            replace,
+            anchor_before,
+            anchor_after,
+            max_replacements,
+        } => {
+            return apply_text_replace_anchored(
+                contents,
+                find,
+                replace,
+                anchor_before,
+                anchor_after,
+                *max_replacements,
+            );
+        }
         OpKind::TomlTransform { rule_id, args } => match rule_id.as_str() {
             "ensure_workspace_resolver_v2" => {
                 doc["workspace"]["resolver"] = value("2");
@@ -715,6 +731,33 @@ pub fn apply_op_to_content(contents: &str, kind: &OpKind) -> anyhow::Result<Stri
                     }
                 }
             }
+            "ensure_workspace_dependency_version" => {
+                let args = args.as_ref().context("missing args")?;
+                let dep = args
+                    .get("dep")
+                    .and_then(|v| v.as_str())
+                    .context("missing dep")?;
+                let version = args
+                    .get("version")
+                    .and_then(|v| v.as_str())
+                    .context("missing version")?;
+
+                let ws_deps = &mut doc["workspace"]["dependencies"][dep];
+                if ws_deps.is_none() {
+                    *ws_deps = value(version);
+                } else if let Some(existing_inline) = ws_deps.as_inline_table_mut() {
+                    if existing_inline.get("path").is_none() && existing_inline.get("git").is_none()
+                    {
+                        existing_inline.insert("version", str_value(version));
+                    }
+                } else if let Some(existing_tbl) = ws_deps.as_table_mut() {
+                    if existing_tbl.get("path").is_none() && existing_tbl.get("git").is_none() {
+                        existing_tbl["version"] = value(version);
+                    }
+                } else if ws_deps.is_value() {
+                    *ws_deps = value(version);
+                }
+            }
             "use_workspace_dependency" => {
                 let args = args.as_ref().context("missing args")?;
                 let toml_path = args
@@ -746,7 +789,7 @@ pub fn apply_op_to_content(contents: &str, kind: &OpKind) -> anyhow::Result<Stri
                                 arr.push(s);
                             }
                         }
-                        inline.insert("features", value(arr).as_value().unwrap().clone());
+                        inline.insert("features", toml_edit::Value::from(arr));
                     }
                 }
 
@@ -809,13 +852,16 @@ fn set_toml_path(doc: &mut DocumentMut, toml_path: &[String], value: serde_json:
     }
     let mut current = doc.as_table_mut();
     for key in &toml_path[..toml_path.len() - 1] {
-        current = current
-            .entry(key)
-            .or_insert(toml_edit::table())
-            .as_table_mut()
-            .unwrap();
+        let entry = current.entry(key).or_insert(toml_edit::table());
+        if entry.as_table().is_none() {
+            *entry = toml_edit::table();
+        }
+        let Some(table) = entry.as_table_mut() else {
+            return;
+        };
+        current = table;
     }
-    let last = toml_path.last().unwrap();
+    let last = &toml_path[toml_path.len() - 1];
     current[last] = Item::Value(json_value_to_toml(value));
 }
 
@@ -830,8 +876,97 @@ fn remove_toml_path(doc: &mut DocumentMut, toml_path: &[String]) {
         };
         current = tbl;
     }
-    let last = toml_path.last().unwrap();
+    let last = &toml_path[toml_path.len() - 1];
     current.remove(last);
+}
+
+fn apply_text_replace_anchored(
+    contents: &str,
+    find: &str,
+    replace: &str,
+    anchor_before: &[String],
+    anchor_after: &[String],
+    max_replacements: Option<u64>,
+) -> anyhow::Result<String> {
+    let limit = max_replacements.unwrap_or(1);
+    if limit == 0 {
+        anyhow::bail!("max_replacements must be >= 1");
+    }
+
+    let has_crlf = contents.contains("\r\n");
+    let mut lines: Vec<String> = contents.lines().map(|l| l.to_string()).collect();
+    let trailing_newline = contents.ends_with('\n');
+
+    let mut matches = Vec::new();
+
+    for idx in 0..lines.len() {
+        if lines[idx] != find {
+            continue;
+        }
+
+        if !before_context_matches(&lines, idx, anchor_before) {
+            continue;
+        }
+        if !after_context_matches(&lines, idx, anchor_after) {
+            continue;
+        }
+
+        matches.push(idx);
+    }
+
+    if matches.is_empty() {
+        return Ok(contents.to_string());
+    }
+
+    if matches.len() as u64 > limit {
+        anyhow::bail!(
+            "anchored replace matched {} lines, exceeding max_replacements {}",
+            matches.len(),
+            limit
+        );
+    }
+
+    for idx in matches {
+        lines[idx] = replace.to_string();
+    }
+
+    let line_ending = if has_crlf { "\r\n" } else { "\n" };
+    let mut out = lines.join(line_ending);
+    if trailing_newline {
+        out.push_str(line_ending);
+    }
+
+    Ok(out)
+}
+
+fn before_context_matches(lines: &[String], idx: usize, anchors: &[String]) -> bool {
+    if anchors.is_empty() {
+        return true;
+    }
+    if idx < anchors.len() {
+        return false;
+    }
+
+    let start = idx - anchors.len();
+    anchors
+        .iter()
+        .enumerate()
+        .all(|(offset, anchor)| lines[start + offset] == *anchor)
+}
+
+fn after_context_matches(lines: &[String], idx: usize, anchors: &[String]) -> bool {
+    if anchors.is_empty() {
+        return true;
+    }
+    let start = idx + 1;
+    if start + anchors.len() > lines.len() {
+        return false;
+    }
+
+    anchors
+        .iter()
+        .enumerate()
+        .all(|(offset, anchor)| lines[start + offset] == *anchor)
 }
 
 fn json_value_to_toml(json: serde_json::Value) -> toml_edit::Value {
@@ -840,11 +975,11 @@ fn json_value_to_toml(json: serde_json::Value) -> toml_edit::Value {
         serde_json::Value::Bool(b) => bool_value(b),
         serde_json::Value::Number(n) => {
             if let Some(i) = n.as_i64() {
-                value(i).as_value().unwrap().clone()
+                toml_edit::Value::from(i)
             } else if let Some(f) = n.as_f64() {
-                value(f).as_value().unwrap().clone()
+                toml_edit::Value::from(f)
             } else {
-                value(n.to_string()).as_value().unwrap().clone()
+                toml_edit::Value::from(n.to_string())
             }
         }
         serde_json::Value::Array(arr) => {
@@ -863,18 +998,18 @@ fn json_value_to_toml(json: serde_json::Value) -> toml_edit::Value {
                     _ => {}
                 }
             }
-            value(out).as_value().unwrap().clone()
+            toml_edit::Value::from(out)
         }
-        _ => value("").as_value().unwrap().clone(),
+        _ => toml_edit::Value::from(""),
     }
 }
 
 fn str_value(s: &str) -> toml_edit::Value {
-    value(s).as_value().unwrap().clone()
+    toml_edit::Value::from(s)
 }
 
 fn bool_value(b: bool) -> toml_edit::Value {
-    value(b).as_value().unwrap().clone()
+    toml_edit::Value::from(b)
 }
 
 fn get_dep_item_mut<'a>(doc: &'a mut DocumentMut, toml_path: &[String]) -> Option<&'a mut Item> {

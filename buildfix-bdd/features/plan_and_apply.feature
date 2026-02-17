@@ -129,6 +129,16 @@ Feature: Plan and apply
     When I run buildfix plan expecting policy block
     Then the path dependency version op is blocked for missing params
 
+  Scenario: Unused dependency removal requires unsafe opt-in
+    Given a repo with an unused dependency
+    And a cargo-machete receipt for unused dependency
+    When I run buildfix plan
+    Then the plan contains an unused dependency removal fix
+    When I run buildfix apply with --apply expecting policy block
+    Then the crate-a Cargo.toml still has dependency "serde"
+    When I run buildfix apply with --apply --allow-unsafe
+    Then the crate-a Cargo.toml no longer contains dependency "serde"
+
   Scenario: Unsafe fix requires --allow-unsafe even with params
     Given a repo with a path dependency missing version and no target version
     And a depguard receipt for missing path dependency version

@@ -345,6 +345,12 @@ pub struct ReceiptSet {
 }
 
 #[derive(Debug, Clone)]
+pub struct MatchedFinding {
+    pub finding: FindingRef,
+    pub data: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone)]
 pub struct ReceiptRecord {
     #[allow(dead_code)] // Useful for debugging/future use
     pub sensor_id: String,
@@ -374,6 +380,18 @@ impl ReceiptSet {
         check_ids: &[&str],
         codes: &[&str],
     ) -> Vec<FindingRef> {
+        self.matching_findings_with_data(tool_prefixes, check_ids, codes)
+            .into_iter()
+            .map(|m| m.finding)
+            .collect()
+    }
+
+    pub fn matching_findings_with_data(
+        &self,
+        tool_prefixes: &[&str],
+        check_ids: &[&str],
+        codes: &[&str],
+    ) -> Vec<MatchedFinding> {
         let mut out = Vec::new();
 
         for r in &self.receipts {
@@ -405,18 +423,21 @@ impl ReceiptSet {
                     continue;
                 }
 
-                out.push(FindingRef {
-                    source: tool.to_string(),
-                    check_id: f.check_id.clone(),
-                    code: f.code.clone().unwrap_or_else(|| "-".to_string()),
-                    path: f.location.as_ref().map(|loc| loc.path.to_string()),
-                    line: f.location.as_ref().and_then(|loc| loc.line),
-                    fingerprint: f.fingerprint.clone(),
+                out.push(MatchedFinding {
+                    finding: FindingRef {
+                        source: tool.to_string(),
+                        check_id: f.check_id.clone(),
+                        code: f.code.clone().unwrap_or_else(|| "-".to_string()),
+                        path: f.location.as_ref().map(|loc| loc.path.to_string()),
+                        line: f.location.as_ref().and_then(|loc| loc.line),
+                        fingerprint: f.fingerprint.clone(),
+                    },
+                    data: f.data.clone(),
                 });
             }
         }
 
-        out.sort_by_key(stable_finding_key);
+        out.sort_by_key(|m| stable_finding_key(&m.finding));
         out
     }
 }
@@ -449,6 +470,22 @@ fn op_sort_key(op: &PlanOp) -> String {
         }
         OpKind::TomlSet { toml_path, .. } => format!("set|{}", toml_path.join(".")),
         OpKind::TomlRemove { toml_path } => format!("remove|{}", toml_path.join(".")),
+        OpKind::TextReplaceAnchored {
+            find,
+            replace,
+            anchor_before,
+            anchor_after,
+            max_replacements,
+        } => format!(
+            "text_replace_anchored|{}|{}|{}|{}|{}",
+            find,
+            replace,
+            anchor_before.join("\x1f"),
+            anchor_after.join("\x1f"),
+            max_replacements
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| "none".to_string())
+        ),
     }
 }
 
@@ -463,17 +500,30 @@ fn deterministic_op_id(op: &PlanOp) -> Uuid {
         OpKind::TomlTransform { rule_id, .. } => rule_id.as_str(),
         OpKind::TomlSet { .. } => "toml_set",
         OpKind::TomlRemove { .. } => "toml_remove",
+        OpKind::TextReplaceAnchored { .. } => "text_replace_anchored",
+    };
+
+    let kind_fingerprint = match &op.kind {
+        OpKind::TomlTransform { args, .. } => args_fingerprint(args),
+        OpKind::TextReplaceAnchored {
+            find,
+            replace,
+            anchor_before,
+            anchor_after,
+            max_replacements,
+        } => args_fingerprint(&Some(serde_json::json!({
+            "find": find,
+            "replace": replace,
+            "anchor_before": anchor_before,
+            "anchor_after": anchor_after,
+            "max_replacements": max_replacements,
+        }))),
+        _ => args_fingerprint(&None),
     };
 
     let stable_key = format!(
         "{}|{}|{}|{}",
-        op.rationale.fix_key,
-        op.target.path,
-        rule_id,
-        args_fingerprint(match &op.kind {
-            OpKind::TomlTransform { args, .. } => args,
-            _ => &None,
-        })
+        op.rationale.fix_key, op.target.path, rule_id, kind_fingerprint
     );
     Uuid::new_v5(&NAMESPACE, stable_key.as_bytes())
 }

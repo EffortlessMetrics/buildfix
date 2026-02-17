@@ -178,7 +178,7 @@ dependencies = [
 
 [[package]]
 name = "buildfix"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -201,7 +201,7 @@ dependencies = [
 
 [[package]]
 name = "buildfix-bdd"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -216,7 +216,7 @@ dependencies = [
 
 [[package]]
 name = "buildfix-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "buildfix-domain",
@@ -239,7 +239,7 @@ dependencies = [
 
 [[package]]
 name = "buildfix-domain"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "buildfix-edit",
@@ -265,7 +265,7 @@ dependencies = [
 
 [[package]]
 name = "buildfix-edit"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "buildfix-types",
@@ -287,7 +287,7 @@ dependencies = [
 
 [[package]]
 name = "buildfix-receipts"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "buildfix-types",
@@ -304,7 +304,7 @@ dependencies = [
 
 [[package]]
 name = "buildfix-render"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "buildfix-types",
@@ -317,7 +317,7 @@ dependencies = [
 
 [[package]]
 name = "buildfix-types"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "camino",
  "chrono",
@@ -3196,7 +3196,7 @@ checksum = "9edde0db4769d2dc68579893f2306b26c6ecfbe0ef499b013d731b7b9247e0b9"
 
 [[package]]
 name = "xtask"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "buildfix-types",

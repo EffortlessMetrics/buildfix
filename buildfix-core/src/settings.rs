@@ -78,6 +78,8 @@ pub struct ApplySettings {
     pub allow_unsafe: bool,
     pub allow_dirty: bool,
     pub params: HashMap<String, String>,
+    pub auto_commit: bool,
+    pub commit_message: Option<String>,
 
     // Backups
     pub backup_enabled: bool,
@@ -97,6 +99,8 @@ impl Default for ApplySettings {
             allow_unsafe: false,
             allow_dirty: false,
             params: HashMap::new(),
+            auto_commit: false,
+            commit_message: None,
             backup_enabled: true,
             backup_suffix: ".buildfix.bak".to_string(),
             mode: RunMode::default(),
@@ -139,6 +143,8 @@ mod tests {
         assert!(!settings.allow_unsafe);
         assert!(!settings.allow_dirty);
         assert!(settings.params.is_empty());
+        assert!(!settings.auto_commit);
+        assert!(settings.commit_message.is_none());
         assert!(settings.backup_enabled);
         assert_eq!(settings.backup_suffix, ".buildfix.bak");
         assert_eq!(settings.mode, RunMode::Standalone);

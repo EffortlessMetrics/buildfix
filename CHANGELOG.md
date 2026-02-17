@@ -7,7 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.0]
+### Added
+
+- **Unused Dependency Removal Fixer** (`cargo.remove_unused_deps`): Creates deterministic `toml_remove` plan ops from sensor-reported unused dependency paths. Classified as Unsafe and requires `buildfix apply --apply --allow-unsafe`.
+- **Golden fixture + BDD coverage** for unused dependency removal, including safety-gate behavior (blocked without `--allow-unsafe`, applied with `--allow-unsafe`).
+
+## [0.2.0] - 2026-02-16
 
 ### Added
 

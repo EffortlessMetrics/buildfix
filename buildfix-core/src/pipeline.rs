@@ -12,7 +12,7 @@ use buildfix_edit::{
 };
 use buildfix_receipts::LoadedReceipt;
 use buildfix_render::{render_apply_md, render_comment_md, render_plan_md};
-use buildfix_types::apply::BuildfixApply;
+use buildfix_types::apply::{AutoCommitInfo, BuildfixApply};
 use buildfix_types::plan::BuildfixPlan;
 use buildfix_types::receipt::ToolInfo;
 use buildfix_types::report::{
@@ -22,6 +22,7 @@ use buildfix_types::report::{
 use buildfix_types::wire::{PlanV1, ReportV1};
 use chrono::Utc;
 use sha2::{Digest, Sha256};
+use std::collections::BTreeSet;
 use tracing::debug;
 
 /// Error type for pipeline results.  Exit code 2 = policy block, 1 = tool error.
@@ -202,6 +203,7 @@ pub fn run_apply(
     let plan_path = settings.out_dir.join("plan.json");
     let plan_str =
         std::fs::read_to_string(&plan_path).with_context(|| format!("read {}", plan_path))?;
+    let plan_sha = sha256_hex(plan_str.as_bytes());
 
     let plan: BuildfixPlan = match serde_json::from_str::<PlanV1>(&plan_str) {
         Ok(wire) => BuildfixPlan::from(wire),
@@ -210,6 +212,9 @@ pub fn run_apply(
             serde_json::from_str(&plan_str).context("parse plan.json")?
         }
     };
+
+    let head_before = git.head_sha(&settings.repo_root).ok().flatten();
+    let dirty_before = git.is_dirty(&settings.repo_root).ok().flatten();
 
     let opts = ApplyOptions {
         dry_run: settings.dry_run,
@@ -222,17 +227,26 @@ pub fn run_apply(
     };
 
     let mut policy_block_dirty = false;
+    let mut dirty_block_message = "dirty working tree".to_string();
 
     // Block apply on dirty working tree unless explicitly allowed.
-    if !settings.dry_run
-        && !settings.allow_dirty
-        && let Ok(Some(true)) = git.is_dirty(&settings.repo_root)
-    {
+    if !settings.dry_run && !settings.allow_dirty && dirty_before == Some(true) {
         policy_block_dirty = true;
+    }
+
+    // Auto-commit is maintainer-only and requires a known-clean git tree.
+    if settings.auto_commit && !settings.dry_run && dirty_before != Some(false) {
+        policy_block_dirty = true;
+        dirty_block_message = "auto-commit requires clean git working tree".to_string();
     }
 
     let (mut apply, patch) = if policy_block_dirty {
         let mut apply = empty_apply_from_plan(&plan, &settings.repo_root, tool.clone(), &plan_path);
+        let dirty_actual = match dirty_before {
+            Some(true) => "dirty".to_string(),
+            Some(false) => "clean".to_string(),
+            None => "unknown".to_string(),
+        };
         apply.preconditions.verified = false;
         apply
             .preconditions
@@ -240,14 +254,14 @@ pub fn run_apply(
             .push(buildfix_types::apply::PreconditionMismatch {
                 path: "<working_tree>".to_string(),
                 expected: "clean".to_string(),
-                actual: "dirty".to_string(),
+                actual: dirty_actual,
             });
         for op in &plan.ops {
             apply.results.push(buildfix_types::apply::ApplyResult {
                 op_id: op.id.clone(),
                 status: buildfix_types::apply::ApplyStatus::Blocked,
-                message: Some("dirty working tree".to_string()),
-                blocked_reason: Some("dirty working tree".to_string()),
+                message: Some(dirty_block_message.clone()),
+                blocked_reason: Some(dirty_block_message.clone()),
                 blocked_reason_token: Some(
                     buildfix_types::plan::blocked_tokens::DIRTY_WORKING_TREE.to_string(),
                 ),
@@ -263,15 +277,69 @@ pub fn run_apply(
     // Populate plan_ref and repo info.
     apply.plan_ref = buildfix_types::apply::PlanRef {
         path: plan_path.to_string(),
-        sha256: Some(sha256_hex(plan_str.as_bytes())),
+        sha256: Some(plan_sha.clone()),
     };
     apply.repo = buildfix_types::apply::ApplyRepoInfo {
         root: settings.repo_root.to_string(),
-        head_sha_before: git.head_sha(&settings.repo_root).ok().flatten(),
-        head_sha_after: git.head_sha(&settings.repo_root).ok().flatten(),
-        dirty_before: git.is_dirty(&settings.repo_root).ok().flatten(),
-        dirty_after: git.is_dirty(&settings.repo_root).ok().flatten(),
+        head_sha_before: head_before.clone(),
+        head_sha_after: head_before,
+        dirty_before,
+        dirty_after: dirty_before,
     };
+
+    if settings.auto_commit {
+        let mut auto_commit = AutoCommitInfo {
+            enabled: true,
+            attempted: false,
+            committed: false,
+            commit_sha: None,
+            message: settings.commit_message.clone(),
+            skip_reason: None,
+        };
+
+        if settings.dry_run {
+            auto_commit.skip_reason = Some("dry-run: auto-commit skipped".to_string());
+        } else if apply.summary.applied == 0 {
+            auto_commit.skip_reason = Some("no applied ops to commit".to_string());
+        } else if apply.summary.blocked > 0
+            || apply.summary.failed > 0
+            || !apply.preconditions.verified
+        {
+            auto_commit.skip_reason =
+                Some("apply not fully successful; skipping auto-commit".to_string());
+        } else {
+            auto_commit.attempted = true;
+            let message = settings
+                .commit_message
+                .clone()
+                .unwrap_or_else(|| default_auto_commit_message(&plan_path, &plan_sha, &apply));
+            auto_commit.message = Some(message.clone());
+
+            match git.commit_all(&settings.repo_root, &message) {
+                Ok(Some(commit_sha)) => {
+                    auto_commit.committed = true;
+                    auto_commit.commit_sha = Some(commit_sha.clone());
+                    apply.repo.head_sha_after = Some(commit_sha);
+                }
+                Ok(None) => {
+                    auto_commit.skip_reason = Some("no changes were committed".to_string());
+                }
+                Err(err) => {
+                    return Err(ToolError::Internal(anyhow::anyhow!(
+                        "auto-commit failed: {}",
+                        err
+                    )));
+                }
+            }
+        }
+
+        apply.auto_commit = Some(auto_commit);
+    }
+
+    apply.repo.dirty_after = git.is_dirty(&settings.repo_root).ok().flatten();
+    if apply.repo.head_sha_after.is_none() {
+        apply.repo.head_sha_after = git.head_sha(&settings.repo_root).ok().flatten();
+    }
 
     let report = report_from_apply(&apply, tool);
     let policy_block = buildfix_edit::check_policy_block(&apply, settings.dry_run).is_some();
@@ -434,11 +502,24 @@ pub(crate) fn report_from_plan(
 fn build_capabilities(receipts: &[LoadedReceipt]) -> ReportCapabilities {
     let mut inputs_available = Vec::new();
     let mut inputs_failed = Vec::new();
+    let mut check_ids = BTreeSet::new();
+    let mut scopes = BTreeSet::new();
 
     for r in receipts {
         match &r.receipt {
-            Ok(_) => {
+            Ok(receipt) => {
                 inputs_available.push(r.path.to_string());
+                if let Some(caps) = &receipt.capabilities {
+                    check_ids.extend(caps.check_ids.iter().cloned());
+                    scopes.extend(caps.scopes.iter().cloned());
+                }
+                for finding in &receipt.findings {
+                    if let Some(check_id) = finding.check_id.as_ref()
+                        && !check_id.is_empty()
+                    {
+                        check_ids.insert(check_id.clone());
+                    }
+                }
             }
             Err(e) => {
                 inputs_failed.push(InputFailure {
@@ -449,9 +530,12 @@ fn build_capabilities(receipts: &[LoadedReceipt]) -> ReportCapabilities {
         }
     }
 
+    inputs_available.sort();
+    inputs_failed.sort_by(|a, b| a.path.cmp(&b.path));
+
     ReportCapabilities {
-        check_ids: vec![], // TODO: populate from planner
-        scopes: vec![],    // TODO: populate from planner
+        check_ids: check_ids.into_iter().collect(),
+        scopes: scopes.into_iter().collect(),
         partial: !inputs_failed.is_empty(),
         reason: if !inputs_failed.is_empty() {
             Some("some receipts failed to load".to_string())
@@ -504,18 +588,32 @@ pub(crate) fn report_from_apply(apply: &BuildfixApply, tool: ToolInfo) -> Buildf
             patch: Some("patch.diff".to_string()),
             comment: None,
         }),
-        data: Some(serde_json::json!({
-            "buildfix": {
-                "apply": {
-                    "attempted": apply.summary.attempted,
-                    "applied": apply.summary.applied,
-                    "blocked": apply.summary.blocked,
-                    "failed": apply.summary.failed,
-                    "files_modified": apply.summary.files_modified,
-                    "apply_performed": apply.summary.applied > 0,
-                }
+        data: Some({
+            let mut apply_data = serde_json::json!({
+                "attempted": apply.summary.attempted,
+                "applied": apply.summary.applied,
+                "blocked": apply.summary.blocked,
+                "failed": apply.summary.failed,
+                "files_modified": apply.summary.files_modified,
+                "apply_performed": apply.summary.applied > 0,
+            });
+            if let Some(auto_commit) = &apply.auto_commit {
+                apply_data["auto_commit"] = serde_json::json!({
+                    "enabled": auto_commit.enabled,
+                    "attempted": auto_commit.attempted,
+                    "committed": auto_commit.committed,
+                    "commit_sha": auto_commit.commit_sha,
+                    "message": auto_commit.message,
+                    "skip_reason": auto_commit.skip_reason,
+                });
             }
-        })),
+
+            serde_json::json!({
+                "buildfix": {
+                    "apply": apply_data
+                }
+            })
+        }),
     }
 }
 
@@ -545,6 +643,22 @@ fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(hasher.finalize())
 }
 
+fn default_auto_commit_message(
+    plan_path: &camino::Utf8Path,
+    plan_sha: &str,
+    apply: &BuildfixApply,
+) -> String {
+    let short_sha = if plan_sha.len() >= 12 {
+        &plan_sha[..12]
+    } else {
+        plan_sha
+    };
+    format!(
+        "buildfix: apply plan {}\n\nplan={}\nops_applied={}\nfiles_modified={}",
+        short_sha, plan_path, apply.summary.applied, apply.summary.files_modified
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -554,7 +668,9 @@ mod tests {
     use buildfix_types::plan::{
         PlanOp, PlanPolicy, PlanSummary, Rationale, RepoInfo, SafetyCounts,
     };
-    use buildfix_types::receipt::{Finding, Location, ReceiptEnvelope, RunInfo, ToolInfo, Verdict};
+    use buildfix_types::receipt::{
+        Finding, Location, ReceiptCapabilities, ReceiptEnvelope, RunInfo, ToolInfo, Verdict,
+    };
     use buildfix_types::wire::PlanV1;
     use camino::{Utf8Path, Utf8PathBuf};
     use sha2::{Digest, Sha256};
@@ -575,6 +691,58 @@ mod tests {
 
         fn is_dirty(&self, _repo_root: &Utf8Path) -> anyhow::Result<Option<bool>> {
             Ok(self.dirty)
+        }
+    }
+
+    struct CommitGitPort {
+        head_before: Option<String>,
+        head_after: Option<String>,
+        dirty_before: Option<bool>,
+        dirty_after: Option<bool>,
+        commit_sha: Option<String>,
+        commit_calls: Mutex<u64>,
+    }
+
+    impl Default for CommitGitPort {
+        fn default() -> Self {
+            Self {
+                head_before: None,
+                head_after: None,
+                dirty_before: Some(false),
+                dirty_after: Some(false),
+                commit_sha: None,
+                commit_calls: Mutex::new(0),
+            }
+        }
+    }
+
+    impl GitPort for CommitGitPort {
+        fn head_sha(&self, _repo_root: &Utf8Path) -> anyhow::Result<Option<String>> {
+            let committed = *self.commit_calls.lock().expect("commit calls") > 0;
+            if committed {
+                Ok(self.head_after.clone())
+            } else {
+                Ok(self.head_before.clone())
+            }
+        }
+
+        fn is_dirty(&self, _repo_root: &Utf8Path) -> anyhow::Result<Option<bool>> {
+            let committed = *self.commit_calls.lock().expect("commit calls") > 0;
+            if committed {
+                Ok(self.dirty_after)
+            } else {
+                Ok(self.dirty_before)
+            }
+        }
+
+        fn commit_all(
+            &self,
+            _repo_root: &Utf8Path,
+            _message: &str,
+        ) -> anyhow::Result<Option<String>> {
+            let mut calls = self.commit_calls.lock().expect("commit calls");
+            *calls += 1;
+            Ok(self.commit_sha.clone())
         }
     }
 
@@ -746,6 +914,8 @@ mod tests {
             allow_unsafe: false,
             allow_dirty: false,
             params: HashMap::new(),
+            auto_commit: false,
+            commit_message: None,
             backup_enabled: false,
             backup_suffix: ".buildfix.bak".to_string(),
             mode: RunMode::Standalone,
@@ -973,6 +1143,44 @@ mod tests {
     }
 
     #[test]
+    fn report_apply_data_includes_auto_commit_when_present() {
+        let mut apply = BuildfixApply::new(
+            tool(),
+            buildfix_types::apply::ApplyRepoInfo {
+                root: ".".into(),
+                head_sha_before: None,
+                head_sha_after: None,
+                dirty_before: None,
+                dirty_after: None,
+            },
+            buildfix_types::apply::PlanRef {
+                path: "plan.json".into(),
+                sha256: None,
+            },
+        );
+        apply.auto_commit = Some(buildfix_types::apply::AutoCommitInfo {
+            enabled: true,
+            attempted: true,
+            committed: true,
+            commit_sha: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
+            message: Some("msg".to_string()),
+            skip_reason: None,
+        });
+
+        let report = report_from_apply(&apply, tool());
+        let data = report.data.unwrap();
+        let auto_commit = &data["buildfix"]["apply"]["auto_commit"];
+
+        assert_eq!(auto_commit["enabled"], serde_json::json!(true));
+        assert_eq!(auto_commit["attempted"], serde_json::json!(true));
+        assert_eq!(auto_commit["committed"], serde_json::json!(true));
+        assert_eq!(
+            auto_commit["commit_sha"],
+            serde_json::json!("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        );
+    }
+
+    #[test]
     fn report_from_plan_includes_input_failures_and_warn_status() {
         let plan = make_plan(vec![], None);
         let receipts = vec![LoadedReceipt {
@@ -999,6 +1207,111 @@ mod tests {
                 .inputs_failed
                 .iter()
                 .any(|f| f.path.contains("report.json"))
+        );
+    }
+
+    #[test]
+    fn report_from_plan_collects_check_ids_scopes_and_sorts_inputs() {
+        let plan = make_plan(vec![], None);
+        let receipt_with_caps = ReceiptEnvelope {
+            schema: "sensor.report.v1".to_string(),
+            tool: ToolInfo {
+                name: "builddiag".to_string(),
+                version: Some("1.0.0".to_string()),
+                repo: None,
+                commit: None,
+            },
+            run: RunInfo::default(),
+            verdict: Verdict::default(),
+            findings: vec![Finding {
+                severity: Default::default(),
+                check_id: Some("workspace.resolver_v2".to_string()),
+                code: None,
+                message: None,
+                location: None,
+                fingerprint: None,
+                data: None,
+            }],
+            capabilities: Some(ReceiptCapabilities {
+                check_ids: vec![
+                    "z.check".to_string(),
+                    "a.check".to_string(),
+                    "workspace.resolver_v2".to_string(),
+                ],
+                scopes: vec!["workspace".to_string(), "crate".to_string()],
+                partial: false,
+                reason: None,
+            }),
+            data: None,
+        };
+        let receipt_findings_only = ReceiptEnvelope {
+            schema: "sensor.report.v1".to_string(),
+            tool: ToolInfo {
+                name: "depguard".to_string(),
+                version: Some("1.0.0".to_string()),
+                repo: None,
+                commit: None,
+            },
+            run: RunInfo::default(),
+            verdict: Verdict::default(),
+            findings: vec![
+                Finding {
+                    severity: Default::default(),
+                    check_id: Some("b.check".to_string()),
+                    code: None,
+                    message: None,
+                    location: None,
+                    fingerprint: None,
+                    data: None,
+                },
+                Finding {
+                    severity: Default::default(),
+                    check_id: Some(String::new()),
+                    code: None,
+                    message: None,
+                    location: None,
+                    fingerprint: None,
+                    data: None,
+                },
+            ],
+            capabilities: None,
+            data: None,
+        };
+        let receipts = vec![
+            LoadedReceipt {
+                path: Utf8PathBuf::from("artifacts/z/report.json"),
+                sensor_id: "z".to_string(),
+                receipt: Ok(receipt_findings_only),
+            },
+            LoadedReceipt {
+                path: Utf8PathBuf::from("artifacts/a/report.json"),
+                sensor_id: "a".to_string(),
+                receipt: Ok(receipt_with_caps),
+            },
+        ];
+
+        let report = report_from_plan(&plan, tool(), &receipts);
+        let caps = report.capabilities.expect("capabilities");
+
+        assert_eq!(
+            caps.check_ids,
+            vec![
+                "a.check".to_string(),
+                "b.check".to_string(),
+                "workspace.resolver_v2".to_string(),
+                "z.check".to_string(),
+            ]
+        );
+        assert_eq!(
+            caps.scopes,
+            vec!["crate".to_string(), "workspace".to_string()]
+        );
+        assert_eq!(
+            caps.inputs_available,
+            vec![
+                "artifacts/a/report.json".to_string(),
+                "artifacts/z/report.json".to_string(),
+            ]
         );
     }
 
@@ -1251,6 +1564,82 @@ mod tests {
         );
         assert!(!outcome.patch.is_empty());
         assert!(!outcome.policy_block);
+    }
+
+    #[test]
+    fn run_apply_auto_commit_updates_head_and_metadata() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let out_dir = root.join("artifacts").join("buildfix");
+        std::fs::create_dir_all(&out_dir).expect("out dir");
+
+        let plan = make_plan(vec![make_op(SafetyClass::Safe, false, None)], None);
+        let plan_wire = PlanV1::try_from(&plan).expect("wire");
+        let plan_json = serde_json::to_string_pretty(&plan_wire).expect("plan json");
+        std::fs::write(out_dir.join("plan.json"), plan_json).expect("write plan");
+
+        let mut settings = make_apply_settings(&root, &out_dir);
+        settings.dry_run = false;
+        settings.auto_commit = true;
+
+        let git = CommitGitPort {
+            head_before: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
+            head_after: Some("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string()),
+            dirty_before: Some(false),
+            dirty_after: Some(false),
+            commit_sha: Some("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string()),
+            commit_calls: Mutex::new(0),
+        };
+
+        let outcome = run_apply(&settings, &git, tool()).expect("run_apply");
+        assert!(!outcome.policy_block);
+        assert_eq!(outcome.apply.summary.applied, 1);
+        assert_eq!(
+            outcome.apply.repo.head_sha_after.as_deref(),
+            Some("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        );
+        assert!(outcome.apply.auto_commit.is_some());
+        let auto_commit = outcome.apply.auto_commit.as_ref().expect("auto_commit");
+        assert!(auto_commit.enabled);
+        assert!(auto_commit.attempted);
+        assert!(auto_commit.committed);
+        assert_eq!(
+            auto_commit.commit_sha.as_deref(),
+            Some("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        );
+    }
+
+    #[test]
+    fn run_apply_auto_commit_blocks_when_tree_is_dirty() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let out_dir = root.join("artifacts").join("buildfix");
+        std::fs::create_dir_all(&out_dir).expect("out dir");
+
+        let plan = make_plan(vec![make_op(SafetyClass::Safe, false, None)], None);
+        let plan_wire = PlanV1::try_from(&plan).expect("wire");
+        let plan_json = serde_json::to_string_pretty(&plan_wire).expect("plan json");
+        std::fs::write(out_dir.join("plan.json"), plan_json).expect("write plan");
+
+        let mut settings = make_apply_settings(&root, &out_dir);
+        settings.dry_run = false;
+        settings.allow_dirty = true;
+        settings.auto_commit = true;
+
+        let git = StubGitPort {
+            head: Some("deadbeef".to_string()),
+            dirty: Some(true),
+        };
+
+        let outcome = run_apply(&settings, &git, tool()).expect("run_apply");
+        assert!(outcome.policy_block);
+        assert_eq!(outcome.apply.summary.blocked, 1);
+        assert!(
+            outcome
+                .apply
+                .results
+                .iter()
+                .all(|r| r.blocked_reason.as_deref()
+                    == Some("auto-commit requires clean git working tree"))
+        );
     }
 
     #[test]

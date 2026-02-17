@@ -86,6 +86,8 @@ buildfix apply [OPTIONS]
 | `--allow-unsafe` | `false` | Allow unsafe ops to apply (requires params) |
 | `--allow-dirty` | `false` | Allow apply on dirty working tree |
 | `--param <KEY=VALUE>` | | Parameter values for unsafe ops (repeatable) |
+| `--auto-commit` | `false` | Auto-commit after a successful apply |
+| `--commit-message <TEXT>` | | Custom commit message for `--auto-commit` |
 
 ### Behavior
 
@@ -99,6 +101,11 @@ With `--apply`:
 - Creates backups in `<out-dir>/backups/`
 - Applies changes atomically
 - Records results in apply.json
+
+With `--apply --auto-commit`:
+- Requires a clean git working tree
+- Creates a commit only when apply fully succeeds and modifies files
+- Records auto-commit metadata in `apply.json`
 
 A policy block (allow/deny, safety gate, caps, precondition mismatch, dirty tree) returns exit code `2`.
 
@@ -126,6 +133,9 @@ buildfix apply --apply --allow-guarded
 
 # Include unsafe ops (when params provided)
 buildfix apply --apply --allow-unsafe --param version=1.2.3
+
+# Apply and auto-commit with a custom message
+buildfix apply --apply --auto-commit --commit-message "buildfix: sync workspace policy"
 ```
 
 ## buildfix explain

@@ -1,9 +1,16 @@
 [package]
 name = "xtask"
-version = "0.1.0"
+version = "0.2.0"
 publish = false
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+description = "Developer task runner for buildfix schema and conformance workflows"
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["cargo", "xtask", "automation", "conformance", "workspace"]
+categories = ["development-tools"]
 
 [[bin]]
 name = "xtask"

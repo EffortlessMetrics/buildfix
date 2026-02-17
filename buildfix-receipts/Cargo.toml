@@ -1,14 +1,15 @@
 [package]
 name = "buildfix-receipts"
-version = "0.1.0"
+version = "0.2.0"
 publish = false
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
-description = "Tolerant loader for sensor receipt files"
+description = "Tolerant receipt loader for artifacts/*/report.json inputs"
 repository.workspace = true
 homepage.workspace = true
 readme = "README.md"
-keywords = ["cargo", "workspace", "receipts", "json"]
+keywords = ["cargo", "receipts", "artifacts", "json", "ingest"]
 categories = ["development-tools"]
 
 [dependencies]

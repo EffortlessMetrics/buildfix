@@ -4,9 +4,11 @@ use buildfix_types::ops::SafetyClass;
 use buildfix_types::plan::PlanOp;
 use serde::Serialize;
 
+mod duplicate_deps;
 mod edition;
 mod msrv;
 mod path_dep_version;
+mod remove_unused_deps;
 mod resolver_v2;
 mod workspace_inheritance;
 
@@ -42,6 +44,8 @@ pub fn builtin_fixers() -> Vec<Box<dyn Fixer>> {
         Box::new(resolver_v2::ResolverV2Fixer),
         Box::new(path_dep_version::PathDepVersionFixer),
         Box::new(workspace_inheritance::WorkspaceInheritanceFixer),
+        Box::new(duplicate_deps::DuplicateDepsConsolidationFixer),
+        Box::new(remove_unused_deps::RemoveUnusedDepsFixer),
         Box::new(msrv::MsrvNormalizeFixer),
         Box::new(edition::EditionUpgradeFixer),
     ]
@@ -60,7 +64,7 @@ mod tests {
     #[test]
     fn builtin_fixers_have_unique_keys() {
         let fixers = builtin_fixers();
-        assert_eq!(fixers.len(), 5);
+        assert_eq!(fixers.len(), 7);
 
         let mut keys = BTreeSet::new();
         for fixer in fixers {
@@ -70,7 +74,7 @@ mod tests {
             keys.insert(meta.fix_key);
         }
 
-        assert_eq!(keys.len(), 5);
+        assert_eq!(keys.len(), 7);
     }
 
     #[test]
@@ -81,6 +85,8 @@ mod tests {
         assert!(keys.contains("cargo.workspace_resolver_v2"));
         assert!(keys.contains("cargo.path_dep_add_version"));
         assert!(keys.contains("cargo.use_workspace_dependency"));
+        assert!(keys.contains("cargo.consolidate_duplicate_deps"));
+        assert!(keys.contains("cargo.remove_unused_deps"));
         assert!(keys.contains("cargo.normalize_rust_version"));
         assert!(keys.contains("cargo.normalize_edition"));
     }

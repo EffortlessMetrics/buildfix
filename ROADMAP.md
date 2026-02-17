@@ -4,11 +4,11 @@ This document outlines the planned features and improvements for buildfix.
 
 ## Current Status
 
-buildfix v0.2 is feature-complete with five built-in fixers:
+buildfix is feature-complete with seven built-in fixers:
 - Receipt-driven planning from sensor outputs
 - Safe, deterministic TOML editing
 - Precondition verification and backup system
-- Five built-in fixers covering common Cargo workspace issues
+- Six built-in fixers covering common Cargo workspace issues
 - Wire format with versioned JSON schemas (V1)
 - Capabilities block for sensor capability negotiation
 
@@ -22,33 +22,28 @@ buildfix v0.2 is feature-complete with five built-in fixers:
 - **Capabilities block**: "No Green By Omission" pattern for tracking input availability
 - **CLI commands**: `explain`, `list-fixes`, `validate`
 
+### v0.3
+
+- **Duplicate Dependency Consolidation Fixer** (`cargo.consolidate_duplicate_deps`): Consolidates duplicate member dependency versions into `[workspace.dependencies]` and rewrites members to `workspace = true`. Safe safety class; receipt-driven from depguard findings.
+
+### v0.4
+
+- **Unused Dependency Removal Fixer** (`cargo.remove_unused_deps`): Removes dependency entries reported as unused by sensors using deterministic `TomlRemove` ops. Unsafe safety class; apply requires `--allow-unsafe`.
+- **Anchored Text Replace Op** (`text_replace_anchored`): Line-based non-TOML edits with strict before/after anchors and bounded replacement count.
+
+### v0.5
+
+- **Auto-Commit Mode**: Optional `buildfix apply --apply --auto-commit` flow with clean-tree enforcement and structured commit metadata in apply artifacts.
+
 ## Planned Features
 
-### Near-Term (v0.3)
-
-#### Duplicate Dependency Consolidation Fixer
-- **Fix Key**: `cargo.consolidate_duplicate_deps`
-- **Safety**: Safe
-- **Sensors**: depguard
-- **Description**: Identifies dependencies used by multiple crates at different versions and consolidates them to `[workspace.dependencies]`
-
 ### Medium-Term (v0.4)
-
-#### Unused Dependency Removal Fixer
-- **Fix Key**: `cargo.remove_unused_deps`
-- **Safety**: Unsafe (requires user confirmation)
-- **Description**: First fixer to use `OpKind::TomlRemove`. Requires sensor providing unused dependency detection.
 
 #### Additional Op Types
 - **Anchored text replace**: Support for non-TOML file edits with strict constraints
 - **Pattern**: Line-based replacements with context anchors for safety
 
 ### Long-Term (v0.5+)
-
-#### Auto-Commit Mode
-- Optional auto-commit after successful apply (maintainer-only workflow)
-- Requires clean working tree and explicit flag
-- Commits with structured message referencing plan
 
 #### Additional File Format Support
 - Support for file types beyond TOML when edits are provably mechanical

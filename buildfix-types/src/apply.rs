@@ -12,6 +12,9 @@ pub struct BuildfixApply {
     pub results: Vec<ApplyResult>,
     pub summary: ApplySummary,
 
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_commit: Option<AutoCommitInfo>,
+
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub errors: Vec<String>,
 }
@@ -26,9 +29,26 @@ impl BuildfixApply {
             preconditions: ApplyPreconditions::default(),
             results: vec![],
             summary: ApplySummary::default(),
+            auto_commit: None,
             errors: vec![],
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutoCommitInfo {
+    pub enabled: bool,
+    pub attempted: bool,
+    pub committed: bool,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit_sha: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skip_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

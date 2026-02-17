@@ -41,6 +41,8 @@ trait Fixer {
 | `ResolverV2Fixer` | `cargo.workspace_resolver_v2` | Safe | Sets `[workspace].resolver = "2"` |
 | `PathDepVersionFixer` | `cargo.path_dep_add_version` | Safe | Adds version to path dependencies |
 | `WorkspaceInheritanceFixer` | `cargo.use_workspace_dependency` | Safe | Converts deps to `{ workspace = true }` |
+| `DuplicateDepsConsolidationFixer` | `cargo.consolidate_duplicate_deps` | Safe | Consolidates duplicate dependency versions to workspace scope |
+| `RemoveUnusedDepsFixer` | `cargo.remove_unused_deps` | Unsafe | Removes dependencies reported as unused by sensors |
 | `MsrvNormalizeFixer` | `cargo.normalize_rust_version` | Guarded | Normalizes crate MSRV to workspace value |
 | `EditionUpgradeFixer` | `cargo.normalize_edition` | Guarded | Normalizes crate edition to workspace value |
 

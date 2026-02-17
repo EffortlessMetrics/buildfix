@@ -1,42 +1,29 @@
 # buildfix-types
 
-Shared DTOs and schemas for buildfix repair plans. This crate defines the wire format for all buildfix artifacts.
+Shared data contracts for the buildfix workspace.
 
-## Key Types
+This crate defines the canonical Rust models and schema IDs for plan/apply/report artifacts and receipt envelopes.
 
-### Safety Classification
-- `SafetyClass` - `Safe`, `Guarded`, `Unsafe` classification for ops
+## Modules
 
-### Plan Types
-- `BuildfixPlan` - Complete repair plan with ops, inputs, and policy
-- `PlanOp` - Individual op with target, kind, rationale, and safety class
-- `FilePrecondition` - File SHA256 preconditions
+- `ops`: operation kinds, targets, and safety classes
+- `plan`: plan document and operation rationale/preconditions
+- `apply`: apply results, status, and file-level outcomes
+- `report`: canonical sensor-compatible report model
+- `receipt`: tolerant sensor receipt envelope model
+- `wire`: wire-format conversion helpers for schema-stable JSON
 
-### Operations
-- `OpKind` - Tagged enum of supported operation kinds:
-  - `toml_set`
-  - `toml_remove`
-  - `toml_transform` (rule_id + args)
+## Schema identifiers
 
-### Receipt Types
-- `ReceiptEnvelope` - Generic sensor receipt format
-- `Finding` - Individual finding with location, severity, message
+- `buildfix.plan.v1`
+- `buildfix.apply.v1`
+- `buildfix.report.v1`
+- `sensor.report.v1`
 
-### Apply Types
-- `BuildfixApply` - Results of applying a plan
-- `ApplyResult` - Per-op outcome
+## Design constraints
 
-## Schema Versions
+- Backward compatibility for serialized artifacts
+- Additive evolution preferred over breaking field changes
+- Explicit serde defaults for tolerant parsing
 
-- `BUILDFIX_PLAN_V1`
-- `BUILDFIX_APPLY_V1`
-- `BUILDFIX_REPORT_V1`
-
-## Usage
-
-```rust
-use buildfix_types::plan::BuildfixPlan;
-use buildfix_types::ops::{OpKind, SafetyClass};
-```
-
-This crate is part of the [buildfix](https://github.com/EffortlessMetrics/buildfix) workspace.
+This crate is internal to the workspace (`publish = false`).

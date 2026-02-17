@@ -23,6 +23,10 @@ max_patch_bytes = 250000      # Maximum patch size in bytes
 enabled = true                # Create backups before editing
 suffix = ".buildfix.bak"      # Backup file suffix
 
+[commit]
+enabled = false               # Auto-commit after successful apply
+message = "buildfix: apply"   # Optional commit message override
+
 [params]
 # key = "value"               # Parameters for unsafe ops
 ```
@@ -199,6 +203,39 @@ These can also be provided via CLI: `--param rust_version=1.75`
 | `rust_version` | MSRV normalization | Target rust-version when no workspace standard |
 | `version` | Path dependency version | Version to add when missing |
 
+## [commit] Section
+
+### enabled
+
+Type: `bool`
+Default: `false`
+
+Enable auto-commit after a successful `buildfix apply --apply`.
+
+```toml
+[commit]
+enabled = true
+```
+
+Equivalent CLI: `--auto-commit` (explicit per-run opt-in).
+
+Auto-commit requires `--apply` and a clean git working tree.
+
+### message
+
+Type: `string`
+Default: unset
+
+Optional commit message override used when auto-commit runs.
+
+```toml
+[commit]
+enabled = true
+message = "buildfix: workspace hygiene sync"
+```
+
+Equivalent CLI: `--commit-message "..."`
+
 ## CLI Overrides
 
 CLI arguments take precedence over config file values:
@@ -210,6 +247,8 @@ CLI arguments take precedence over config file values:
 | `allow_guarded` | `--allow-guarded` |
 | `allow_unsafe` | `--allow-unsafe` |
 | `allow_dirty` | `--allow-dirty` |
+| `commit.enabled` | `--auto-commit` |
+| `commit.message` | `--commit-message` |
 | `params` | `--param` |
 
 Plan-only: use `--no-clean-hashes` to disable precondition hashes.

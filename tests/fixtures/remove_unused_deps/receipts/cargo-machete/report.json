@@ -1,0 +1,32 @@
+{
+  "schema": "cargo-machete.report.v1",
+  "tool": {
+    "name": "cargo-machete",
+    "version": "0.0.0"
+  },
+  "verdict": {
+    "status": "fail",
+    "counts": {
+      "findings": 1,
+      "errors": 1,
+      "warnings": 0
+    }
+  },
+  "findings": [
+    {
+      "severity": "warn",
+      "check_id": "deps.unused_dependency",
+      "code": "unused_dep",
+      "message": "dependency appears unused",
+      "location": {
+        "path": "crates/a/Cargo.toml",
+        "line": 7,
+        "column": 1
+      },
+      "data": {
+        "toml_path": ["dependencies", "serde"],
+        "dep": "serde"
+      }
+    }
+  ]
+}

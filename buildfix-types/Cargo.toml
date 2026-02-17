@@ -1,14 +1,15 @@
 [package]
 name = "buildfix-types"
-version = "0.1.0"
+version = "0.2.0"
 publish = false
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
-description = "Shared DTOs and schemas for buildfix repair plans"
+description = "Shared schema types for buildfix plan/apply/report artifacts"
 repository.workspace = true
 homepage.workspace = true
 readme = "README.md"
-keywords = ["cargo", "workspace", "types", "repair"]
+keywords = ["cargo", "schema", "types", "serde", "artifacts"]
 categories = ["development-tools"]
 
 [features]

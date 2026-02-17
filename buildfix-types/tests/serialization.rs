@@ -216,6 +216,23 @@ fn opkind_serializes_remove_and_transform() {
     assert_eq!(transform_value["type"], "toml_transform");
     assert_eq!(transform_value["rule_id"], "custom_rule");
     assert!(transform_value.get("args").is_none());
+
+    let anchored = OpKind::TextReplaceAnchored {
+        find: "resolver = \"1\"".to_string(),
+        replace: "resolver = \"2\"".to_string(),
+        anchor_before: vec!["[workspace]".to_string()],
+        anchor_after: vec![],
+        max_replacements: Some(1),
+    };
+    let anchored_value = serde_json::to_value(&anchored).expect("serialize anchored replace");
+    assert_eq!(anchored_value["type"], "text_replace_anchored");
+    assert_eq!(anchored_value["find"], "resolver = \"1\"");
+    assert_eq!(anchored_value["replace"], "resolver = \"2\"");
+    assert_eq!(
+        anchored_value["anchor_before"],
+        serde_json::json!(["[workspace]"])
+    );
+    assert_eq!(anchored_value["max_replacements"], serde_json::json!(1));
 }
 
 #[test]

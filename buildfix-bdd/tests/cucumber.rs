@@ -323,6 +323,100 @@ async fn assert_crate_a_has_version_for_dep(world: &mut BuildfixWorld, expected:
 }
 
 // ============================================================================
+// Scenario: Removes unused dependency
+// ============================================================================
+
+#[given("a repo with an unused dependency")]
+async fn repo_with_unused_dependency(world: &mut BuildfixWorld) {
+    let td = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(td.path().to_path_buf()).unwrap();
+
+    fs::create_dir_all(root.join("crates").join("crate-a")).unwrap();
+
+    fs::write(
+        root.join("Cargo.toml"),
+        r#"
+[workspace]
+members = ["crates/crate-a"]
+resolver = "2"
+"#,
+    )
+    .unwrap();
+
+    fs::write(
+        root.join("crates").join("crate-a").join("Cargo.toml"),
+        r#"
+[package]
+name = "crate-a"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = "1.0"
+"#,
+    )
+    .unwrap();
+
+    world.temp = Some(td);
+    world.repo_root = Some(root);
+}
+
+#[given("a cargo-machete receipt for unused dependency")]
+async fn cargo_machete_receipt_unused_dependency(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let artifacts = root.join("artifacts").join("cargo-machete");
+    fs::create_dir_all(&artifacts).unwrap();
+
+    let receipt = serde_json::json!({
+        "schema": "cargo-machete.report.v1",
+        "tool": { "name": "cargo-machete", "version": "0.0.0" },
+        "verdict": { "status": "fail", "counts": { "findings": 1, "errors": 1, "warnings": 0 } },
+        "findings": [{
+            "severity": "warn",
+            "check_id": "deps.unused_dependency",
+            "code": "unused_dep",
+            "message": "dependency appears unused",
+            "location": { "path": "crates/crate-a/Cargo.toml", "line": 8, "column": 1 },
+            "data": {
+                "toml_path": ["dependencies", "serde"],
+                "dep": "serde"
+            }
+        }]
+    });
+
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
+}
+
+#[then("the plan contains an unused dependency removal fix")]
+async fn assert_plan_contains_unused_dep_removal(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    let removal = plan_ops(&v).iter().find(|op| {
+        op["kind"]["type"] == "toml_remove"
+            && op["kind"]["toml_path"] == serde_json::json!(["dependencies", "serde"])
+    });
+    let Some(op) = removal else {
+        panic!(
+            "expected a toml_remove op for dependencies.serde, got:\n{}",
+            serde_json::to_string_pretty(&v).unwrap()
+        );
+    };
+
+    assert_eq!(
+        op["safety"].as_str(),
+        Some("unsafe"),
+        "expected unused dep removal to be unsafe"
+    );
+}
+
+// ============================================================================
 // Scenario: Converts to workspace dependency
 // ============================================================================
 
@@ -673,6 +767,34 @@ async fn assert_crate_a_still_has_msrv(world: &mut BuildfixWorld, expected: Stri
         contents.contains(&expected_line),
         "expected rust-version still \"{}\" (not changed), got:\n{}",
         expected,
+        contents
+    );
+}
+
+#[then(expr = "the crate-a Cargo.toml still has dependency {string}")]
+async fn assert_crate_a_still_has_dependency(world: &mut BuildfixWorld, dep: String) {
+    let root = repo_root(world).clone();
+    let contents = fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml"))
+        .context("read crate-a Cargo.toml")
+        .unwrap();
+    assert!(
+        contents.contains(&format!("{} =", dep)),
+        "expected dependency '{}' to still exist, got:\n{}",
+        dep,
+        contents
+    );
+}
+
+#[then(expr = "the crate-a Cargo.toml no longer contains dependency {string}")]
+async fn assert_crate_a_no_longer_has_dependency(world: &mut BuildfixWorld, dep: String) {
+    let root = repo_root(world).clone();
+    let contents = fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml"))
+        .context("read crate-a Cargo.toml")
+        .unwrap();
+    assert!(
+        !contents.contains(&format!("{} =", dep)),
+        "expected dependency '{}' to be removed, got:\n{}",
+        dep,
         contents
     );
 }

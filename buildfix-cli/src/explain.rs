@@ -194,7 +194,115 @@ Member crates can add features but cannot change the version."#,
             },
         ],
     },
-    // 4) MSRV normalization
+    // 4) Duplicate dependency consolidation
+    FixExplanation {
+        key: "duplicate-deps",
+        fix_id: "cargo.consolidate_duplicate_deps",
+        title: "Duplicate Dependency Consolidation",
+        safety: SafetyClass::Safe,
+        description: r#"Consolidates duplicate dependency versions across member crates into
+[workspace.dependencies].
+
+When depguard reports that a dependency appears at multiple versions across the
+workspace, this fix:
+1. Ensures the selected version exists in [workspace.dependencies]
+2. Rewrites reported member dependencies to `{ workspace = true }`
+3. Preserves per-crate overrides such as features/optional/package
+
+This creates a single source of truth for the dependency version at workspace
+scope and removes per-crate drift."#,
+        safety_rationale: r#"This fix is classified as SAFE because:
+- The target dependency and selected version come from the sensor receipt
+- Edits are deterministic and scoped to explicitly reported entries
+- The transform is mechanical (workspace.dependencies + workspace=true rewrite)
+- Per-crate non-version overrides are preserved"#,
+        remediation: r#"To manually apply this fix:
+
+1. Pick the canonical version for the duplicated dependency
+2. Set it in root Cargo.toml:
+    [workspace.dependencies]
+    serde = "1.0.210"
+
+3. Update member manifests to inherit from the workspace:
+    [dependencies]
+    serde = { workspace = true }
+
+4. Re-run your sensor to confirm duplicate-version findings are cleared."#,
+        triggers: &[
+            TriggerPattern {
+                sensor: "depguard",
+                check_id: "deps.duplicate_dependency_versions",
+                code: None,
+            },
+            TriggerPattern {
+                sensor: "depguard",
+                check_id: "cargo.duplicate_dependency_versions",
+                code: None,
+            },
+            TriggerPattern {
+                sensor: "depguard",
+                check_id: "deps.duplicate_versions",
+                code: None,
+            },
+            TriggerPattern {
+                sensor: "depguard",
+                check_id: "cargo.duplicate_versions",
+                code: None,
+            },
+        ],
+    },
+    // 5) Remove unused dependencies
+    FixExplanation {
+        key: "remove-unused-deps",
+        fix_id: "cargo.remove_unused_deps",
+        title: "Remove Unused Dependencies",
+        safety: SafetyClass::Unsafe,
+        description: r#"Removes dependency entries that sensors report as unused.
+
+When tools such as cargo-udeps or cargo-machete identify dependencies that are
+not used by the crate, this fix removes the exact dependency entry from
+Cargo.toml (for example `dependencies.foo`).
+
+This is implemented as a direct TOML key removal (`toml_remove`) using
+sensor-provided location data (`toml_path`)."#,
+        safety_rationale: r#"This fix is classified as UNSAFE because:
+- A dependency reported as unused can still be needed for optional/runtime flows
+- Build scripts, feature-gated code, and platform-specific paths can hide usage
+- Removing dependencies can change build behavior or break downstream workflows
+
+The edit is deterministic, but human confirmation is required before apply."#,
+        remediation: r#"To manually apply this fix:
+
+1. Confirm the dependency is truly unused in all relevant build modes
+2. Remove it from the appropriate dependency table in Cargo.toml
+3. Run `cargo check --workspace --all-targets --all-features`
+
+To let buildfix apply this class of fix:
+    buildfix apply --apply --allow-unsafe"#,
+        triggers: &[
+            TriggerPattern {
+                sensor: "cargo-udeps",
+                check_id: "deps.unused_dependency",
+                code: None,
+            },
+            TriggerPattern {
+                sensor: "udeps",
+                check_id: "deps.unused_dependency",
+                code: None,
+            },
+            TriggerPattern {
+                sensor: "cargo-machete",
+                check_id: "deps.unused_dependency",
+                code: None,
+            },
+            TriggerPattern {
+                sensor: "machete",
+                check_id: "deps.unused_dependency",
+                code: None,
+            },
+        ],
+    },
+    // 6) MSRV normalization
     FixExplanation {
         key: "msrv",
         fix_id: "cargo.normalize_rust_version",
@@ -258,7 +366,7 @@ Consider using cargo-msrv to verify actual minimum version."#,
             },
         ],
     },
-    // 5) Edition normalization
+    // 7) Edition normalization
     FixExplanation {
         key: "edition",
         fix_id: "cargo.normalize_edition",
@@ -421,10 +529,12 @@ mod tests {
 
     #[test]
     fn test_all_fixes_registered() {
-        assert_eq!(FIX_REGISTRY.len(), 5);
+        assert_eq!(FIX_REGISTRY.len(), 7);
         assert!(lookup_fix("resolver-v2").is_some());
         assert!(lookup_fix("path-dep-version").is_some());
         assert!(lookup_fix("workspace-inheritance").is_some());
+        assert!(lookup_fix("duplicate-deps").is_some());
+        assert!(lookup_fix("remove-unused-deps").is_some());
         assert!(lookup_fix("msrv").is_some());
         assert!(lookup_fix("edition").is_some());
     }
@@ -436,6 +546,8 @@ mod tests {
         assert!(keys.contains(&"resolver-v2"));
         assert!(keys.contains(&"path-dep-version"));
         assert!(keys.contains(&"workspace-inheritance"));
+        assert!(keys.contains(&"duplicate-deps"));
+        assert!(keys.contains(&"remove-unused-deps"));
         assert!(keys.contains(&"msrv"));
         assert!(keys.contains(&"edition"));
     }

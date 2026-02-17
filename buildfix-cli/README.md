@@ -1,94 +1,59 @@
-# buildfix
+# buildfix (`buildfix-cli`)
 
-Receipt-driven repair tool for Cargo workspace hygiene. Consumes sensor receipts and emits deterministic repair plans.
+CLI frontend for the buildfix repair pipeline.
 
-## Installation
-
-```bash
-cargo install --path buildfix-cli
-```
+This crate owns command-line UX: argument parsing, config merge, exit-code handling, schema validation commands, and fix explanation/listing.
 
 ## Commands
 
-### `buildfix plan`
-Generate a repair plan from sensor receipts.
+- `buildfix plan`: load receipts and produce plan artifacts
+- `buildfix apply`: apply `plan.json` (dry-run unless `--apply`)
+- `buildfix explain <fix-key>`: show fix rationale, safety, and policy keys
+- `buildfix list-fixes [--format text|json]`: enumerate built-in fixes
+- `buildfix validate`: validate receipts and buildfix artifacts against schemas
 
-```bash
-buildfix plan [OPTIONS]
-  --repo-root <PATH>         # Repository root (default: cwd)
-  --artifacts-dir <PATH>     # Receipts location (default: artifacts/)
-  --out-dir <PATH>           # Output directory (default: artifacts/buildfix/)
-  --allow <PATTERN>          # Allow glob patterns
-  --deny <PATTERN>           # Deny glob patterns
-  --param <KEY=VALUE>        # Params for unsafe ops (repeatable)
-  --max-ops <N>              # Max operations per plan
-  --max-files <N>            # Max files to modify
-  --max-patch-bytes <N>      # Max patch size
-  --git-head-precondition    # Include git HEAD SHA check
-```
+## Key options
 
-Outputs: `plan.json`, `plan.md`, `patch.diff`, `report.json`
+`plan` supports policy and precondition controls such as:
 
-### `buildfix apply`
-Apply an existing plan.
+- `--allow`, `--deny`
+- `--max-ops`, `--max-files`, `--max-patch-bytes`
+- `--git-head-precondition`
+- `--no-clean-hashes`
+- `--param key=value`
+- `--mode standalone|cockpit`
 
-```bash
-buildfix apply [OPTIONS]
-  --repo-root <PATH>         # Repository root
-  --out-dir <PATH>           # Plan location
-  --apply                    # Write changes (dry-run by default)
-  --allow-guarded            # Include guarded fixes
-  --allow-unsafe             # Include unsafe fixes
-  --allow-dirty              # Allow dirty working tree
-  --param <KEY=VALUE>        # Params for unsafe ops (repeatable)
-```
+`apply` supports execution and safety controls such as:
 
-Outputs: `apply.json`, `apply.md`, `patch.diff`
+- `--apply`
+- `--allow-guarded`
+- `--allow-unsafe`
+- `--allow-dirty`
+- `--auto-commit [--commit-message ...]`
+- `--param key=value`
+- `--mode standalone|cockpit`
 
-### `buildfix explain`
-Explain a fix by key or ID.
+## Config file
 
-```bash
-buildfix explain <FIX_KEY_OR_ID>
-buildfix explain resolver-v2
-buildfix explain path-dep-version
-```
+The CLI merges `buildfix.toml` with CLI flags (CLI wins). Supported sections:
 
-### `buildfix list-fixes`
-List known fixes and policy keys.
+- `[policy]`
+- `[backups]`
+- `[commit]`
+- `[params]`
 
-```bash
-buildfix list-fixes
-buildfix list-fixes --format json
-```
+## Artifact outputs
 
-### `buildfix validate`
-Validate receipts and buildfix artifacts against embedded schemas.
+Plan run outputs:
 
-```bash
-buildfix validate
-```
+- `plan.json`, `plan.md`, `comment.md`, `patch.diff`, `report.json`, `extras/buildfix.report.v1.json`
 
-## Configuration
+Apply run outputs:
 
-Optional `buildfix.toml` in repo root:
+- `apply.json`, `apply.md`, `patch.diff`, `report.json`, `extras/buildfix.report.v1.json`
 
-```toml
-[policy]
-allow = ["builddiag/workspace.resolver_v2/*"]
-deny = ["builddiag/rust.msrv_consistent/*"]
-max_ops = 50
+## Exit codes
 
-[backups]
-enabled = true
-```
-
-## Exit Codes
-
-| Code | Meaning |
-|------|---------|
-| 0 | Success |
-| 1 | Tool error (I/O, parse) |
-| 2 | Policy block (precondition, safety gate) |
-
-This crate is part of the [buildfix](https://github.com/EffortlessMetrics/buildfix) workspace.
+- `0`: success
+- `1`: internal/tool error
+- `2`: policy block (safety gate, precondition mismatch, denied fix)

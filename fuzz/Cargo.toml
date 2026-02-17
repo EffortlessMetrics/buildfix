@@ -7,9 +7,10 @@ license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 homepage.workspace = true
-authors.workspace = true
-keywords.workspace = true
-categories.workspace = true
+keywords = ["fuzzing", "cargo", "toml", "json", "transforms"]
+categories = ["development-tools"]
+description = "cargo-fuzz harnesses for buildfix parsers and transforms"
+readme = "README.md"
 
 [package.metadata]
 cargo-fuzz = true

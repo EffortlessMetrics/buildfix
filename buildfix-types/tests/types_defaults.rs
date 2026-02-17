@@ -73,6 +73,7 @@ fn buildfix_apply_new_sets_schema_and_defaults() {
     assert_eq!(apply.summary.blocked, 0);
     assert_eq!(apply.summary.failed, 0);
     assert_eq!(apply.summary.files_modified, 0);
+    assert!(apply.auto_commit.is_none());
 }
 
 #[test]

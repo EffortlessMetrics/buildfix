@@ -55,6 +55,16 @@ Unsafe cases:
 - No declared workspace standard
 - Multiple competing “standards” in the workspace
 
+### 5) Unused dependency removal
+- Fix key: `cargo-machete / deps.unused_dependency / *` (also `cargo-udeps`, `udeps`, `machete`)
+- Safety: unsafe
+- Target: dependency entry in member `Cargo.toml`
+- Edit: remove reported dependency key via `toml_remove`
+
+Unsafe rationale:
+- Sensor coverage can miss feature/platform-specific usage
+- Manual confirmation is required before apply (`--allow-unsafe`)
+
 ## buildfix-internal codes
 
 These are buildfix’s own finding codes (for buildfix.report.v1):

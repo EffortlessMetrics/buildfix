@@ -26,7 +26,7 @@ Schema: `buildfix.plan.v1`
 ```json
 {
   "schema": "buildfix.plan.v1",
-  "tool": { "name": "buildfix", "version": "0.1.0" },
+  "tool": { "name": "buildfix", "version": "0.2.0" },
   "repo": { "root": "/repo", "head_sha": "...", "dirty": false },
   "inputs": [
     {
@@ -123,6 +123,7 @@ Schema: `buildfix.plan.v1`
 - `toml_set` with `toml_path` and `value`
 - `toml_remove` with `toml_path`
 - `toml_transform` with `rule_id` and optional `args`
+- `text_replace_anchored` with `find`, `replace`, optional anchors, and optional `max_replacements`
 
 ## apply.json
 
@@ -133,7 +134,7 @@ Schema: `buildfix.apply.v1`
 ```json
 {
   "schema": "buildfix.apply.v1",
-  "tool": { "name": "buildfix", "version": "0.1.0" },
+  "tool": { "name": "buildfix", "version": "0.2.0" },
   "repo": {
     "root": "/repo",
     "head_sha_before": "...",
@@ -183,6 +184,7 @@ Schema: `buildfix.apply.v1`
 | `preconditions` | object | `verified` and any mismatches |
 | `results` | array | Per-op results |
 | `summary` | object | Apply counts |
+| `auto_commit` | object? | Auto-commit attempt/result metadata |
 
 ### result
 
@@ -193,6 +195,19 @@ Schema: `buildfix.apply.v1`
 | `message` | string? | Optional message |
 | `blocked_reason` | string? | Policy block reason |
 | `files` | array | File-level hashes and backups |
+
+### auto_commit
+
+When present, records auto-commit execution details:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `enabled` | bool | Auto-commit was enabled for this apply run |
+| `attempted` | bool | A commit command was attempted |
+| `committed` | bool | Commit was created successfully |
+| `commit_sha` | string? | Resulting commit SHA |
+| `message` | string? | Commit message used |
+| `skip_reason` | string? | Why auto-commit was skipped |
 
 ## report.json
 
@@ -205,7 +220,7 @@ Cockpit-compatible receipt envelope for integration with the director system.
 ```json
 {
   "schema": "buildfix.report.v1",
-  "tool": { "name": "buildfix", "version": "0.1.0" },
+  "tool": { "name": "buildfix", "version": "0.2.0" },
   "run": {
     "started_at": "2024-01-15T10:30:00Z",
     "ended_at": "2024-01-15T10:30:05Z",

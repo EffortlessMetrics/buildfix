@@ -1,0 +1,158 @@
+{
+  "inputs": [
+    {
+      "path": "<ARTIFACTS>/depguard/report.json",
+      "schema": "depguard.report.v1",
+      "tool": "depguard"
+    }
+  ],
+  "ops": [
+    {
+      "blocked": false,
+      "id": "5bc5e0d5-96a1-53ac-86d3-b960dfb7747e",
+      "kind": {
+        "args": {
+          "dep": "serde",
+          "version": "1.0.200"
+        },
+        "rule_id": "ensure_workspace_dependency_version",
+        "type": "toml_transform"
+      },
+      "rationale": {
+        "description": "Consolidates duplicate dependency versions into workspace.dependencies",
+        "findings": [
+          {
+            "check_id": "deps.duplicate_dependency_versions",
+            "code": "duplicate_version",
+            "line": 7,
+            "path": "crates/a/Cargo.toml",
+            "source": "depguard"
+          },
+          {
+            "check_id": "deps.duplicate_dependency_versions",
+            "code": "duplicate_version",
+            "line": 7,
+            "path": "crates/b/Cargo.toml",
+            "source": "depguard"
+          }
+        ],
+        "fix_key": "depguard/deps.duplicate_dependency_versions/duplicate_version"
+      },
+      "safety": "safe",
+      "target": {
+        "path": "Cargo.toml"
+      }
+    },
+    {
+      "blocked": false,
+      "id": "c00514e9-2fc1-535b-81ca-04d634ddb6c7",
+      "kind": {
+        "args": {
+          "dep": "serde",
+          "preserved": {},
+          "toml_path": [
+            "dependencies",
+            "serde"
+          ]
+        },
+        "rule_id": "use_workspace_dependency",
+        "type": "toml_transform"
+      },
+      "rationale": {
+        "description": "Consolidates duplicate dependency versions into workspace.dependencies",
+        "findings": [
+          {
+            "check_id": "deps.duplicate_dependency_versions",
+            "code": "duplicate_version",
+            "line": 7,
+            "path": "crates/a/Cargo.toml",
+            "source": "depguard"
+          }
+        ],
+        "fix_key": "depguard/deps.duplicate_dependency_versions/duplicate_version"
+      },
+      "safety": "safe",
+      "target": {
+        "path": "crates/a/Cargo.toml"
+      }
+    },
+    {
+      "blocked": false,
+      "id": "31611d71-cd8b-5ec3-980c-2e33851d778e",
+      "kind": {
+        "args": {
+          "dep": "serde",
+          "preserved": {
+            "features": [
+              "derive"
+            ]
+          },
+          "toml_path": [
+            "dependencies",
+            "serde"
+          ]
+        },
+        "rule_id": "use_workspace_dependency",
+        "type": "toml_transform"
+      },
+      "rationale": {
+        "description": "Consolidates duplicate dependency versions into workspace.dependencies",
+        "findings": [
+          {
+            "check_id": "deps.duplicate_dependency_versions",
+            "code": "duplicate_version",
+            "line": 7,
+            "path": "crates/b/Cargo.toml",
+            "source": "depguard"
+          }
+        ],
+        "fix_key": "depguard/deps.duplicate_dependency_versions/duplicate_version"
+      },
+      "safety": "safe",
+      "target": {
+        "path": "crates/b/Cargo.toml"
+      }
+    }
+  ],
+  "policy": {
+    "allow": [],
+    "allow_dirty": false,
+    "allow_guarded": false,
+    "allow_unsafe": false,
+    "deny": []
+  },
+  "preconditions": {
+    "files": [
+      {
+        "path": "Cargo.toml",
+        "sha256": "<SHA256>"
+      },
+      {
+        "path": "crates/a/Cargo.toml",
+        "sha256": "<SHA256>"
+      },
+      {
+        "path": "crates/b/Cargo.toml",
+        "sha256": "<SHA256>"
+      }
+    ]
+  },
+  "repo": {
+    "root": "<REPO_ROOT>"
+  },
+  "schema": "buildfix.plan.v1",
+  "summary": {
+    "files_touched": 3,
+    "ops_blocked": 0,
+    "ops_total": 3,
+    "safety_counts": {
+      "guarded": 0,
+      "safe": 3,
+      "unsafe": 0
+    }
+  },
+  "tool": {
+    "name": "buildfix",
+    "version": "test"
+  }
+}

@@ -1,46 +1,25 @@
 # buildfix-render
 
-Markdown rendering for buildfix artifacts. Produces human-readable reports from repair plans and apply results.
+Markdown renderers for buildfix artifacts.
 
-## Functions
+This crate turns structured `buildfix-types` data into human-readable markdown for operator and CI consumption.
 
-### `render_plan_md(plan: &BuildfixPlan) -> String`
-Renders a plan as markdown:
-- Summary counts (ops_total, ops_blocked, files_touched)
-- List of ops with safety, policy keys, and findings
-- Operation details per op
+## API
 
-### `render_apply_md(apply: &BuildfixApply) -> String`
-Renders apply results:
-- Attempted/Applied/Blocked/Failed counts
-- Per-op results with status and file changes
-- Error details for failed ops
+- `render_plan_md(&BuildfixPlan) -> String`
+- `render_apply_md(&BuildfixApply) -> String`
+- `render_comment_md(&BuildfixPlan) -> String`
 
-## Output Example
+## Output roles
 
-```markdown
-# Buildfix Plan
+- `plan.md`: detailed plan summary and operation listing
+- `apply.md`: per-op apply results and file-change hashes
+- `comment.md`: short cockpit/PR-friendly summary with artifact pointers
 
-## Summary
-- Ops total: 3
-- Ops blocked: 0
-- Files touched: 2
+## Boundaries
 
-## Ops
+- No planning logic
+- No file mutation
+- No schema validation
 
-### 1. builddiag/workspace.resolver_v2/not_v2
-- **ID:** `abc123`
-- **Safety:** Safe
-- **Findings:** builddiag/workspace.resolver_v2/not_v2
-```
-
-## Usage
-
-```rust
-use buildfix_render::{render_plan_md, render_apply_md};
-
-let md = render_plan_md(&plan);
-std::fs::write("plan.md", md)?;
-```
-
-This crate is part of the [buildfix](https://github.com/EffortlessMetrics/buildfix) workspace.
+This crate is internal to the workspace (`publish = false`).

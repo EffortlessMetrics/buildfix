@@ -42,6 +42,16 @@ pub enum OpKind {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         args: Option<serde_json::Value>,
     },
+    TextReplaceAnchored {
+        find: String,
+        replace: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        anchor_before: Vec<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        anchor_after: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max_replacements: Option<u64>,
+    },
 }
 
 /// Target path for an operation.

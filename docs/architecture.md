@@ -45,6 +45,7 @@ Core planning logic. Decides *what* should change based on receipts.
 - `ResolverV2Fixer` - Workspace resolver = "2"
 - `PathDepVersionFixer` - Add version to path deps
 - `WorkspaceInheritanceFixer` - Use workspace = true
+- `DuplicateDepsConsolidationFixer` - Consolidate duplicate dep versions
 - `MsrvNormalizeFixer` - Normalize MSRV
 - `EditionUpgradeFixer` - Normalize edition
 

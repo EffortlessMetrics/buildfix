@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::apply::{
-    ApplyPreconditions, ApplyRepoInfo, ApplyResult, ApplySummary, BuildfixApply, PlanRef,
+    ApplyPreconditions, ApplyRepoInfo, ApplyResult, ApplySummary, AutoCommitInfo, BuildfixApply,
+    PlanRef,
 };
 use crate::receipt::ToolInfo;
 use crate::wire::{ToolInfoV1, WireError};
@@ -19,6 +20,9 @@ pub struct ApplyV1 {
     pub results: Vec<ApplyResult>,
 
     pub summary: ApplySummary,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_commit: Option<AutoCommitInfo>,
 
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub errors: Vec<String>,
@@ -46,6 +50,7 @@ impl TryFrom<&BuildfixApply> for ApplyV1 {
             preconditions: apply.preconditions.clone(),
             results: apply.results.clone(),
             summary: apply.summary.clone(),
+            auto_commit: apply.auto_commit.clone(),
             errors: apply.errors.clone(),
         })
     }
@@ -66,6 +71,7 @@ impl From<ApplyV1> for BuildfixApply {
             preconditions: apply.preconditions,
             results: apply.results,
             summary: apply.summary,
+            auto_commit: apply.auto_commit,
             errors: apply.errors,
         }
     }

@@ -1,51 +1,29 @@
 # buildfix-receipts
 
-Tolerant loader for sensor receipt files from `artifacts/*/report.json`.
+Receipt ingestion helpers for buildfix.
 
-## Features
+This crate scans `artifacts/*/report.json` and loads sensor envelopes with tolerant parsing so planning can proceed even when some inputs fail.
 
-- Scans `artifacts/*/report.json` glob pattern
-- Tolerant parsing: ignores unknown fields, collects errors without failing
-- Deterministic: results sorted by path
-- Graceful handling of missing optional fields
+## API
 
-## Usage
+- `load_receipts(artifacts_dir) -> Vec<LoadedReceipt>`
 
-```rust
-use buildfix_receipts::load_receipts;
+`LoadedReceipt` includes:
 
-let receipts = load_receipts(Path::new("artifacts"));
-for loaded in receipts {
-    match loaded.receipt {
-        Ok(envelope) => println!("Loaded {} findings from {}",
-            envelope.findings.len(), loaded.sensor_id),
-        Err(e) => eprintln!("Failed to parse {}: {}", loaded.path.display(), e),
-    }
-}
-```
+- `path`
+- `sensor_id`
+- `receipt: Result<ReceiptEnvelope, ReceiptLoadError>`
 
-## Types
+## Behavior
 
-### `LoadedReceipt`
-```rust
-struct LoadedReceipt {
-    path: PathBuf,           // Full path to report.json
-    sensor_id: String,       // Directory name (e.g., "builddiag")
-    receipt: Result<ReceiptEnvelope, ReceiptLoadError>,
-}
-```
+- Reads `artifacts/*/report.json`
+- Skips reserved non-sensor directories (`buildfix`, `cockpit`)
+- Preserves per-receipt load errors instead of failing the entire batch
+- Sorts outputs by path for deterministic downstream processing
 
-### `ReceiptLoadError`
-- `Io` - File read failure
-- `Json` - Parse failure
+## Error types
 
-## Expected Directory Structure
+- `ReceiptLoadError::Io`
+- `ReceiptLoadError::Json`
 
-```
-artifacts/
-  builddiag/report.json
-  depguard/report.json
-  buildscan/report.json
-```
-
-This crate is part of the [buildfix](https://github.com/EffortlessMetrics/buildfix) workspace.
+This crate is internal to the workspace (`publish = false`).

@@ -1,14 +1,15 @@
 [package]
 name = "buildfix-core"
-version = "0.1.0"
+version = "0.2.0"
 publish = false
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
-description = "Embeddable core library for buildfix (clap-free, I/O-abstracted)"
+description = "Embeddable plan/apply pipeline for buildfix (clap-free, port-driven)"
 repository.workspace = true
 homepage.workspace = true
 readme = "README.md"
-keywords = ["cargo", "workspace", "repair", "library"]
+keywords = ["cargo", "workspace", "repair", "pipeline", "library"]
 categories = ["development-tools"]
 
 [dependencies]

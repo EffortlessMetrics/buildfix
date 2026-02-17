@@ -43,6 +43,7 @@ pub fn render_plan_md(plan: &BuildfixPlan) -> String {
                 buildfix_types::ops::OpKind::TomlSet { .. } => "toml_set",
                 buildfix_types::ops::OpKind::TomlRemove { .. } => "toml_remove",
                 buildfix_types::ops::OpKind::TomlTransform { rule_id, .. } => rule_id,
+                buildfix_types::ops::OpKind::TextReplaceAnchored { .. } => "text_replace_anchored",
             }
         ));
         if let Some(reason) = &op.blocked_reason {

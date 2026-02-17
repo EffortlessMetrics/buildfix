@@ -43,6 +43,46 @@ impl GitPort for ShellGitPort {
             Err(_) => Ok(None),
         }
     }
+
+    fn commit_all(&self, repo_root: &Utf8Path, message: &str) -> anyhow::Result<Option<String>> {
+        use std::process::Command;
+
+        let add = Command::new("git")
+            .args(["add", "-A"])
+            .current_dir(repo_root)
+            .output()
+            .with_context(|| format!("git add -A in {}", repo_root))?;
+        if !add.status.success() {
+            anyhow::bail!(
+                "git add -A failed: {}",
+                String::from_utf8_lossy(&add.stderr).trim()
+            );
+        }
+
+        let commit = Command::new("git")
+            .args(["commit", "-m", message])
+            .current_dir(repo_root)
+            .output()
+            .with_context(|| format!("git commit in {}", repo_root))?;
+
+        if !commit.status.success() {
+            let stdout = String::from_utf8_lossy(&commit.stdout);
+            let stderr = String::from_utf8_lossy(&commit.stderr);
+            let combined = format!("{}\n{}", stdout, stderr).to_ascii_lowercase();
+            if combined.contains("nothing to commit") || combined.contains("no changes added") {
+                return Ok(None);
+            }
+            anyhow::bail!(
+                "git commit failed: {}",
+                format!("{}\n{}", stdout.trim(), stderr.trim()).trim()
+            );
+        }
+
+        match self.head_sha(repo_root)? {
+            Some(sha) => Ok(Some(sha)),
+            None => anyhow::bail!("git commit succeeded but head sha is unavailable"),
+        }
+    }
 }
 
 /// In-memory receipt source for embedding and testing.
@@ -335,10 +375,18 @@ mod tests {
         run_git(&root, &["commit", "-m", "init"]);
 
         let port = ShellGitPort;
-        assert!(port.head_sha(&root).expect("head").is_some());
+        let head_before = port.head_sha(&root).expect("head before");
+        assert!(head_before.is_some());
         assert_eq!(port.is_dirty(&root).expect("dirty"), Some(false));
 
         std::fs::write(root.join("Cargo.toml"), "[workspace]\n# dirty\n").expect("write");
         assert_eq!(port.is_dirty(&root).expect("dirty"), Some(true));
+
+        let committed = port
+            .commit_all(&root, "buildfix: test auto-commit")
+            .expect("commit");
+        assert!(committed.is_some());
+        assert_eq!(port.is_dirty(&root).expect("dirty after"), Some(false));
+        assert_ne!(committed, head_before);
     }
 }

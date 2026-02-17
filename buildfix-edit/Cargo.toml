@@ -1,14 +1,15 @@
 [package]
 name = "buildfix-edit"
-version = "0.1.0"
+version = "0.2.0"
 publish = false
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
-description = "TOML editing engine for Cargo manifest repairs"
+description = "Policy-aware edit/apply engine for buildfix plan operations"
 repository.workspace = true
 homepage.workspace = true
 readme = "README.md"
-keywords = ["cargo", "toml", "edit", "manifest"]
+keywords = ["cargo", "toml", "patch", "preconditions", "repair"]
 categories = ["development-tools"]
 
 [dependencies]
