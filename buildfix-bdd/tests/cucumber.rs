@@ -17,6 +17,9 @@ pub struct BuildfixWorld {
     explain_output: Option<String>,
     saved_plan_json: Option<String>,
     saved_git_head: Option<String>,
+    last_command_stdout: Option<String>,
+    last_command_stderr: Option<String>,
+    last_command_status: Option<i32>,
 }
 
 fn repo_root(world: &BuildfixWorld) -> &Utf8PathBuf {
@@ -101,6 +104,36 @@ async fn builddiag_receipt(world: &mut BuildfixWorld) {
     .unwrap();
 }
 
+#[given("a builddiag receipt for resolver v2 with capabilities")]
+async fn builddiag_receipt_with_capabilities(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let artifacts = root.join("artifacts").join("builddiag");
+    fs::create_dir_all(&artifacts).unwrap();
+
+    let receipt = serde_json::json!({
+        "schema": "builddiag.report.v1",
+        "tool": { "name": "builddiag", "version": "0.0.0" },
+        "capabilities": {
+            "check_ids": ["workspace.resolver_v2"],
+            "scopes": ["workspace"]
+        },
+        "verdict": { "status": "fail", "counts": { "findings": 1, "errors": 1, "warnings": 0 } },
+        "findings": [{
+            "severity": "error",
+            "check_id": "workspace.resolver_v2",
+            "code": "not_v2",
+            "message": "workspace resolver is not 2",
+            "location": { "path": "Cargo.toml", "line": 1, "column": 1 }
+        }]
+    });
+
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
+}
+
 #[when("I run buildfix plan")]
 async fn run_plan(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
@@ -140,6 +173,27 @@ async fn run_apply(world: &mut BuildfixWorld) {
         .arg("--apply")
         .assert()
         .success();
+}
+
+#[when("I run buildfix apply with --apply expecting missing plan")]
+async fn run_apply_expect_missing_plan(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let output = Command::cargo_bin("buildfix")
+        .expect("buildfix binary")
+        .current_dir(root.as_str())
+        .arg("apply")
+        .arg("--apply")
+        .output()
+        .expect("run apply");
+
+    world.last_command_stdout = Some(String::from_utf8_lossy(&output.stdout).to_string());
+    world.last_command_stderr = Some(String::from_utf8_lossy(&output.stderr).to_string());
+    world.last_command_status = output.status.code();
+
+    assert!(
+        !output.status.success(),
+        "expected apply to fail when plan.json is missing"
+    );
 }
 
 #[then(expr = "the root Cargo.toml sets workspace resolver to {string}")]
@@ -525,6 +579,161 @@ async fn assert_crate_a_uses_workspace_serde(world: &mut BuildfixWorld) {
     assert!(
         contents.contains("workspace = true"),
         "expected serde to use workspace = true, got:\n{}",
+        contents
+    );
+}
+
+// ============================================================================
+// Scenario: Consolidates duplicate dependency versions
+// ============================================================================
+
+#[given("a repo with duplicate dependency versions across members")]
+async fn repo_with_duplicate_dependency_versions(world: &mut BuildfixWorld) {
+    let td = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(td.path().to_path_buf()).unwrap();
+
+    fs::create_dir_all(root.join("crates").join("crate-a")).unwrap();
+    fs::create_dir_all(root.join("crates").join("crate-b")).unwrap();
+
+    fs::write(
+        root.join("Cargo.toml"),
+        r#"
+[workspace]
+members = ["crates/crate-a", "crates/crate-b"]
+resolver = "2"
+"#,
+    )
+    .unwrap();
+
+    fs::write(
+        root.join("crates").join("crate-a").join("Cargo.toml"),
+        r#"
+[package]
+name = "crate-a"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = "1.0.180"
+"#,
+    )
+    .unwrap();
+
+    fs::write(
+        root.join("crates").join("crate-b").join("Cargo.toml"),
+        r#"
+[package]
+name = "crate-b"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1.0.160", features = ["derive"] }
+"#,
+    )
+    .unwrap();
+
+    world.temp = Some(td);
+    world.repo_root = Some(root);
+}
+
+#[given("a depguard receipt for duplicate dependency versions")]
+async fn depguard_receipt_duplicate_dependency_versions(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let artifacts = root.join("artifacts").join("depguard");
+    fs::create_dir_all(&artifacts).unwrap();
+
+    let receipt = serde_json::json!({
+        "schema": "depguard.report.v1",
+        "tool": { "name": "depguard", "version": "0.0.0" },
+        "verdict": { "status": "fail", "counts": { "findings": 2, "errors": 2, "warnings": 0 } },
+        "findings": [
+            {
+                "severity": "error",
+                "check_id": "deps.duplicate_dependency_versions",
+                "code": "duplicate_version",
+                "message": "duplicate dependency versions",
+                "location": { "path": "crates/crate-a/Cargo.toml", "line": 8, "column": 1 },
+                "data": {
+                    "dep": "serde",
+                    "selected_version": "1.0.200",
+                    "toml_path": ["dependencies", "serde"]
+                }
+            },
+            {
+                "severity": "error",
+                "check_id": "deps.duplicate_dependency_versions",
+                "code": "duplicate_version",
+                "message": "duplicate dependency versions",
+                "location": { "path": "crates/crate-b/Cargo.toml", "line": 8, "column": 1 },
+                "data": {
+                    "dep": "serde",
+                    "selected_version": "1.0.200",
+                    "toml_path": ["dependencies", "serde"]
+                }
+            }
+        ]
+    });
+
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
+}
+
+#[then("the plan contains a duplicate dependency consolidation fix")]
+async fn assert_plan_contains_duplicate_dependency_fix(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    assert!(
+        plan_has_rule(&v, "ensure_workspace_dependency_version"),
+        "expected a duplicate dependency consolidation root op"
+    );
+    assert!(
+        plan_has_rule(&v, "use_workspace_dependency"),
+        "expected duplicate dependency consolidation member ops"
+    );
+}
+
+#[then(expr = "the root Cargo.toml has workspace dependency serde version {string}")]
+async fn assert_root_workspace_serde_version(world: &mut BuildfixWorld, version: String) {
+    let root = repo_root(world).clone();
+    let contents = fs::read_to_string(root.join("Cargo.toml"))
+        .context("read Cargo.toml")
+        .unwrap();
+
+    let has_inline = contents.contains(&format!("dependencies = {{ serde = \"{}\" }}", version));
+    let has_table = contents.contains("[workspace.dependencies]")
+        && contents.contains(&format!("serde = \"{}\"", version));
+    assert!(
+        has_inline || has_table,
+        "expected workspace serde version {} in Cargo.toml, got:\n{}",
+        version,
+        contents
+    );
+}
+
+#[then(expr = "the crate-b Cargo.toml uses workspace dependency for serde with feature {string}")]
+async fn assert_crate_b_workspace_serde_with_feature(world: &mut BuildfixWorld, feature: String) {
+    let root = repo_root(world).clone();
+    let contents = fs::read_to_string(root.join("crates").join("crate-b").join("Cargo.toml"))
+        .context("read crate-b Cargo.toml")
+        .unwrap();
+
+    assert!(
+        contents.contains("workspace = true"),
+        "expected serde to use workspace = true in crate-b, got:\n{}",
+        contents
+    );
+    assert!(
+        contents.contains(&format!("features = [\"{}\"]", feature))
+            || contents.contains(&format!("features = [ \"{}\" ]", feature)),
+        "expected serde features to preserve {}, got:\n{}",
+        feature,
         contents
     );
 }
@@ -2483,6 +2692,83 @@ async fn assert_report_mentions_receipt_error(world: &mut BuildfixWorld) {
         has_error_input,
         "expected plan inputs to contain an errored receipt (schema=null, tool=null), got: {}",
         serde_json::to_string_pretty(&v["inputs"]).unwrap()
+    );
+}
+
+#[then("the command fails with exit code 1")]
+async fn assert_command_failed_exit_code_one(world: &mut BuildfixWorld) {
+    assert_eq!(
+        world.last_command_status,
+        Some(1),
+        "expected exit code 1, got {:?}",
+        world.last_command_status
+    );
+}
+
+#[then(expr = "the command output mentions {string}")]
+async fn assert_command_output_mentions(world: &mut BuildfixWorld, needle: String) {
+    let stdout = world.last_command_stdout.as_deref().unwrap_or_default();
+    let stderr = world.last_command_stderr.as_deref().unwrap_or_default();
+    let combined = format!("{stdout}\n{stderr}");
+    assert!(
+        combined.contains(&needle),
+        "expected output to contain '{}', got:\n{}",
+        needle,
+        combined
+    );
+}
+
+fn read_report_json(world: &BuildfixWorld) -> serde_json::Value {
+    let root = repo_root(world).clone();
+    let report_path = root.join("artifacts").join("buildfix").join("report.json");
+    let report_str = fs::read_to_string(&report_path).expect("read report.json");
+    serde_json::from_str(&report_str).expect("parse report.json")
+}
+
+#[then(expr = "report.json capabilities include check id {string}")]
+async fn assert_report_capabilities_check_id(world: &mut BuildfixWorld, check_id: String) {
+    let report = read_report_json(world);
+    let check_ids = report["capabilities"]["check_ids"]
+        .as_array()
+        .expect("capabilities.check_ids array");
+    assert!(
+        check_ids
+            .iter()
+            .any(|v| v.as_str() == Some(check_id.as_str())),
+        "expected capabilities.check_ids to contain '{}', got:\n{}",
+        check_id,
+        serde_json::to_string_pretty(&report["capabilities"]).unwrap()
+    );
+}
+
+#[then(expr = "report.json capabilities include scope {string}")]
+async fn assert_report_capabilities_scope(world: &mut BuildfixWorld, scope: String) {
+    let report = read_report_json(world);
+    let scopes = report["capabilities"]["scopes"]
+        .as_array()
+        .expect("capabilities.scopes array");
+    assert!(
+        scopes.iter().any(|v| v.as_str() == Some(scope.as_str())),
+        "expected capabilities.scopes to contain '{}', got:\n{}",
+        scope,
+        serde_json::to_string_pretty(&report["capabilities"]).unwrap()
+    );
+}
+
+#[then("report.json capabilities mark partial results")]
+async fn assert_report_capabilities_partial(world: &mut BuildfixWorld) {
+    let report = read_report_json(world);
+    let partial = report["capabilities"]["partial"]
+        .as_bool()
+        .expect("capabilities.partial bool");
+    assert!(partial, "expected capabilities.partial to be true");
+
+    let inputs_failed = report["capabilities"]["inputs_failed"]
+        .as_array()
+        .expect("capabilities.inputs_failed array");
+    assert!(
+        !inputs_failed.is_empty(),
+        "expected at least one failed input when partial is true"
     );
 }
 

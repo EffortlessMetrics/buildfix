@@ -24,6 +24,16 @@ Feature: Plan and apply
     When I run buildfix apply with --apply
     Then the crate-a Cargo.toml uses workspace dependency for serde
 
+  Scenario: Consolidates duplicate dependency versions
+    Given a repo with duplicate dependency versions across members
+    And a depguard receipt for duplicate dependency versions
+    When I run buildfix plan
+    Then the plan contains a duplicate dependency consolidation fix
+    When I run buildfix apply with --apply
+    Then the root Cargo.toml has workspace dependency serde version "1.0.200"
+    And the crate-a Cargo.toml uses workspace dependency for serde
+    And the crate-b Cargo.toml uses workspace dependency for serde with feature "derive"
+
   Scenario: Normalizes MSRV to workspace value
     Given a repo with inconsistent MSRV
     And a builddiag receipt for MSRV inconsistency
@@ -85,6 +95,21 @@ Feature: Plan and apply
     And an empty artifacts directory
     When I run buildfix plan
     Then the plan contains no fixes
+
+  Scenario: Apply fails when plan artifact is missing
+    Given a repo missing workspace resolver v2
+    When I run buildfix apply with --apply expecting missing plan
+    Then the command fails with exit code 1
+    And the command output mentions "plan.json"
+
+  Scenario: Report capabilities surface partial input failures
+    Given a repo missing workspace resolver v2
+    And a builddiag receipt for resolver v2 with capabilities
+    And a corrupted JSON receipt
+    When I run buildfix plan
+    Then report.json capabilities include check id "workspace.resolver_v2"
+    And report.json capabilities include scope "workspace"
+    And report.json capabilities mark partial results
 
   # ============================================================================
   # Policy enforcement
