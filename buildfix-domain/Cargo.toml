@@ -16,13 +16,21 @@ categories = ["development-tools"]
 anyhow.workspace = true
 camino.workspace = true
 fs-err.workspace = true
-glob.workspace = true
+buildfix-fixer-catalog = { path = "../buildfix-fixer-catalog", default-features = false }
+buildfix-fixer-api = { path = "../buildfix-fixer-api" }
+buildfix-domain-policy = { path = "../buildfix-domain-policy" }
+buildfix-fixer-duplicate-deps = { path = "../buildfix-fixer-duplicate-deps", optional = true }
+buildfix-fixer-edition = { path = "../buildfix-fixer-edition", optional = true }
+buildfix-fixer-license = { path = "../buildfix-fixer-license", optional = true }
+buildfix-fixer-msrv = { path = "../buildfix-fixer-msrv", optional = true }
+buildfix-fixer-path-dep-version = { path = "../buildfix-fixer-path-dep-version", optional = true }
+buildfix-fixer-remove-unused-deps = { path = "../buildfix-fixer-remove-unused-deps", optional = true }
+buildfix-fixer-resolver-v2 = { path = "../buildfix-fixer-resolver-v2", optional = true }
+buildfix-fixer-workspace-inheritance = { path = "../buildfix-fixer-workspace-inheritance", optional = true }
 serde.workspace = true
 serde_json.workspace = true
-sha2.workspace = true
-hex.workspace = true
-thiserror.workspace = true
 toml_edit.workspace = true
+thiserror.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 
@@ -38,3 +46,44 @@ proptest.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
 toml.workspace = true
+
+[features]
+default = [
+    "fixer-resolver-v2",
+    "fixer-path-dep-version",
+    "fixer-workspace-inheritance",
+    "fixer-duplicate-deps",
+    "fixer-remove-unused-deps",
+    "fixer-msrv",
+    "fixer-edition",
+    "fixer-license",
+]
+fixer-resolver-v2 = [
+    "dep:buildfix-fixer-resolver-v2",
+    "buildfix-fixer-catalog/fixer-resolver-v2",
+]
+fixer-path-dep-version = [
+    "dep:buildfix-fixer-path-dep-version",
+    "buildfix-fixer-catalog/fixer-path-dep-version",
+]
+fixer-workspace-inheritance = [
+    "dep:buildfix-fixer-workspace-inheritance",
+    "buildfix-fixer-catalog/fixer-workspace-inheritance",
+]
+fixer-duplicate-deps = [
+    "dep:buildfix-fixer-duplicate-deps",
+    "buildfix-fixer-catalog/fixer-duplicate-deps",
+]
+fixer-remove-unused-deps = [
+    "dep:buildfix-fixer-remove-unused-deps",
+    "buildfix-fixer-catalog/fixer-remove-unused-deps",
+]
+fixer-msrv = ["dep:buildfix-fixer-msrv", "buildfix-fixer-catalog/fixer-msrv"]
+fixer-edition = [
+    "dep:buildfix-fixer-edition",
+    "buildfix-fixer-catalog/fixer-edition",
+]
+fixer-license = [
+    "dep:buildfix-fixer-license",
+    "buildfix-fixer-catalog/fixer-license",
+]

@@ -1,0 +1,19 @@
+[package]
+name = "buildfix-report"
+version = "0.2.0"
+publish = false
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Core report projection for buildfix plan/apply outcomes."
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["cargo", "workspace", "report", "planning", "telemetry"]
+categories = ["development-tools"]
+
+[dependencies]
+chrono.workspace = true
+buildfix-receipts = { path = "../buildfix-receipts" }
+buildfix-types = { path = "../buildfix-types" }
+serde_json.workspace = true

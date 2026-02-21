@@ -2,16 +2,8 @@ use anyhow::Context;
 use camino::{Utf8Path, Utf8PathBuf};
 use fs_err as fs;
 
-/// Read-only repository access.
-///
-/// buildfix-domain uses this so it can be tested against an in-memory implementation later.
-pub trait RepoView {
-    fn root(&self) -> &Utf8Path;
-
-    fn read_to_string(&self, rel: &Utf8Path) -> anyhow::Result<String>;
-
-    fn exists(&self, rel: &Utf8Path) -> bool;
-}
+// Re-exported for downstream reuse and compatibility with microcrate adapters.
+pub use buildfix_fixer_api::RepoView;
 
 /// File-system backed `RepoView`.
 #[derive(Debug, Clone)]

@@ -10,6 +10,7 @@ mod error;
 pub use error::{EditError, EditResult, PolicyBlockError};
 
 use anyhow::Context;
+use buildfix_hash::sha256_hex;
 use buildfix_types::apply::{
     ApplyFile, ApplyPreconditions, ApplyRepoInfo, ApplyResult, ApplyStatus, ApplySummary,
     BuildfixApply, PlanRef, PreconditionMismatch,
@@ -20,7 +21,6 @@ use buildfix_types::receipt::ToolInfo;
 use camino::{Utf8Path, Utf8PathBuf};
 use diffy::PatchFormatter;
 use fs_err as fs;
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use toml_edit::{DocumentMut, InlineTable, Item, value};
 use uuid::Uuid;
@@ -602,12 +602,6 @@ fn abs_path(repo_root: &Utf8Path, rel: &Utf8Path) -> Utf8PathBuf {
     } else {
         repo_root.join(rel)
     }
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    hex::encode(hasher.finalize())
 }
 
 fn render_patch(

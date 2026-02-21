@@ -7,6 +7,7 @@ mod fixers;
 mod planner;
 mod ports;
 
-pub use fixers::{FixerMeta, builtin_fixer_metas};
-pub use planner::{PlanContext, Planner, PlannerConfig};
+pub use buildfix_fixer_api::{FixerMeta, MatchedFinding, PlanContext, PlannerConfig, ReceiptSet};
+pub use fixers::builtin_fixer_metas;
+pub use planner::Planner;
 pub use ports::{FsRepoView, RepoView};

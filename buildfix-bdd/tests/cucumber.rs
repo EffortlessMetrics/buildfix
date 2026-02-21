@@ -7,6 +7,7 @@ use assert_cmd::Command;
 use camino::Utf8PathBuf;
 use cucumber::{World, given, then, when};
 use fs_err as fs;
+use std::collections::HashSet;
 use std::process::Command as StdCommand;
 use tempfile::TempDir;
 
@@ -2049,6 +2050,7 @@ async fn assert_plan_contains_multiple_fixes(world: &mut BuildfixWorld) {
 async fn assert_fixes_sorted_deterministically(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
     let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let mut ids_seen = std::collections::HashSet::new();
 
     // Run plan twice and compare
     let plan_str1 = fs::read_to_string(&plan_path).unwrap();
@@ -2078,6 +2080,16 @@ async fn assert_fixes_sorted_deterministically(world: &mut BuildfixWorld) {
         .iter()
         .map(|f| f["id"].as_str().unwrap())
         .collect();
+
+    assert_eq!(fixes1.len(), fixes2.len());
+    for id in &fixes1 {
+        assert!(
+            !id.is_empty(),
+            "expected deterministic op id to be non-empty"
+        );
+        let inserted = ids_seen.insert(*id);
+        assert!(inserted, "expected op ids to be unique, duplicate: {}", id);
+    }
 
     assert_eq!(
         fixes1, fixes2,
@@ -2266,6 +2278,37 @@ async fn assert_json_contains_fix(world: &mut BuildfixWorld, key: String) {
         key,
         output
     );
+}
+
+#[then("the JSON fix output matches enabled builtins")]
+async fn assert_json_matches_enabled_builtins(world: &mut BuildfixWorld) {
+    let output = world.explain_output.as_ref().expect("output");
+    let json: serde_json::Value =
+        serde_json::from_str(output).expect("output should be valid JSON");
+    let fixes = json.as_array().expect("JSON should be an array");
+
+    let mut fix_ids = HashSet::new();
+    for item in fixes {
+        let fix_id = item["fix_id"].as_str().unwrap_or("");
+        assert!(
+            !fix_id.is_empty(),
+            "expected each fix entry to include a non-empty fix_id: {:?}",
+            item
+        );
+        fix_ids.insert(fix_id.to_string());
+    }
+
+    let expected_catalog: HashSet<String> = buildfix_fixer_catalog::enabled_fix_ids()
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+    let expected_core: HashSet<String> = buildfix_core::builtin_fixer_metas()
+        .into_iter()
+        .map(|m| m.fix_key.to_string())
+        .collect();
+
+    assert_eq!(expected_catalog, expected_core);
+    assert_eq!(fix_ids, expected_catalog);
 }
 
 // ============================================================================
@@ -2769,6 +2812,92 @@ async fn assert_report_capabilities_partial(world: &mut BuildfixWorld) {
     assert!(
         !inputs_failed.is_empty(),
         "expected at least one failed input when partial is true"
+    );
+}
+
+#[then("report.json capabilities check ids are sorted")]
+async fn assert_report_capabilities_check_ids_sorted(world: &mut BuildfixWorld) {
+    let report = read_report_json(world);
+    let check_ids = report["capabilities"]["check_ids"]
+        .as_array()
+        .expect("capabilities.check_ids array")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("check_ids value should be string")
+                .to_string()
+        })
+        .collect::<Vec<_>>();
+    let mut sorted = check_ids.clone();
+    sorted.sort();
+    assert_eq!(
+        sorted, check_ids,
+        "expected sorted check_ids, got {:?}",
+        check_ids
+    );
+}
+
+#[then("report.json capabilities scopes are sorted")]
+async fn assert_report_capabilities_scopes_sorted(world: &mut BuildfixWorld) {
+    let report = read_report_json(world);
+    let scopes = report["capabilities"]["scopes"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .map(|value| {
+                    value
+                        .as_str()
+                        .expect("scopes value should be string")
+                        .to_string()
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let mut sorted = scopes.clone();
+    sorted.sort();
+    assert_eq!(sorted, scopes, "expected sorted scopes, got {:?}", scopes);
+}
+
+#[then("report.json capabilities inputs available are sorted")]
+async fn assert_report_capabilities_inputs_available_sorted(world: &mut BuildfixWorld) {
+    let report = read_report_json(world);
+    let inputs_available = report["capabilities"]["inputs_available"]
+        .as_array()
+        .expect("capabilities.inputs_available array")
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .expect("inputs_available value should be string")
+                .to_string()
+        })
+        .collect::<Vec<_>>();
+    let mut sorted = inputs_available.clone();
+    sorted.sort();
+    assert_eq!(
+        sorted, inputs_available,
+        "expected sorted inputs_available, got {:?}",
+        inputs_available
+    );
+}
+
+#[then(expr = "report.json apply data field {string} is {int}")]
+async fn assert_report_apply_data_field_i64(
+    world: &mut BuildfixWorld,
+    field: String,
+    expected: i64,
+) {
+    let report = read_report_json(world);
+    let value = &report["data"]["buildfix"]["apply"][&field];
+    assert!(
+        value.is_number(),
+        "expected report.buildfix.apply.{field} to be a number, got {value}"
+    );
+    assert_eq!(
+        value.as_i64(),
+        Some(expected),
+        "expected report.buildfix.apply.{field} to be {expected}, got {value}"
     );
 }
 

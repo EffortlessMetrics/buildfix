@@ -1,0 +1,22 @@
+[package]
+name = "buildfix-fixer-edition"
+version = "0.2.0"
+publish = false
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Edition normalization fixer implementation."
+repository.workspace = true
+homepage.workspace = true
+categories = ["development-tools"]
+keywords = ["cargo", "fixer", "buildfix", "edition"]
+
+[dependencies]
+anyhow.workspace = true
+camino.workspace = true
+toml_edit.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+buildfix-fixer-api = { path = "../buildfix-fixer-api" }
+buildfix-types = { path = "../buildfix-types" }
+buildfix-receipts = { path = "../buildfix-receipts" }

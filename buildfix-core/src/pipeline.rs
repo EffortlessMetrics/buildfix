@@ -6,22 +6,31 @@
 use crate::ports::{GitPort, ReceiptSource, WritePort};
 use crate::settings::{ApplySettings, PlanSettings};
 use anyhow::Context;
+use buildfix_artifacts::{
+    ArtifactWriter, write_apply_artifacts as write_apply_artifacts_io,
+    write_plan_artifacts as write_plan_artifacts_io,
+};
 use buildfix_domain::{FsRepoView, PlanContext, Planner, PlannerConfig};
 use buildfix_edit::{
     ApplyOptions, AttachPreconditionsOptions, apply_plan, attach_preconditions, preview_patch,
 };
+use buildfix_hash::sha256_hex;
 use buildfix_receipts::LoadedReceipt;
-use buildfix_render::{render_apply_md, render_comment_md, render_plan_md};
+#[cfg(feature = "reporting")]
+use buildfix_report::{build_apply_report, build_plan_report};
 use buildfix_types::apply::{AutoCommitInfo, BuildfixApply};
 use buildfix_types::plan::BuildfixPlan;
 use buildfix_types::receipt::ToolInfo;
+use buildfix_types::report::BuildfixReport;
+#[cfg(not(feature = "reporting"))]
 use buildfix_types::report::{
-    BuildfixReport, InputFailure, ReportArtifacts, ReportCapabilities, ReportCounts, ReportFinding,
-    ReportRunInfo, ReportSeverity, ReportStatus, ReportToolInfo, ReportVerdict,
+    InputFailure, ReportArtifacts, ReportCapabilities, ReportCounts, ReportFinding, ReportRunInfo,
+    ReportSeverity, ReportStatus, ReportToolInfo, ReportVerdict,
 };
-use buildfix_types::wire::{PlanV1, ReportV1};
+use buildfix_types::wire::PlanV1;
+#[cfg(not(feature = "reporting"))]
 use chrono::Utc;
-use sha2::{Digest, Sha256};
+#[cfg(not(feature = "reporting"))]
 use std::collections::BTreeSet;
 use tracing::debug;
 
@@ -147,43 +156,29 @@ pub fn run_plan(
 }
 
 /// Write all plan artifacts to the output directory.
+#[cfg(feature = "artifact-writer")]
 pub fn write_plan_artifacts(
     outcome: &PlanOutcome,
     out_dir: &camino::Utf8Path,
     writer: &dyn WritePort,
 ) -> anyhow::Result<()> {
-    writer.create_dir_all(out_dir)?;
+    let adapter = CoreArtifactWriter { writer };
+    write_plan_artifacts_io(
+        &outcome.plan,
+        &outcome.report,
+        &outcome.patch,
+        out_dir,
+        &adapter,
+    )
+}
 
-    let plan_wire = PlanV1::try_from(&outcome.plan).context("convert plan to wire")?;
-    let plan_json = serde_json::to_string_pretty(&plan_wire).context("serialize plan")?;
-    writer.write_file(&out_dir.join("plan.json"), plan_json.as_bytes())?;
-
-    let plan_md = render_plan_md(&outcome.plan);
-    writer.write_file(&out_dir.join("plan.md"), plan_md.as_bytes())?;
-
-    let comment_md = render_comment_md(&outcome.plan);
-    writer.write_file(&out_dir.join("comment.md"), comment_md.as_bytes())?;
-
-    writer.write_file(&out_dir.join("patch.diff"), outcome.patch.as_bytes())?;
-
-    let report_wire = ReportV1::from(&outcome.report);
-    let report_json = serde_json::to_string_pretty(&report_wire).context("serialize report")?;
-    writer.write_file(&out_dir.join("report.json"), report_json.as_bytes())?;
-
-    // Write extras.
-    let extras_dir = out_dir.join("extras");
-    writer.create_dir_all(&extras_dir)?;
-    let mut extras_report = outcome.report.clone();
-    extras_report.schema = buildfix_types::schema::BUILDFIX_REPORT_V1.to_string();
-    let extras_wire = ReportV1::from(&extras_report);
-    let extras_json =
-        serde_json::to_string_pretty(&extras_wire).context("serialize extras report")?;
-    writer.write_file(
-        &extras_dir.join("buildfix.report.v1.json"),
-        extras_json.as_bytes(),
-    )?;
-
-    Ok(())
+#[cfg(not(feature = "artifact-writer"))]
+pub fn write_plan_artifacts(
+    _outcome: &PlanOutcome,
+    _out_dir: &camino::Utf8Path,
+    _writer: &dyn WritePort,
+) -> anyhow::Result<()> {
+    anyhow::bail!("artifact-writer feature is disabled for buildfix-core")
 }
 
 /// Outcome of `run_apply`.
@@ -353,45 +348,60 @@ pub fn run_apply(
 }
 
 /// Write all apply artifacts to the output directory.
+#[cfg(feature = "artifact-writer")]
 pub fn write_apply_artifacts(
     outcome: &ApplyOutcome,
     out_dir: &camino::Utf8Path,
     writer: &dyn WritePort,
 ) -> anyhow::Result<()> {
-    writer.create_dir_all(out_dir)?;
-
-    let apply_wire =
-        buildfix_types::wire::ApplyV1::try_from(&outcome.apply).context("convert apply to wire")?;
-    let apply_json = serde_json::to_string_pretty(&apply_wire).context("serialize apply")?;
-    writer.write_file(&out_dir.join("apply.json"), apply_json.as_bytes())?;
-
-    let apply_md = render_apply_md(&outcome.apply);
-    writer.write_file(&out_dir.join("apply.md"), apply_md.as_bytes())?;
-
-    writer.write_file(&out_dir.join("patch.diff"), outcome.patch.as_bytes())?;
-
-    let report_wire = ReportV1::from(&outcome.report);
-    let report_json = serde_json::to_string_pretty(&report_wire).context("serialize report")?;
-    writer.write_file(&out_dir.join("report.json"), report_json.as_bytes())?;
-
-    // Write extras.
-    let extras_dir = out_dir.join("extras");
-    writer.create_dir_all(&extras_dir)?;
-    let mut extras_report = outcome.report.clone();
-    extras_report.schema = buildfix_types::schema::BUILDFIX_REPORT_V1.to_string();
-    let extras_wire = ReportV1::from(&extras_report);
-    let extras_json =
-        serde_json::to_string_pretty(&extras_wire).context("serialize extras report")?;
-    writer.write_file(
-        &extras_dir.join("buildfix.report.v1.json"),
-        extras_json.as_bytes(),
-    )?;
-
-    Ok(())
+    let adapter = CoreArtifactWriter { writer };
+    write_apply_artifacts_io(
+        &outcome.apply,
+        &outcome.report,
+        &outcome.patch,
+        out_dir,
+        &adapter,
+    )
 }
 
-// ── report helpers (extracted from CLI) ──────────────────────────────────
+struct CoreArtifactWriter<'a> {
+    writer: &'a dyn WritePort,
+}
 
+impl<'a> ArtifactWriter for CoreArtifactWriter<'a> {
+    fn write_file(&self, path: &camino::Utf8Path, contents: &[u8]) -> anyhow::Result<()> {
+        self.writer.write_file(path, contents)
+    }
+
+    fn create_dir_all(&self, path: &camino::Utf8Path) -> anyhow::Result<()> {
+        self.writer.create_dir_all(path)
+    }
+}
+
+#[cfg(not(feature = "artifact-writer"))]
+pub fn write_apply_artifacts(
+    _outcome: &ApplyOutcome,
+    _out_dir: &camino::Utf8Path,
+    _writer: &dyn WritePort,
+) -> anyhow::Result<()> {
+    anyhow::bail!("artifact-writer feature is disabled for buildfix-core")
+}
+
+#[cfg(feature = "reporting")]
+pub(crate) fn report_from_plan(
+    plan: &BuildfixPlan,
+    tool: ToolInfo,
+    receipts: &[LoadedReceipt],
+) -> BuildfixReport {
+    build_plan_report(plan, tool, receipts)
+}
+
+#[cfg(feature = "reporting")]
+pub(crate) fn report_from_apply(apply: &BuildfixApply, tool: ToolInfo) -> BuildfixReport {
+    build_apply_report(apply, tool)
+}
+
+#[cfg(not(feature = "reporting"))]
 pub(crate) fn report_from_plan(
     plan: &BuildfixPlan,
     tool: ToolInfo,
@@ -481,7 +491,7 @@ pub(crate) fn report_from_plan(
                     "unsafe": sc.unsafe_count,
                 });
             }
-            let tokens: std::collections::BTreeSet<&str> = plan
+            let tokens: BTreeSet<&str> = plan
                 .ops
                 .iter()
                 .filter_map(|o| o.blocked_reason_token.as_deref())
@@ -499,6 +509,7 @@ pub(crate) fn report_from_plan(
     }
 }
 
+#[cfg(not(feature = "reporting"))]
 fn build_capabilities(receipts: &[LoadedReceipt]) -> ReportCapabilities {
     let mut inputs_available = Vec::new();
     let mut inputs_failed = Vec::new();
@@ -547,6 +558,7 @@ fn build_capabilities(receipts: &[LoadedReceipt]) -> ReportCapabilities {
     }
 }
 
+#[cfg(not(feature = "reporting"))]
 pub(crate) fn report_from_apply(apply: &BuildfixApply, tool: ToolInfo) -> BuildfixReport {
     let status = if apply.summary.failed > 0 {
         ReportStatus::Fail
@@ -637,12 +649,6 @@ fn empty_apply_from_plan(
     BuildfixApply::new(tool, repo_info, plan_ref)
 }
 
-fn sha256_hex(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    hex::encode(hasher.finalize())
-}
-
 fn default_auto_commit_message(
     plan_path: &camino::Utf8Path,
     plan_sha: &str,
@@ -671,9 +677,9 @@ mod tests {
     use buildfix_types::receipt::{
         Finding, Location, ReceiptCapabilities, ReceiptEnvelope, RunInfo, ToolInfo, Verdict,
     };
+    use buildfix_types::report::ReportStatus;
     use buildfix_types::wire::PlanV1;
     use camino::{Utf8Path, Utf8PathBuf};
-    use sha2::{Digest, Sha256};
     use std::collections::HashMap;
     use std::sync::Mutex;
     use tempfile::TempDir;
@@ -1371,9 +1377,7 @@ mod tests {
         let pre = &outcome.plan.preconditions.files[0];
         assert_eq!(pre.path, "Cargo.toml");
 
-        let mut hasher = Sha256::new();
-        hasher.update(b"[workspace]\nresolver = \"1\"\n");
-        let expected_sha = hex::encode(hasher.finalize());
+        let expected_sha = sha256_hex(b"[workspace]\nresolver = \"1\"\n");
         assert_eq!(pre.sha256, expected_sha);
 
         assert_eq!(

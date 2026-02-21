@@ -16,20 +16,26 @@ categories = ["development-tools"]
 anyhow.workspace = true
 camino.workspace = true
 chrono.workspace = true
-hex.workspace = true
+buildfix-hash = { path = "../buildfix-hash" }
+buildfix-core-runtime = { path = "../buildfix-core-runtime" }
 serde.workspace = true
 serde_json.workspace = true
-sha2.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 
 buildfix-domain = { path = "../buildfix-domain" }
 buildfix-edit = { path = "../buildfix-edit" }
+buildfix-artifacts = { path = "../buildfix-artifacts", optional = true }
 buildfix-receipts = { path = "../buildfix-receipts" }
-buildfix-render = { path = "../buildfix-render" }
+buildfix-report = { path = "../buildfix-report", optional = true }
 buildfix-types = { path = "../buildfix-types" }
 
 [dev-dependencies]
 pretty_assertions.workspace = true
 tempfile.workspace = true
+
+[features]
+default = ["reporting", "artifact-writer"]
+reporting = ["dep:buildfix-report"]
+artifact-writer = ["dep:buildfix-artifacts"]
