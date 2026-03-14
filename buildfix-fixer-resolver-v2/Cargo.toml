@@ -1,7 +1,7 @@
 [package]
 name = "buildfix-fixer-resolver-v2"
 version = "0.2.0"
-publish = false
+publish = ["crates-io"]
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -15,7 +15,7 @@ keywords = ["cargo", "fixer", "buildfix", "resolver-v2"]
 anyhow.workspace = true
 camino.workspace = true
 toml_edit.workspace = true
-buildfix-fixer-api = { path = "../buildfix-fixer-api" }
-buildfix-types = { path = "../buildfix-types" }
-buildfix-receipts = { path = "../buildfix-receipts" }
+buildfix-fixer-api = { version = "0.2.0", path = "../buildfix-fixer-api" }
+buildfix-types = { version = "0.2.0", path = "../buildfix-types" }
+buildfix-receipts = { version = "0.2.0", path = "../buildfix-receipts" }
 

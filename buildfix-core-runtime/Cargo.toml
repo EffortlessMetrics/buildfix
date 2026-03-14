@@ -1,7 +1,7 @@
 [package]
 name = "buildfix-core-runtime"
 version = "0.2.0"
-publish = false
+publish = ["crates-io"]
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -16,8 +16,8 @@ categories = ["development-tools"]
 anyhow.workspace = true
 camino.workspace = true
 tracing.workspace = true
-buildfix-edit = { path = "../buildfix-edit" }
-buildfix-receipts = { path = "../buildfix-receipts" }
+buildfix-edit = { version = "0.2.0", path = "../buildfix-edit" }
+buildfix-receipts = { version = "0.2.0", path = "../buildfix-receipts" }
 
 [dev-dependencies]
 pretty_assertions.workspace = true

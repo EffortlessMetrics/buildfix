@@ -1,7 +1,7 @@
 [package]
 name = "buildfix-edit"
 version = "0.2.0"
-publish = false
+publish = ["crates-io"]
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -25,8 +25,8 @@ toml_edit.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 
-buildfix-types = { path = "../buildfix-types" }
-buildfix-hash = { path = "../buildfix-hash" }
+buildfix-types = { version = "0.2.0", path = "../buildfix-types" }
+buildfix-hash = { version = "0.2.0", path = "../buildfix-hash" }
 
 [dev-dependencies]
 hex.workspace = true
