@@ -4,6 +4,12 @@ CLI frontend for the buildfix repair pipeline.
 
 This crate owns command-line UX: argument parsing, config merge, exit-code handling, schema validation commands, and fix explanation/listing.
 
+## Install
+
+```bash
+cargo install buildfix --locked
+```
+
 ## Commands
 
 - `buildfix plan`: load receipts and produce plan artifacts

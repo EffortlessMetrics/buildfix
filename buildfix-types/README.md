@@ -26,4 +26,4 @@ This crate defines the canonical Rust models and schema IDs for plan/apply/repor
 - Additive evolution preferred over breaking field changes
 - Explicit serde defaults for tolerant parsing
 
-This crate is internal to the workspace (`publish = false`).
+This is a support crate for the `buildfix` workspace and may evolve in lockstep with the workspace release train.
