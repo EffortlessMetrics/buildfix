@@ -1,0 +1,78 @@
+{
+  "inputs": [
+    {
+      "path": "<ARTIFACTS>/depguard/report.json",
+      "schema": "depguard.report.v1",
+      "tool": "depguard"
+    }
+  ],
+  "ops": [
+    {
+      "blocked": false,
+      "id": "cca08d34-3186-5420-9b9e-56f75695ef63",
+      "kind": {
+        "args": {
+          "dep": "crate-b",
+          "dep_path": "../b",
+          "toml_path": [
+            "dependencies",
+            "crate-b"
+          ],
+          "version": "0.2.0"
+        },
+        "rule_id": "ensure_path_dep_has_version",
+        "type": "toml_transform"
+      },
+      "rationale": {
+        "description": "Adds version field to path dependencies for publishability",
+        "findings": [
+          {
+            "check_id": "deps.path_requires_version",
+            "code": "missing_version",
+            "line": 7,
+            "path": "crates/a/Cargo.toml",
+            "source": "depguard"
+          }
+        ],
+        "fix_key": "depguard/deps.path_requires_version/missing_version"
+      },
+      "safety": "safe",
+      "target": {
+        "path": "crates/a/Cargo.toml"
+      }
+    }
+  ],
+  "policy": {
+    "allow": [],
+    "allow_dirty": false,
+    "allow_guarded": false,
+    "allow_unsafe": false,
+    "deny": []
+  },
+  "preconditions": {
+    "files": [
+      {
+        "path": "crates/a/Cargo.toml",
+        "sha256": "<SHA256>"
+      }
+    ]
+  },
+  "repo": {
+    "root": "<REPO_ROOT>"
+  },
+  "schema": "buildfix.plan.v1",
+  "summary": {
+    "files_touched": 1,
+    "ops_blocked": 0,
+    "ops_total": 1,
+    "safety_counts": {
+      "guarded": 0,
+      "safe": 1,
+      "unsafe": 0
+    }
+  },
+  "tool": {
+    "name": "buildfix",
+    "version": "test"
+  }
+}

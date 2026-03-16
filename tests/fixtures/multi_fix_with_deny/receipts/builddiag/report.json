@@ -1,0 +1,28 @@
+{
+  "schema": "builddiag.report.v1",
+  "tool": {
+    "name": "builddiag",
+    "version": "0.0.0"
+  },
+  "verdict": {
+    "status": "fail",
+    "counts": {
+      "findings": 1,
+      "errors": 1,
+      "warnings": 0
+    }
+  },
+  "findings": [
+    {
+      "severity": "error",
+      "check_id": "workspace.resolver_v2",
+      "code": "not_v2",
+      "message": "workspace resolver is not 2",
+      "location": {
+        "path": "Cargo.toml",
+        "line": 1,
+        "column": 1
+      }
+    }
+  ]
+}

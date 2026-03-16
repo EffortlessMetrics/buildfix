@@ -1,45 +1,72 @@
-# buildfix (architecture-kit workspace)
+# buildfix
 
-This repository is a multi-crate workspace for **buildfix**: a receipt-driven repair tool aimed at common Cargo workspace hygiene issues.
+buildfix is a receipt-driven repair tool for Cargo workspace hygiene.
 
-The intent is mechanical:
+It consumes sensor receipts from `artifacts/*/report.json`, produces deterministic fix plans, and can apply those fixes with explicit safety gates (`safe`, `guarded`, `unsafe`).
 
-- Sensors (buildscan/builddiag/depguard) emit `artifacts/<sensor>/report.json`.
-- `buildfix plan` reads receipts and produces:
-  - `artifacts/buildfix/plan.json`
-  - `artifacts/buildfix/plan.md`
-  - `artifacts/buildfix/patch.diff` (preview)
-  - `artifacts/buildfix/report.json` (cockpit-compatible)
-- `buildfix apply` reads `plan.json` and (optionally) writes edits back to the repo.
+## Workspace crates
 
-## Crates
-
-- `buildfix-types` — schemaed DTOs (plan/apply/report, operations, receipt envelope).
-- `buildfix-receipts` — tolerant receipt loader (`artifacts/*/report.json`).
-- `buildfix-domain` — planner: receipts → deterministic planned operations.
-- `buildfix-edit` — editor: operations → `toml_edit` mutations + unified diffs.
-- `buildfix-render` — markdown rendering for artifacts.
-- `buildfix` (in `buildfix-cli`) — the CLI.
-- `buildfix-bdd` — cucumber harness (scenario-style tests).
-- `xtask` — small workspace helper.
+| Crate | Responsibility |
+| --- | --- |
+| `buildfix-types` | Shared DTOs and schema constants for plan/apply/report receipts. |
+| `buildfix-receipts` | Tolerant receipt ingestion from `artifacts/*/report.json`. |
+| `buildfix-domain` | Planning logic that decides **what** should change. |
+| `buildfix-edit` | Edit engine that decides **how** to mutate manifests. |
+| `buildfix-render` | Markdown renderers for plan/apply/comment artifacts. |
+| `buildfix-core` | Clap-free orchestration pipeline (plan/apply + artifact writing). |
+| `buildfix-cli` (package: `buildfix`) | User-facing CLI. |
+| `buildfix-bdd` | Cucumber acceptance suite. |
+| `xtask` | Developer automation and conformance helpers. |
+| `fuzz` | `cargo-fuzz` targets (excluded from workspace members). |
 
 ## Quick start
 
 ```bash
-# Plan
+# Generate plan artifacts
 cargo run -p buildfix -- plan
 
-# Dry-run apply (generates apply.json/apply.md + patch.diff but does not write)
+# Dry-run apply (no file writes)
 cargo run -p buildfix -- apply
 
-# Apply changes (safe fixes only by default)
+# Apply safe operations
 cargo run -p buildfix -- apply --apply
 
-# Allow guarded fixes (e.g., MSRV normalization)
+# Include guarded operations
 cargo run -p buildfix -- apply --apply --allow-guarded
+
+# Validate receipts and artifacts
+cargo run -p buildfix -- validate
 ```
 
-## Notes
+## Artifacts
 
-- This workspace is designed to be integrated under a larger “director” system.
-- Dependencies are not vendored; a normal Cargo environment with registry access is expected.
+`plan` writes to `artifacts/buildfix/`:
+
+- `plan.json`
+- `plan.md`
+- `comment.md`
+- `patch.diff`
+- `report.json`
+- `extras/buildfix.report.v1.json`
+
+`apply` writes to `artifacts/buildfix/`:
+
+- `apply.json`
+- `apply.md`
+- `patch.diff`
+- `report.json`
+- `extras/buildfix.report.v1.json`
+
+## Safety model
+
+- `safe`: deterministic and low-risk; applied with `--apply`
+- `guarded`: deterministic but higher-impact; needs `--allow-guarded`
+- `unsafe`: requires explicit operator approval and/or params; needs `--allow-unsafe`
+
+Exit codes:
+
+- `0`: success
+- `1`: tool/runtime error
+- `2`: policy block (for example precondition mismatch or safety gate)
+
+See `docs/safety-model.md` and `docs/architecture.md` for deeper design details.

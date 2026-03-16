@@ -1,0 +1,72 @@
+{
+  "inputs": [
+    {
+      "path": "<ARTIFACTS>/cargo-machete/report.json",
+      "schema": "cargo-machete.report.v1",
+      "tool": "cargo-machete"
+    }
+  ],
+  "ops": [
+    {
+      "blocked": false,
+      "id": "70120bf0-49e2-538b-a79a-3d16cdc86b4c",
+      "kind": {
+        "toml_path": [
+          "dependencies",
+          "serde"
+        ],
+        "type": "toml_remove"
+      },
+      "rationale": {
+        "description": "Removes dependency entries reported as unused",
+        "findings": [
+          {
+            "check_id": "deps.unused_dependency",
+            "code": "unused_dep",
+            "line": 7,
+            "path": "crates/a/Cargo.toml",
+            "source": "cargo-machete"
+          }
+        ],
+        "fix_key": "cargo-machete/deps.unused_dependency/unused_dep"
+      },
+      "safety": "unsafe",
+      "target": {
+        "path": "crates/a/Cargo.toml"
+      }
+    }
+  ],
+  "policy": {
+    "allow": [],
+    "allow_dirty": false,
+    "allow_guarded": false,
+    "allow_unsafe": false,
+    "deny": []
+  },
+  "preconditions": {
+    "files": [
+      {
+        "path": "crates/a/Cargo.toml",
+        "sha256": "<SHA256>"
+      }
+    ]
+  },
+  "repo": {
+    "root": "<REPO_ROOT>"
+  },
+  "schema": "buildfix.plan.v1",
+  "summary": {
+    "files_touched": 1,
+    "ops_blocked": 0,
+    "ops_total": 1,
+    "safety_counts": {
+      "guarded": 0,
+      "safe": 0,
+      "unsafe": 1
+    }
+  },
+  "tool": {
+    "name": "buildfix",
+    "version": "test"
+  }
+}

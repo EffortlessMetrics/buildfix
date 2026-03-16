@@ -1,0 +1,37 @@
+{
+  "plan_ref": {
+    "path": "<PLAN_PATH>"
+  },
+  "preconditions": {
+    "mismatches": [],
+    "verified": true
+  },
+  "repo": {
+    "root": "<REPO_ROOT>"
+  },
+  "results": [
+    {
+      "files": [
+        {
+          "path": "Cargo.toml",
+          "sha256_after": "2e0e11dd88ff3a367882ba2d048aeddd911171086c5cc9b8e3a434dc0c9d52fa",
+          "sha256_before": "f271ca22e10909eb21e927f31f6ebbb47603d65414c5f7fc4d1814719867cd9a"
+        }
+      ],
+      "op_id": "ab9ced5a-84ab-52fb-9080-73eece088fd5",
+      "status": "applied"
+    }
+  ],
+  "schema": "buildfix.apply.v1",
+  "summary": {
+    "applied": 1,
+    "attempted": 1,
+    "blocked": 0,
+    "failed": 0,
+    "files_modified": 1
+  },
+  "tool": {
+    "name": "buildfix",
+    "version": "test"
+  }
+}

@@ -1,0 +1,222 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:cockpit:cockpit.report.v1",
+  "title": "cockpit.report.v1",
+  "description": "Director aggregate output summarizing all sensor results.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "tool",
+    "run",
+    "verdict",
+    "sensors"
+  ],
+  "properties": {
+    "schema": {
+      "const": "cockpit.report.v1"
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "const": "cockpit"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "repo": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "string"
+        }
+      }
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "started_at"
+      ],
+      "properties": {
+        "started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "ended_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "git_head_sha": {
+          "type": "string"
+        }
+      }
+    },
+    "verdict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "counts"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "warn",
+            "fail",
+            "skip"
+          ]
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "info",
+            "warn",
+            "error"
+          ],
+          "properties": {
+            "info": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "warn": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "error": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      }
+    },
+    "sensors": {
+      "type": "array",
+      "description": "Summary of each sensor's results",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "status"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Sensor name, e.g. 'builddiag', 'depguard'"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warn",
+              "fail",
+              "skip",
+              "error"
+            ],
+            "description": "Sensor verdict status (error = tool crashed)"
+          },
+          "counts": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "info": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "warn": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "error": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "report_path": {
+            "type": "string",
+            "description": "Path to sensor's report.json relative to cockpit report"
+          },
+          "error_message": {
+            "type": "string",
+            "description": "Error message if sensor crashed"
+          }
+        }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Director-level capabilities for 'No Green By Omission'",
+      "properties": {
+        "sensors_expected": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of sensors that should have run"
+        },
+        "sensors_ran": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of sensors that actually ran"
+        },
+        "sensors_missing": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of sensors that were expected but did not run"
+        },
+        "sensors_failed": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "reason"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          },
+          "description": "Sensors that failed to execute"
+        }
+      }
+    },
+    "data": {
+      "description": "Director-specific payload"
+    }
+  }
+}

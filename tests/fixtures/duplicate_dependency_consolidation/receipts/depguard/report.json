@@ -1,0 +1,49 @@
+{
+  "schema": "depguard.report.v1",
+  "tool": {
+    "name": "depguard",
+    "version": "0.0.0"
+  },
+  "verdict": {
+    "status": "fail",
+    "counts": {
+      "findings": 2,
+      "errors": 2,
+      "warnings": 0
+    }
+  },
+  "findings": [
+    {
+      "severity": "error",
+      "check_id": "deps.duplicate_dependency_versions",
+      "code": "duplicate_version",
+      "message": "dependency has duplicate versions across workspace",
+      "location": {
+        "path": "crates/a/Cargo.toml",
+        "line": 7,
+        "column": 1
+      },
+      "data": {
+        "dep": "serde",
+        "selected_version": "1.0.200",
+        "toml_path": ["dependencies", "serde"]
+      }
+    },
+    {
+      "severity": "error",
+      "check_id": "deps.duplicate_dependency_versions",
+      "code": "duplicate_version",
+      "message": "dependency has duplicate versions across workspace",
+      "location": {
+        "path": "crates/b/Cargo.toml",
+        "line": 7,
+        "column": 1
+      },
+      "data": {
+        "dep": "serde",
+        "selected_version": "1.0.200",
+        "toml_path": ["dependencies", "serde"]
+      }
+    }
+  ]
+}

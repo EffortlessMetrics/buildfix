@@ -1,8 +1,16 @@
 [package]
 name = "buildfix-domain"
-version = "0.1.0"
+version = "0.2.0"
+publish = false
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+description = "Deterministic planning engine for buildfix repair operations"
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["cargo", "workspace", "planner", "deterministic", "repair"]
+categories = ["development-tools"]
 
 [dependencies]
 anyhow.workspace = true
@@ -11,6 +19,8 @@ fs-err.workspace = true
 glob.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
+hex.workspace = true
 thiserror.workspace = true
 toml_edit.workspace = true
 tracing.workspace = true
@@ -20,5 +30,11 @@ buildfix-types = { path = "../buildfix-types" }
 buildfix-receipts = { path = "../buildfix-receipts" }
 
 [dev-dependencies]
+buildfix-edit = { path = "../buildfix-edit" }
+buildfix-render = { path = "../buildfix-render" }
+fs-err.workspace = true
 pretty_assertions.workspace = true
+proptest.workspace = true
+serde_json.workspace = true
 tempfile.workspace = true
+toml.workspace = true

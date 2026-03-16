@@ -1,8 +1,16 @@
 [package]
 name = "buildfix-edit"
-version = "0.1.0"
+version = "0.2.0"
+publish = false
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+description = "Policy-aware edit/apply engine for buildfix plan operations"
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["cargo", "toml", "patch", "preconditions", "repair"]
+categories = ["development-tools"]
 
 [dependencies]
 anyhow.workspace = true
@@ -12,10 +20,12 @@ fs-err.workspace = true
 hex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+serde_yaml.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 toml_edit.workspace = true
 tracing.workspace = true
+uuid.workspace = true
 
 buildfix-types = { path = "../buildfix-types" }
 

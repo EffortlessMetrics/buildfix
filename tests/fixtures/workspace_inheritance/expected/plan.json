@@ -1,0 +1,77 @@
+{
+  "inputs": [
+    {
+      "path": "<ARTIFACTS>/depguard/report.json",
+      "schema": "depguard.report.v1",
+      "tool": "depguard"
+    }
+  ],
+  "ops": [
+    {
+      "blocked": false,
+      "id": "482bf98c-2e65-5de5-a8ef-5fdf1e64c52f",
+      "kind": {
+        "args": {
+          "dep": "serde",
+          "preserved": {},
+          "toml_path": [
+            "dependencies",
+            "serde"
+          ]
+        },
+        "rule_id": "use_workspace_dependency",
+        "type": "toml_transform"
+      },
+      "rationale": {
+        "description": "Converts dependency specs to workspace = true inheritance",
+        "findings": [
+          {
+            "check_id": "deps.workspace_inheritance",
+            "code": "should_use_workspace",
+            "line": 7,
+            "path": "crates/a/Cargo.toml",
+            "source": "depguard"
+          }
+        ],
+        "fix_key": "depguard/deps.workspace_inheritance/should_use_workspace"
+      },
+      "safety": "safe",
+      "target": {
+        "path": "crates/a/Cargo.toml"
+      }
+    }
+  ],
+  "policy": {
+    "allow": [],
+    "allow_dirty": false,
+    "allow_guarded": false,
+    "allow_unsafe": false,
+    "deny": []
+  },
+  "preconditions": {
+    "files": [
+      {
+        "path": "crates/a/Cargo.toml",
+        "sha256": "<SHA256>"
+      }
+    ]
+  },
+  "repo": {
+    "root": "<REPO_ROOT>"
+  },
+  "schema": "buildfix.plan.v1",
+  "summary": {
+    "files_touched": 1,
+    "ops_blocked": 0,
+    "ops_total": 1,
+    "safety_counts": {
+      "guarded": 0,
+      "safe": 1,
+      "unsafe": 0
+    }
+  },
+  "tool": {
+    "name": "buildfix",
+    "version": "test"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "schema": "builddiag.report.v1",
+  "tool": {
+    "name": "builddiag",
+    "version": "0.1.0"
+  },
+  "run": {
+    "started_at": "2024-01-15T10:30:00Z",
+    "ended_at": "2024-01-15T10:30:00Z",
+    "duration_ms": 50
+  },
+  "verdict": {
+    "status": "skip",
+    "counts": {
+      "info": 0,
+      "warn": 0,
+      "error": 0
+    },
+    "reasons": ["No Cargo.toml found in repository root"]
+  },
+  "findings": [],
+  "capabilities": {
+    "check_ids": [
+      "workspace_resolver",
+      "path_dep_version",
+      "edition_year",
+      "msrv_consistent"
+    ],
+    "scopes": ["workspace", "crate"],
+    "partial": false,
+    "reason": "No Cargo.toml found"
+  }
+}

@@ -191,6 +191,25 @@
         "patch_bytes": {
           "type": "integer",
           "minimum": 0
+        },
+        "safety_counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["safe", "guarded", "unsafe"],
+          "properties": {
+            "safe": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "guarded": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unsafe": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
         }
       }
     }
@@ -219,6 +238,9 @@
         "line": {
           "type": "integer",
           "minimum": 1
+        },
+        "fingerprint": {
+          "type": "string"
         }
       }
     },
@@ -249,6 +271,9 @@
           "type": "boolean"
         },
         "blocked_reason": {
+          "type": "string"
+        },
+        "blocked_reason_token": {
           "type": "string"
         },
         "target": {
@@ -319,10 +344,27 @@
           "enum": [
             "toml_set",
             "toml_remove",
-            "toml_transform"
+            "json_set",
+            "json_remove",
+            "yaml_set",
+            "yaml_remove",
+            "toml_transform",
+            "text_replace_anchored"
           ]
         },
         "toml_path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "json_path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "yaml_path": {
           "type": "array",
           "items": {
             "type": "string"
@@ -332,7 +374,29 @@
         "rule_id": {
           "type": "string"
         },
-        "args": {}
+        "args": {},
+        "find": {
+          "type": "string"
+        },
+        "replace": {
+          "type": "string"
+        },
+        "anchor_before": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "anchor_after": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "max_replacements": {
+          "type": "integer",
+          "minimum": 1
+        }
       },
       "allOf": [
         {
@@ -368,6 +432,64 @@
           "if": {
             "properties": {
               "type": {
+                "const": "json_set"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "json_path",
+              "value"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "json_remove"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "json_path"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "yaml_set"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "yaml_path",
+              "value"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "yaml_remove"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "yaml_path"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
                 "const": "toml_transform"
               }
             }
@@ -375,6 +497,21 @@
           "then": {
             "required": [
               "rule_id"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "text_replace_anchored"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "find",
+              "replace"
             ]
           }
         }

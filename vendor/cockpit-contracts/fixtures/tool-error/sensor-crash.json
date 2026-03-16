@@ -1,0 +1,44 @@
+{
+  "schema": "builddiag.report.v1",
+  "tool": {
+    "name": "builddiag",
+    "version": "0.1.0"
+  },
+  "run": {
+    "started_at": "2024-01-15T10:30:00Z",
+    "ended_at": "2024-01-15T10:30:00Z",
+    "duration_ms": 10
+  },
+  "verdict": {
+    "status": "fail",
+    "counts": {
+      "info": 0,
+      "warn": 0,
+      "error": 1
+    },
+    "reasons": ["Tool error: Failed to parse Cargo.toml"]
+  },
+  "findings": [
+    {
+      "severity": "error",
+      "check_id": "tool_error",
+      "code": "parse_failure",
+      "message": "Failed to parse Cargo.toml: invalid TOML at line 15",
+      "location": {
+        "path": "Cargo.toml",
+        "line": 15
+      }
+    }
+  ],
+  "capabilities": {
+    "check_ids": [
+      "workspace_resolver",
+      "path_dep_version",
+      "edition_year",
+      "msrv_consistent"
+    ],
+    "scopes": ["workspace", "crate"],
+    "partial": true,
+    "reason": "Parse error prevented full analysis"
+  }
+}

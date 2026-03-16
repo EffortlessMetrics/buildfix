@@ -153,6 +153,36 @@
         }
       }
     },
+    "auto_commit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "attempted",
+        "committed"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "attempted": {
+          "type": "boolean"
+        },
+        "committed": {
+          "type": "boolean"
+        },
+        "commit_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "message": {
+          "type": "string"
+        },
+        "skip_reason": {
+          "type": "string"
+        }
+      }
+    },
     "errors": {
       "type": "array",
       "items": {
@@ -186,6 +216,9 @@
           "type": "string"
         },
         "blocked_reason": {
+          "type": "string"
+        },
+        "blocked_reason_token": {
           "type": "string"
         },
         "files": {

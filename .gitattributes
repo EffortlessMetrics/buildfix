@@ -1,0 +1,2 @@
+# Keep golden fixture files as LF to avoid CRLF mismatch in tests on Windows
+tests/fixtures/** text eol=lf

@@ -1,0 +1,49 @@
+{
+  "schema": "builddiag.report.v1",
+  "tool": {
+    "name": "builddiag",
+    "version": "0.1.0"
+  },
+  "run": {
+    "started_at": "2024-01-15T10:30:00Z",
+    "ended_at": "2024-01-15T10:30:02Z",
+    "duration_ms": 2000,
+    "git_head_sha": "abc123def456"
+  },
+  "verdict": {
+    "status": "fail",
+    "counts": {
+      "info": 0,
+      "warn": 0,
+      "error": 1
+    },
+    "reasons": ["Workspace resolver v2 not set"]
+  },
+  "findings": [
+    {
+      "severity": "error",
+      "check_id": "workspace_resolver",
+      "code": "missing_v2",
+      "message": "Workspace Cargo.toml does not set resolver = \"2\"",
+      "location": {
+        "path": "Cargo.toml",
+        "line": 1
+      },
+      "fingerprint": "workspace_resolver:missing_v2:Cargo.toml",
+      "data": {
+        "fix_key": "resolver-v2",
+        "suggested_value": "2"
+      }
+    }
+  ],
+  "capabilities": {
+    "check_ids": [
+      "workspace_resolver",
+      "path_dep_version",
+      "edition_year",
+      "msrv_consistent"
+    ],
+    "scopes": ["workspace", "crate"],
+    "partial": false
+  }
+}

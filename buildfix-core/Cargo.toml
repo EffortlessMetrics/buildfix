@@ -1,0 +1,35 @@
+[package]
+name = "buildfix-core"
+version = "0.2.0"
+publish = false
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Embeddable plan/apply pipeline for buildfix (clap-free, port-driven)"
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["cargo", "workspace", "repair", "pipeline", "library"]
+categories = ["development-tools"]
+
+[dependencies]
+anyhow.workspace = true
+camino.workspace = true
+chrono.workspace = true
+hex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+buildfix-domain = { path = "../buildfix-domain" }
+buildfix-edit = { path = "../buildfix-edit" }
+buildfix-receipts = { path = "../buildfix-receipts" }
+buildfix-render = { path = "../buildfix-render" }
+buildfix-types = { path = "../buildfix-types" }
+
+[dev-dependencies]
+pretty_assertions.workspace = true
+tempfile.workspace = true

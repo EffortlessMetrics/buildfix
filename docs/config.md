@@ -15,19 +15,19 @@ This config is consumed by buildfix. It determines what can be planned/applied.
 - whether guarded ops may apply
 - caps on operations/files/diff size
 - backup policy
-- parameters for unsafe fixes (optional)
+- parameters for unsafe ops (optional)
 
 ### Matching rules
 
 Allow/deny entries support:
-- exact fix keys: `depguard/deps.path_requires_version/missing_version`
+- exact policy keys: `depguard/deps.path_requires_version/missing_version`
 - prefix patterns: `depguard/*`
 - code patterns (discouraged; prefer fix keys)
 
 Rules are evaluated in this order:
 1) explicit deny wins
 2) if allowlist non-empty, only allowlisted keys may proceed
-3) otherwise allowlisted-by-default safe fixes are eligible
+3) otherwise allowlisted-by-default safe ops are eligible
 
 ## cockpit.toml
 
@@ -40,7 +40,7 @@ Typical patterns:
 Recommended default for general repos:
 - buildfix is informational (non-blocking), missing receipt is skip.
 
-## Parameters for unsafe fixes
+## Parameters for unsafe ops
 
 Unsafe operations can be unblocked only by supplying parameters, either via CLI:
 - `--param rust_version=1.75`

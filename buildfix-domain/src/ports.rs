@@ -47,3 +47,49 @@ impl RepoView for FsRepoView {
         self.abs(rel).exists()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fs_err as fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn fs_repo_view_reads_relative_and_absolute_paths() {
+        let temp = TempDir::new().expect("temp dir");
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8");
+        let file_path = root.join("Cargo.toml");
+        fs::write(&file_path, "name = \"demo\"").expect("write");
+
+        let repo = FsRepoView::new(root.clone());
+
+        let rel_contents = repo
+            .read_to_string(Utf8Path::new("Cargo.toml"))
+            .expect("read relative");
+        assert_eq!(rel_contents, "name = \"demo\"");
+
+        assert!(file_path.is_absolute());
+        let abs_contents = repo.read_to_string(&file_path).expect("read absolute");
+        assert_eq!(abs_contents, "name = \"demo\"");
+    }
+
+    #[test]
+    fn fs_repo_view_exists_checks() {
+        let temp = TempDir::new().expect("temp dir");
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8");
+        let file_path = root.join("Cargo.toml");
+        fs::write(&file_path, "name = \"demo\"").expect("write");
+
+        let repo = FsRepoView::new(root);
+        assert!(repo.exists(Utf8Path::new("Cargo.toml")));
+        assert!(!repo.exists(Utf8Path::new("missing.toml")));
+    }
+
+    #[test]
+    fn fs_repo_view_root_is_stable() {
+        let temp = TempDir::new().expect("temp dir");
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8");
+        let repo = FsRepoView::new(root.clone());
+        assert_eq!(repo.root(), root.as_path());
+    }
+}

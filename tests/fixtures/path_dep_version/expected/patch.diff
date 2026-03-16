@@ -1,0 +1,11 @@
+diff --git a/crates/a/Cargo.toml b/crates/a/Cargo.toml
+--- a/crates/a/Cargo.toml
++++ b/crates/a/Cargo.toml
+--- original
++++ modified
+@@ -4,4 +4,4 @@
+ edition = "2021"
+
+ [dependencies]
+-crate-b = { path = "../b" }
++crate-b = { path = "../b" , version = "0.2.0" }

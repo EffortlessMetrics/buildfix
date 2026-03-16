@@ -43,9 +43,18 @@ pub fn load_receipts(artifacts_dir: &Utf8Path) -> anyhow::Result<Vec<LoadedRecei
             .unwrap_or("unknown")
             .to_string();
 
+        // Skip reserved output directories — not sensor receipts.
+        if sensor_id == "buildfix" || sensor_id == "cockpit" {
+            debug!(path = %utf8_path, %sensor_id, "skipping non-sensor receipt");
+            continue;
+        }
+
         let receipt = match fs::read_to_string(&utf8_path) {
-            Ok(s) => serde_json::from_str::<ReceiptEnvelope>(&s)
-                .map_err(|e| ReceiptLoadError::Json { message: e.to_string() }),
+            Ok(s) => {
+                serde_json::from_str::<ReceiptEnvelope>(&s).map_err(|e| ReceiptLoadError::Json {
+                    message: e.to_string(),
+                })
+            }
             Err(e) => Err(ReceiptLoadError::Io {
                 message: e.to_string(),
             }),
