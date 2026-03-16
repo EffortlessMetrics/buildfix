@@ -15,7 +15,7 @@ struct Cli {
 enum Command {
     /// Print schema identifiers used by buildfix.
     PrintSchemas,
-    /// Create an empty artifacts layout (artifacts/<sensor>/report.json placeholders).
+    /// Create an empty artifacts layout (artifacts/`<sensor>`/report.json placeholders).
     InitArtifacts {
         #[arg(long, default_value = "artifacts")]
         dir: String,

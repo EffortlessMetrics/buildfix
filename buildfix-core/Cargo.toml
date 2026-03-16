@@ -1,7 +1,7 @@
 [package]
 name = "buildfix-core"
 version = "0.2.0"
-publish = false
+publish = ["crates-io"]
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -16,20 +16,26 @@ categories = ["development-tools"]
 anyhow.workspace = true
 camino.workspace = true
 chrono.workspace = true
-hex.workspace = true
+buildfix-hash = { version = "0.2.0", path = "../buildfix-hash" }
+buildfix-core-runtime = { version = "0.2.0", path = "../buildfix-core-runtime" }
 serde.workspace = true
 serde_json.workspace = true
-sha2.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 
-buildfix-domain = { path = "../buildfix-domain" }
-buildfix-edit = { path = "../buildfix-edit" }
-buildfix-receipts = { path = "../buildfix-receipts" }
-buildfix-render = { path = "../buildfix-render" }
-buildfix-types = { path = "../buildfix-types" }
+buildfix-domain = { version = "0.2.0", path = "../buildfix-domain" }
+buildfix-edit = { version = "0.2.0", path = "../buildfix-edit" }
+buildfix-artifacts = { version = "0.2.0", path = "../buildfix-artifacts", optional = true }
+buildfix-receipts = { version = "0.2.0", path = "../buildfix-receipts" }
+buildfix-report = { version = "0.2.0", path = "../buildfix-report", optional = true }
+buildfix-types = { version = "0.2.0", path = "../buildfix-types" }
 
 [dev-dependencies]
 pretty_assertions.workspace = true
 tempfile.workspace = true
+
+[features]
+default = ["reporting", "artifact-writer"]
+reporting = ["dep:buildfix-report"]
+artifact-writer = ["dep:buildfix-artifacts"]

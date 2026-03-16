@@ -1,7 +1,7 @@
 [package]
 name = "buildfix-render"
 version = "0.2.0"
-publish = false
+publish = ["crates-io"]
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -19,7 +19,7 @@ serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 
-buildfix-types = { path = "../buildfix-types" }
+buildfix-types = { version = "0.2.0", path = "../buildfix-types" }
 
 [dev-dependencies]
 pretty_assertions.workspace = true

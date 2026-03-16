@@ -1,0 +1,23 @@
+[package]
+name = "buildfix-fixer-path-dep-version"
+version = "0.2.0"
+publish = ["crates-io"]
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Path dependency version fixer implementation."
+repository.workspace = true
+homepage.workspace = true
+categories = ["development-tools"]
+keywords = ["cargo", "fixer", "buildfix", "path-dependency"]
+
+[dependencies]
+anyhow.workspace = true
+camino.workspace = true
+toml_edit.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+buildfix-fixer-api = { version = "0.2.0", path = "../buildfix-fixer-api" }
+buildfix-types = { version = "0.2.0", path = "../buildfix-types" }
+buildfix-receipts = { version = "0.2.0", path = "../buildfix-receipts" }
+

@@ -22,4 +22,4 @@ This crate turns structured `buildfix-types` data into human-readable markdown f
 - No file mutation
 - No schema validation
 
-This crate is internal to the workspace (`publish = false`).
+This is a support crate for the `buildfix` workspace and may evolve in lockstep with the workspace release train.

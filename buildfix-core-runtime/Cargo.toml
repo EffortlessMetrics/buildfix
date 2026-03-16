@@ -1,0 +1,31 @@
+[package]
+name = "buildfix-core-runtime"
+version = "0.2.0"
+publish = ["crates-io"]
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Core runtime adapters and settings for buildfix embeddings."
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["cargo", "workflow", "automation", "editing", "adapters"]
+categories = ["development-tools"]
+
+[dependencies]
+anyhow.workspace = true
+camino.workspace = true
+tracing.workspace = true
+buildfix-edit = { version = "0.2.0", path = "../buildfix-edit" }
+buildfix-receipts = { version = "0.2.0", path = "../buildfix-receipts" }
+
+[dev-dependencies]
+pretty_assertions.workspace = true
+tempfile.workspace = true
+fs-err.workspace = true
+
+[features]
+default = ["fs", "git", "memory"]
+fs = []
+git = []
+memory = []

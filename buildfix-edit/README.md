@@ -36,4 +36,4 @@ This crate applies planned operations, checks preconditions, enforces safety gat
 - `unsafe` ops require `allow_unsafe`
 - Missing params and precondition mismatches block apply results
 
-This crate is internal to the workspace (`publish = false`).
+This is a support crate for the `buildfix` workspace and may evolve in lockstep with the workspace release train.

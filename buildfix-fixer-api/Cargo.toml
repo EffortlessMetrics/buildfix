@@ -1,0 +1,21 @@
+[package]
+name = "buildfix-fixer-api"
+version = "0.2.0"
+publish = ["crates-io"]
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Shared contracts for buildfix fixer microcrates."
+repository.workspace = true
+homepage.workspace = true
+categories = ["development-tools"]
+keywords = ["cargo", "fixer", "buildfix", "plugin"]
+
+[dependencies]
+anyhow.workspace = true
+camino.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+buildfix-receipts = { version = "0.2.0", path = "../buildfix-receipts" }
+buildfix-types = { version = "0.2.0", path = "../buildfix-types" }

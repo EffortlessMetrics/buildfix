@@ -38,4 +38,4 @@ Use `builtin_fixer_metas()` for stable metadata used by docs/listing surfaces.
 - No direct file mutation
 - No CLI concerns
 
-This crate is internal to the workspace (`publish = false`).
+This is a support crate for the `buildfix` workspace and may evolve in lockstep with the workspace release train.

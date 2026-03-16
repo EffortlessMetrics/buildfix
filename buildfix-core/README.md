@@ -40,4 +40,4 @@ Default adapters in `adapters`:
 - Uses `buildfix-render` to build markdown artifacts
 - Uses `buildfix-types` for wire/domain data models
 
-This crate is internal to the workspace (`publish = false`).
+This is a support crate for the `buildfix` workspace and may evolve in lockstep with the workspace release train.

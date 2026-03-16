@@ -1,6 +1,7 @@
 [package]
 name = "buildfix"
 version = "0.2.0"
+publish = ["crates-io"]
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -12,6 +13,8 @@ keywords = ["cargo", "workspace", "repair", "cli", "hygiene"]
 categories = ["command-line-utilities", "development-tools"]
 include = [
   "src/**",
+  "schemas/**",
+  "vendor/cockpit-contracts/schemas/**",
   "README.md",
   "Cargo.toml",
 ]
@@ -33,8 +36,10 @@ tracing-subscriber.workspace = true
 jsonschema.workspace = true
 
 buildfix-core = { version = "0.2.0", path = "../buildfix-core" }
+buildfix-core-runtime = { version = "0.2.0", path = "../buildfix-core-runtime" }
 buildfix-receipts = { version = "0.2.0", path = "../buildfix-receipts" }
 buildfix-types = { version = "0.2.0", path = "../buildfix-types" }
+buildfix-fixer-catalog = { version = "0.2.0", path = "../buildfix-fixer-catalog" }
 
 [dev-dependencies]
 assert_cmd.workspace = true

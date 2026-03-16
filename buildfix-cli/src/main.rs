@@ -2,9 +2,10 @@ mod config;
 mod explain;
 
 use anyhow::Context;
-use buildfix_core::adapters::{FsReceiptSource, FsWritePort, ShellGitPort};
 use buildfix_core::pipeline::{run_apply, run_plan, write_apply_artifacts, write_plan_artifacts};
-use buildfix_core::settings::{ApplySettings, PlanSettings, RunMode};
+use buildfix_core_runtime::{
+    ApplySettings, FsReceiptSource, FsWritePort, PlanSettings, RunMode, ShellGitPort,
+};
 use buildfix_types::receipt::ToolInfo;
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::{Parser, Subcommand};
@@ -15,13 +16,13 @@ use std::process::ExitCode;
 use tracing::{debug, error, info};
 use tracing_subscriber::EnvFilter;
 
-const PLAN_SCHEMA: &str = include_str!("../../schemas/buildfix.plan.v1.json");
-const APPLY_SCHEMA: &str = include_str!("../../schemas/buildfix.apply.v1.json");
+const PLAN_SCHEMA: &str = include_str!("../schemas/buildfix.plan.v1.json");
+const APPLY_SCHEMA: &str = include_str!("../schemas/buildfix.apply.v1.json");
 /// Canonical report is validated against the sensor envelope schema.
 const REPORT_SCHEMA: &str =
-    include_str!("../../vendor/cockpit-contracts/schemas/sensor.report.v1.json");
+    include_str!("../vendor/cockpit-contracts/schemas/sensor.report.v1.json");
 /// Buildfix-specific extras report is validated against the buildfix schema.
-const BUILDFIX_REPORT_SCHEMA: &str = include_str!("../../schemas/buildfix.report.v1.json");
+const BUILDFIX_REPORT_SCHEMA: &str = include_str!("../schemas/buildfix.report.v1.json");
 
 #[derive(Debug, Parser)]
 #[command(
@@ -516,14 +517,14 @@ fn cmd_explain(args: ExplainArgs) -> anyhow::Result<()> {
 }
 
 fn cmd_list_fixes(args: ListFixesArgs) -> anyhow::Result<()> {
-    use explain::{FIX_REGISTRY, format_safety_class, policy_keys};
+    use explain::{enabled_fixes, format_safety_class, policy_keys};
 
     match args.format {
         OutputFormat::Text => {
             println!("Available fixes:\n");
             println!("  {:<24} {:<10} TITLE", "KEY", "SAFETY");
             println!("  {:<24} {:<10} -----", "---", "------");
-            for fix in FIX_REGISTRY {
+            for fix in &enabled_fixes() {
                 let policy = policy_keys(fix).join(", ");
                 println!(
                     "  {:<24} {:<10} {}",
@@ -537,7 +538,7 @@ fn cmd_list_fixes(args: ListFixesArgs) -> anyhow::Result<()> {
             println!("Use 'buildfix explain <key>' for details.");
         }
         OutputFormat::Json => {
-            let fixes: Vec<_> = FIX_REGISTRY
+            let fixes: Vec<_> = enabled_fixes()
                 .iter()
                 .map(|f| {
                     serde_json::json!({

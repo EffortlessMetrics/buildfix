@@ -26,4 +26,4 @@ This crate scans `artifacts/*/report.json` and loads sensor envelopes with toler
 - `ReceiptLoadError::Io`
 - `ReceiptLoadError::Json`
 
-This crate is internal to the workspace (`publish = false`).
+This is a support crate for the `buildfix` workspace and may evolve in lockstep with the workspace release train.

@@ -6,7 +6,23 @@
 //! - Remediation guidance
 //! - Triggering sensor findings
 
+pub use buildfix_fixer_catalog::TriggerPattern;
 use buildfix_types::ops::SafetyClass;
+use std::collections::{BTreeSet, HashSet};
+
+fn enabled_fix_ids() -> HashSet<&'static str> {
+    buildfix_fixer_catalog::enabled_fix_ids()
+        .into_iter()
+        .collect()
+}
+
+pub fn enabled_fixes() -> Vec<&'static FixExplanation> {
+    let enabled = enabled_fix_ids();
+    FIX_REGISTRY
+        .iter()
+        .filter(|fix| enabled.contains(fix.fix_id))
+        .collect()
+}
 
 /// Information about a buildfix fix.
 #[derive(Debug, Clone)]
@@ -27,17 +43,6 @@ pub struct FixExplanation {
     pub remediation: &'static str,
     /// Sensor findings that trigger this fix.
     pub triggers: &'static [TriggerPattern],
-}
-
-/// Pattern for matching sensor findings.
-#[derive(Debug, Clone)]
-pub struct TriggerPattern {
-    /// Sensor/tool name (e.g., "builddiag", "depguard").
-    pub sensor: &'static str,
-    /// Check ID pattern (e.g., "workspace.resolver_v2").
-    pub check_id: &'static str,
-    /// Optional code pattern (e.g., "missing_version").
-    pub code: Option<&'static str>,
 }
 
 /// Registry of all available fix explanations.
@@ -492,12 +497,12 @@ If no canonical value is available and you still want buildfix to apply:
     },
 ];
 
-/// Look up a fix explanation by key or fix_id.
+/// Look up an enabled fix explanation by key or fix_id.
 pub fn lookup_fix(query: &str) -> Option<&'static FixExplanation> {
     let query_lower = query.to_lowercase();
     let query_normalized = query_lower.replace('_', "-");
 
-    FIX_REGISTRY.iter().find(|fix| {
+    enabled_fixes().into_iter().find(|fix| {
         // Match by key (e.g., "resolver-v2")
         fix.key == query_normalized
             // Match by fix_id (e.g., "cargo.workspace_resolver_v2")
@@ -511,12 +516,12 @@ pub fn lookup_fix(query: &str) -> Option<&'static FixExplanation> {
 
 /// List all available fix keys.
 pub fn list_fix_keys() -> Vec<&'static str> {
-    FIX_REGISTRY.iter().map(|f| f.key).collect()
+    enabled_fixes().iter().map(|f| f.key).collect()
 }
 
 /// Derive policy keys (sensor/check_id/code) from triggers.
 pub fn policy_keys(fix: &FixExplanation) -> Vec<String> {
-    let mut keys = std::collections::BTreeSet::new();
+    let mut keys = BTreeSet::new();
     for trigger in fix.triggers {
         let code = trigger.code.unwrap_or("*");
         keys.insert(format!("{}/{}/{}", trigger.sensor, trigger.check_id, code));
@@ -546,7 +551,7 @@ pub fn safety_class_meaning(safety: SafetyClass) -> &'static str {
         }
         SafetyClass::Unsafe => {
             "UNSAFE fixes are ambiguous without user-provided inputs.\n\
-             They are plan-only by default and require `--allow-unsafe` to apply."
+             They require explicit `--allow-unsafe` and any required params to apply."
         }
     }
 }
@@ -587,29 +592,46 @@ mod tests {
 
     #[test]
     fn test_all_fixes_registered() {
-        assert_eq!(FIX_REGISTRY.len(), 8);
-        assert!(lookup_fix("resolver-v2").is_some());
-        assert!(lookup_fix("path-dep-version").is_some());
-        assert!(lookup_fix("workspace-inheritance").is_some());
-        assert!(lookup_fix("duplicate-deps").is_some());
-        assert!(lookup_fix("remove-unused-deps").is_some());
-        assert!(lookup_fix("msrv").is_some());
-        assert!(lookup_fix("edition").is_some());
-        assert!(lookup_fix("license").is_some());
+        let expected: HashSet<&str> = buildfix_fixer_catalog::enabled_fix_ids()
+            .into_iter()
+            .collect();
+        let enabled_from_core: HashSet<&str> = buildfix_core::builtin_fixer_metas()
+            .into_iter()
+            .map(|m| m.fix_key)
+            .collect();
+
+        assert_eq!(expected, enabled_from_core);
+
+        for key in &expected {
+            assert!(
+                lookup_fix(key).is_some(),
+                "expected enabled fix not listed in explain registry: {key}"
+            );
+        }
+
+        if expected.is_empty() {
+            assert!(
+                lookup_fix("resolver-v2").is_none() && lookup_fix("path-dep-version").is_none(),
+                "disabled feature profile should not resolve fixed key variants"
+            );
+        }
     }
 
     #[test]
     fn test_list_fix_keys_matches_registry() {
         let keys = list_fix_keys();
-        assert_eq!(keys.len(), FIX_REGISTRY.len());
-        assert!(keys.contains(&"resolver-v2"));
-        assert!(keys.contains(&"path-dep-version"));
-        assert!(keys.contains(&"workspace-inheritance"));
-        assert!(keys.contains(&"duplicate-deps"));
-        assert!(keys.contains(&"remove-unused-deps"));
-        assert!(keys.contains(&"msrv"));
-        assert!(keys.contains(&"edition"));
-        assert!(keys.contains(&"license"));
+        let expected_keys: Vec<&str> = buildfix_fixer_catalog::enabled_fix_keys();
+        let expected_set: std::collections::HashSet<&str> = expected_keys.iter().copied().collect();
+        let keys_set: std::collections::HashSet<&str> = keys.iter().copied().collect();
+
+        assert_eq!(keys_set, expected_set);
+
+        for key in expected_keys {
+            assert!(
+                lookup_fix(key).is_some(),
+                "expected lookup by key to resolve for {key}"
+            );
+        }
     }
 
     #[test]

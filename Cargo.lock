@@ -183,6 +183,8 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "buildfix-core",
+ "buildfix-core-runtime",
+ "buildfix-fixer-catalog",
  "buildfix-receipts",
  "buildfix-types",
  "camino",
@@ -200,11 +202,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "buildfix-artifacts"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-render",
+ "buildfix-types",
+ "camino",
+ "serde_json",
+]
+
+[[package]]
 name = "buildfix-bdd"
 version = "0.2.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
+ "buildfix-core",
+ "buildfix-fixer-catalog",
  "buildfix-types",
  "camino",
  "cucumber",
@@ -219,18 +234,19 @@ name = "buildfix-core"
 version = "0.2.0"
 dependencies = [
  "anyhow",
+ "buildfix-artifacts",
+ "buildfix-core-runtime",
  "buildfix-domain",
  "buildfix-edit",
+ "buildfix-hash",
  "buildfix-receipts",
- "buildfix-render",
+ "buildfix-report",
  "buildfix-types",
  "camino",
  "chrono",
- "hex",
  "pretty_assertions",
  "serde",
  "serde_json",
- "sha2",
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
@@ -238,23 +254,45 @@ dependencies = [
 ]
 
 [[package]]
-name = "buildfix-domain"
+name = "buildfix-core-runtime"
 version = "0.2.0"
 dependencies = [
  "anyhow",
  "buildfix-edit",
  "buildfix-receipts",
+ "camino",
+ "fs-err",
+ "pretty_assertions",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
+name = "buildfix-domain"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-domain-policy",
+ "buildfix-edit",
+ "buildfix-fixer-api",
+ "buildfix-fixer-catalog",
+ "buildfix-fixer-duplicate-deps",
+ "buildfix-fixer-edition",
+ "buildfix-fixer-license",
+ "buildfix-fixer-msrv",
+ "buildfix-fixer-path-dep-version",
+ "buildfix-fixer-remove-unused-deps",
+ "buildfix-fixer-resolver-v2",
+ "buildfix-fixer-workspace-inheritance",
+ "buildfix-receipts",
  "buildfix-render",
  "buildfix-types",
  "camino",
  "fs-err",
- "glob",
- "hex",
  "pretty_assertions",
  "proptest",
  "serde",
  "serde_json",
- "sha2",
  "tempfile",
  "thiserror 2.0.18",
  "toml",
@@ -264,10 +302,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "buildfix-domain-policy"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-fixer-api",
+ "buildfix-types",
+ "hex",
+ "serde_json",
+ "sha2",
+ "uuid",
+]
+
+[[package]]
 name = "buildfix-edit"
 version = "0.2.0"
 dependencies = [
  "anyhow",
+ "buildfix-hash",
  "buildfix-types",
  "camino",
  "diffy",
@@ -284,6 +336,143 @@ dependencies = [
  "toml_edit",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "buildfix-fixer-api"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-receipts",
+ "buildfix-types",
+ "camino",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "buildfix-fixer-catalog"
+version = "0.2.0"
+dependencies = [
+ "buildfix-types",
+]
+
+[[package]]
+name = "buildfix-fixer-duplicate-deps"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-fixer-api",
+ "buildfix-receipts",
+ "buildfix-types",
+ "camino",
+ "serde",
+ "serde_json",
+ "toml_edit",
+]
+
+[[package]]
+name = "buildfix-fixer-edition"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-fixer-api",
+ "buildfix-receipts",
+ "buildfix-types",
+ "camino",
+ "serde",
+ "serde_json",
+ "toml_edit",
+]
+
+[[package]]
+name = "buildfix-fixer-license"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-fixer-api",
+ "buildfix-receipts",
+ "buildfix-types",
+ "camino",
+ "serde",
+ "serde_json",
+ "toml_edit",
+]
+
+[[package]]
+name = "buildfix-fixer-msrv"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-fixer-api",
+ "buildfix-receipts",
+ "buildfix-types",
+ "camino",
+ "serde",
+ "serde_json",
+ "toml_edit",
+]
+
+[[package]]
+name = "buildfix-fixer-path-dep-version"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-fixer-api",
+ "buildfix-receipts",
+ "buildfix-types",
+ "camino",
+ "serde",
+ "serde_json",
+ "toml_edit",
+]
+
+[[package]]
+name = "buildfix-fixer-remove-unused-deps"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-fixer-api",
+ "buildfix-receipts",
+ "buildfix-types",
+ "camino",
+ "serde",
+ "serde_json",
+ "toml_edit",
+]
+
+[[package]]
+name = "buildfix-fixer-resolver-v2"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-fixer-api",
+ "buildfix-receipts",
+ "buildfix-types",
+ "camino",
+ "toml_edit",
+]
+
+[[package]]
+name = "buildfix-fixer-workspace-inheritance"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-fixer-api",
+ "buildfix-receipts",
+ "buildfix-types",
+ "camino",
+ "serde",
+ "serde_json",
+ "toml_edit",
+]
+
+[[package]]
+name = "buildfix-hash"
+version = "0.2.0"
+dependencies = [
+ "hex",
+ "sha2",
 ]
 
 [[package]]
@@ -314,6 +503,16 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+]
+
+[[package]]
+name = "buildfix-report"
+version = "0.2.0"
+dependencies = [
+ "buildfix-receipts",
+ "buildfix-types",
+ "chrono",
+ "serde_json",
 ]
 
 [[package]]

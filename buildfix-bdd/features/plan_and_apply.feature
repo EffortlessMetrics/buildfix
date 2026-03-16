@@ -111,6 +111,23 @@ Feature: Plan and apply
     And report.json capabilities include scope "workspace"
     And report.json capabilities mark partial results
 
+  Scenario: Report capabilities are deterministic and sorted
+    Given a repo with multiple issues
+    And receipts for multiple issues
+    When I run buildfix plan
+    Then report.json capabilities check ids are sorted
+    And report.json capabilities scopes are sorted
+    And report.json capabilities inputs available are sorted
+
+  Scenario: Apply report includes deterministic apply metadata
+    Given a repo missing workspace resolver v2
+    And a builddiag receipt for resolver v2
+    When I run buildfix plan
+    And I run buildfix apply with --apply
+    Then report.json apply data field "applied" is 1
+    And report.json apply data field "blocked" is 0
+    And report.json apply data field "attempted" is 1
+
   # ============================================================================
   # Policy enforcement
   # ============================================================================
@@ -297,6 +314,7 @@ Feature: Plan and apply
     When I run buildfix list-fixes --format json
     Then the output is valid JSON
     And the JSON output contains fix with key "resolver-v2"
+    And the JSON fix output matches enabled builtins
 
   # ============================================================================
   # Idempotency
