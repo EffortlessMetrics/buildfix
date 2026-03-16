@@ -551,7 +551,7 @@ pub fn safety_class_meaning(safety: SafetyClass) -> &'static str {
         }
         SafetyClass::Unsafe => {
             "UNSAFE fixes are ambiguous without user-provided inputs.\n\
-             They are plan-only by default and require `--allow-unsafe` to apply."
+             They require explicit `--allow-unsafe` and any required params to apply."
         }
     }
 }

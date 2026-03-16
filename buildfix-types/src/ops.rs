@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 /// In buildfix terms:
 /// - safe: fully determined from repo-local truth, low impact
 /// - guarded: deterministic but higher impact (requires explicit allow)
-/// - unsafe: ambiguous without user-provided inputs (plan-only by default)
+/// - unsafe: deterministic only when user-provided parameters are present and
+///   `--allow-unsafe` is enabled
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SafetyClass {
