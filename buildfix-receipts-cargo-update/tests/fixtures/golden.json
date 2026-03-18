@@ -1,0 +1,60 @@
+{
+  "schema": "buildfix.receipt.v1",
+  "sensor": {
+    "id": "cargo-update",
+    "name": "cargo-update",
+    "version": "0.0.0"
+  },
+  "verdict": {
+    "status": "warn",
+    "counts": {
+      "findings": 3,
+      "errors": 0,
+      "warnings": 3
+    }
+  },
+  "findings": [
+    {
+      "severity": "warn",
+      "checkId": "update.available",
+      "message": "serde v1.0.0 has an update available (latest: 1.0.200, stable: 1.0.200)",
+      "location": {
+        "path": "Cargo.toml"
+      },
+      "data": {
+        "name": "serde",
+        "version": "1.0.0",
+        "latestVersion": "1.0.200",
+        "latestStable": "1.0.200"
+      }
+    },
+    {
+      "severity": "warn",
+      "checkId": "update.available",
+      "message": "tokio v1.0.0 has an update available (latest: 1.40.0, stable: 1.40.0)",
+      "location": {
+        "path": "Cargo.toml"
+      },
+      "data": {
+        "name": "tokio",
+        "version": "1.0.0",
+        "latestVersion": "1.40.0",
+        "latestStable": "1.40.0"
+      }
+    },
+    {
+      "severity": "warn",
+      "checkId": "update.available",
+      "message": "reqwest v0.11.0 has an update available (latest: 0.12.0, stable: 0.12.0)",
+      "location": {
+        "path": "Cargo.toml"
+      },
+      "data": {
+        "name": "reqwest",
+        "version": "0.11.0",
+        "latestVersion": "0.12.0",
+        "latestStable": "0.12.0"
+      }
+    }
+  ]
+}

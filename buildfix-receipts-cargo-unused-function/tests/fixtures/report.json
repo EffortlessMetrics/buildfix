@@ -1,0 +1,25 @@
+{
+  "functions": [
+    {
+      "name": "unused_helper",
+      "file": "src/lib.rs",
+      "line": 42,
+      "column": 4,
+      "visibility": "pub"
+    },
+    {
+      "name": "internal_func",
+      "file": "src/utils.rs",
+      "line": 10,
+      "column": 1,
+      "visibility": "pub(crate)"
+    },
+    {
+      "name": "private_helper",
+      "file": "src/lib.rs",
+      "line": 100,
+      "column": 5,
+      "visibility": "pub(super)"
+    }
+  ]
+}

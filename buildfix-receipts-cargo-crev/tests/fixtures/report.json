@@ -1,0 +1,40 @@
+{
+  "reviews": [
+    {
+      "package": "some-crate",
+      "version": "1.0.0",
+      "reviews_count": 0,
+      "issues": [
+        {
+          "severity": "high",
+          "title": "No reviews",
+          "description": "This crate has no trusted reviews"
+        }
+      ]
+    },
+    {
+      "package": "untrusted-crate",
+      "version": "2.0.0",
+      "reviews_count": 1,
+      "issues": [
+        {
+          "severity": "medium",
+          "title": "Untrusted",
+          "description": "This crate has only untrusted reviews"
+        }
+      ]
+    },
+    {
+      "package": "low-severity-crate",
+      "version": "0.5.0",
+      "reviews_count": 0,
+      "issues": [
+        {
+          "severity": "low",
+          "title": "Low issue",
+          "description": "This is a low severity issue"
+        }
+      ]
+    }
+  ]
+}

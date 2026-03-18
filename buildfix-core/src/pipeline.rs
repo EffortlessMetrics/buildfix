@@ -44,6 +44,7 @@ pub enum ToolError {
 }
 
 /// Outcome of `run_plan`.
+#[derive(Debug)]
 pub struct PlanOutcome {
     pub plan: BuildfixPlan,
     pub report: BuildfixReport,
@@ -182,6 +183,7 @@ pub fn write_plan_artifacts(
 }
 
 /// Outcome of `run_apply`.
+#[derive(Debug)]
 pub struct ApplyOutcome {
     pub apply: BuildfixApply,
     pub report: BuildfixReport,
@@ -1446,9 +1448,7 @@ mod tests {
         let settings = build_plan_settings(&root);
         let git = StubGitPort::default();
 
-        let err = run_plan(&settings, &FailingReceiptSource, &git, tool())
-            .err()
-            .expect("run_plan");
+        let err = run_plan(&settings, &FailingReceiptSource, &git, tool()).expect_err("run_plan");
         match err {
             ToolError::Internal(e) => {
                 assert!(e.to_string().contains("receipt load failed"));
@@ -1677,5 +1677,418 @@ mod tests {
             .expect("extras json");
         let json: serde_json::Value = serde_json::from_slice(extras).expect("parse extras");
         assert_eq!(json["schema"], buildfix_types::schema::BUILDFIX_REPORT_V1);
+    }
+
+    #[test]
+    fn run_plan_respects_max_ops_limit() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let receipts = crate::adapters::InMemoryReceiptSource::new(vec![resolver_receipt()]);
+
+        let mut settings = build_plan_settings(&root);
+        settings.max_ops = Some(0);
+
+        let git = StubGitPort::default();
+        let outcome = run_plan(&settings, &receipts, &git, tool()).expect("run_plan");
+
+        assert!(outcome.plan.ops.iter().all(|o| o.blocked));
+        assert_eq!(
+            outcome.plan.summary.ops_blocked,
+            outcome.plan.ops.len() as u64
+        );
+    }
+
+    #[test]
+    fn run_plan_respects_allow_guarded_flag() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let receipts = crate::adapters::InMemoryReceiptSource::new(vec![resolver_receipt()]);
+
+        let mut settings = build_plan_settings(&root);
+        settings.allow_guarded = true;
+
+        let git = StubGitPort::default();
+        let outcome = run_plan(&settings, &receipts, &git, tool()).expect("run_plan");
+
+        assert!(!outcome.plan.ops.is_empty());
+    }
+
+    #[test]
+    fn run_plan_respects_allow_unsafe_flag() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let receipts = crate::adapters::InMemoryReceiptSource::new(vec![resolver_receipt()]);
+
+        let mut settings = build_plan_settings(&root);
+        settings.allow_unsafe = true;
+
+        let git = StubGitPort::default();
+        let outcome = run_plan(&settings, &receipts, &git, tool()).expect("run_plan");
+
+        assert!(!outcome.plan.ops.is_empty());
+    }
+
+    #[test]
+    fn run_apply_reads_wire_format_plan() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let out_dir = root.join("artifacts").join("buildfix");
+        std::fs::create_dir_all(&out_dir).expect("out dir");
+
+        let plan = make_plan(vec![make_op(SafetyClass::Safe, false, None)], None);
+        let plan_wire = PlanV1::try_from(&plan).expect("wire");
+        let plan_json = serde_json::to_string(&plan_wire).expect("plan json");
+        std::fs::write(out_dir.join("plan.json"), plan_json).expect("write plan");
+
+        let settings = make_apply_settings(&root, &out_dir);
+        let git = StubGitPort::default();
+
+        let outcome = run_apply(&settings, &git, tool()).expect("run_apply");
+        assert_eq!(outcome.apply.results.len(), 1);
+    }
+
+    #[test]
+    fn run_apply_fails_when_plan_json_missing() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let out_dir = root.join("artifacts").join("buildfix");
+        std::fs::create_dir_all(&out_dir).expect("out dir");
+
+        let settings = make_apply_settings(&root, &out_dir);
+        let git = StubGitPort::default();
+
+        let err = run_apply(&settings, &git, tool()).expect_err("run_apply should fail");
+        match err {
+            ToolError::Internal(e) => {
+                assert!(e.to_string().contains("read"));
+            }
+            ToolError::PolicyBlock => panic!("expected internal error"),
+        }
+    }
+
+    #[test]
+    fn run_apply_fails_when_plan_json_invalid() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let out_dir = root.join("artifacts").join("buildfix");
+        std::fs::create_dir_all(&out_dir).expect("out dir");
+
+        std::fs::write(out_dir.join("plan.json"), "not valid json").expect("write invalid plan");
+
+        let settings = make_apply_settings(&root, &out_dir);
+        let git = StubGitPort::default();
+
+        let err = run_apply(&settings, &git, tool()).expect_err("run_apply should fail");
+        match err {
+            ToolError::Internal(e) => {
+                assert!(e.to_string().contains("parse"));
+            }
+            ToolError::PolicyBlock => panic!("expected internal error"),
+        }
+    }
+
+    #[test]
+    fn run_apply_allow_dirty_permits_dirty_tree() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let out_dir = root.join("artifacts").join("buildfix");
+        std::fs::create_dir_all(&out_dir).expect("out dir");
+
+        let plan = make_plan(vec![make_op(SafetyClass::Safe, false, None)], None);
+        let plan_wire = PlanV1::try_from(&plan).expect("wire");
+        let plan_json = serde_json::to_string_pretty(&plan_wire).expect("plan json");
+        std::fs::write(out_dir.join("plan.json"), plan_json).expect("write plan");
+
+        let mut settings = make_apply_settings(&root, &out_dir);
+        settings.dry_run = false;
+        settings.allow_dirty = true;
+
+        let git = StubGitPort {
+            head: Some("deadbeef".to_string()),
+            dirty: Some(true),
+        };
+
+        let outcome = run_apply(&settings, &git, tool()).expect("run_apply");
+        assert!(!outcome.policy_block);
+        assert_eq!(outcome.apply.summary.applied, 1);
+    }
+
+    #[test]
+    fn run_apply_dry_run_ignores_dirty_check() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let out_dir = root.join("artifacts").join("buildfix");
+        std::fs::create_dir_all(&out_dir).expect("out dir");
+
+        let plan = make_plan(vec![make_op(SafetyClass::Safe, false, None)], None);
+        let plan_wire = PlanV1::try_from(&plan).expect("wire");
+        let plan_json = serde_json::to_string_pretty(&plan_wire).expect("plan json");
+        std::fs::write(out_dir.join("plan.json"), plan_json).expect("write plan");
+
+        let mut settings = make_apply_settings(&root, &out_dir);
+        settings.dry_run = true;
+
+        let git = StubGitPort {
+            head: Some("deadbeef".to_string()),
+            dirty: Some(true),
+        };
+
+        let outcome = run_apply(&settings, &git, tool()).expect("run_apply");
+        assert!(!outcome.policy_block);
+    }
+
+    #[test]
+    fn run_apply_auto_commit_skip_reason_dry_run() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let out_dir = root.join("artifacts").join("buildfix");
+        std::fs::create_dir_all(&out_dir).expect("out dir");
+
+        let plan = make_plan(vec![make_op(SafetyClass::Safe, false, None)], None);
+        let plan_wire = PlanV1::try_from(&plan).expect("wire");
+        let plan_json = serde_json::to_string_pretty(&plan_wire).expect("plan json");
+        std::fs::write(out_dir.join("plan.json"), plan_json).expect("write plan");
+
+        let mut settings = make_apply_settings(&root, &out_dir);
+        settings.dry_run = false;
+        settings.auto_commit = true;
+        settings.commit_message = Some("Custom commit message".to_string());
+
+        let git = CommitGitPort {
+            head_before: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
+            head_after: Some("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string()),
+            dirty_before: Some(false),
+            dirty_after: Some(false),
+            commit_sha: Some("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string()),
+            commit_calls: Mutex::new(0),
+        };
+
+        let outcome = run_apply(&settings, &git, tool()).expect("run_apply");
+        let auto_commit = outcome.apply.auto_commit.as_ref().expect("auto_commit");
+        assert_eq!(
+            auto_commit.message.as_ref().unwrap(),
+            "Custom commit message"
+        );
+    }
+
+    #[test]
+    fn default_auto_commit_message_contains_plan_info() {
+        let plan_path = Utf8PathBuf::from("artifacts/buildfix/plan.json");
+        let plan_sha = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+
+        let apply = BuildfixApply::new(
+            tool(),
+            buildfix_types::apply::ApplyRepoInfo {
+                root: ".".into(),
+                head_sha_before: None,
+                head_sha_after: None,
+                dirty_before: None,
+                dirty_after: None,
+            },
+            buildfix_types::apply::PlanRef {
+                path: plan_path.to_string(),
+                sha256: None,
+            },
+        );
+
+        let msg = default_auto_commit_message(&plan_path, plan_sha, &apply);
+        assert!(msg.contains("buildfix: apply plan"));
+        assert!(msg.contains("ops_applied=0"));
+    }
+
+    #[test]
+    fn tool_error_display() {
+        let err = ToolError::PolicyBlock;
+        assert_eq!(err.to_string(), "policy block");
+
+        let err = ToolError::Internal(anyhow::anyhow!("test error"));
+        assert!(err.to_string().contains("test error"));
+    }
+
+    #[test]
+    fn tool_error_is_send_sync() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<ToolError>();
+    }
+
+    #[test]
+    fn run_plan_allows_dirty_tree_when_configured() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let receipts = crate::adapters::InMemoryReceiptSource::new(vec![resolver_receipt()]);
+
+        let mut settings = build_plan_settings(&root);
+        settings.allow_dirty = true;
+
+        let git = StubGitPort {
+            head: Some("deadbeef".to_string()),
+            dirty: Some(true),
+        };
+
+        let outcome = run_plan(&settings, &receipts, &git, tool()).expect("run_plan");
+        assert!(!outcome.plan.ops.is_empty());
+    }
+
+    #[test]
+    fn run_plan_clears_git_info_when_unavailable() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let receipts = crate::adapters::InMemoryReceiptSource::new(vec![resolver_receipt()]);
+
+        let settings = build_plan_settings(&root);
+
+        let git = StubGitPort {
+            head: None,
+            dirty: None,
+        };
+
+        let outcome = run_plan(&settings, &receipts, &git, tool()).expect("run_plan");
+        assert_eq!(outcome.plan.repo.head_sha, None);
+        assert_eq!(outcome.plan.repo.dirty, None);
+    }
+
+    #[test]
+    fn run_apply_with_backup_enabled() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let out_dir = root.join("artifacts").join("buildfix");
+        std::fs::create_dir_all(&out_dir).expect("out dir");
+
+        let plan = make_plan(vec![make_op(SafetyClass::Safe, false, None)], None);
+        let plan_wire = PlanV1::try_from(&plan).expect("wire");
+        let plan_json = serde_json::to_string_pretty(&plan_wire).expect("plan json");
+        std::fs::write(out_dir.join("plan.json"), plan_json).expect("write plan");
+
+        let mut settings = make_apply_settings(&root, &out_dir);
+        settings.backup_enabled = true;
+        settings.backup_suffix = ".backup".to_string();
+
+        let git = StubGitPort::default();
+
+        let outcome = run_apply(&settings, &git, tool()).expect("run_apply");
+        assert_eq!(outcome.apply.results.len(), 1);
+    }
+
+    #[test]
+    fn run_apply_tracks_dirty_after_state() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let out_dir = root.join("artifacts").join("buildfix");
+        std::fs::create_dir_all(&out_dir).expect("out dir");
+
+        let plan = make_plan(vec![make_op(SafetyClass::Safe, false, None)], None);
+        let plan_wire = PlanV1::try_from(&plan).expect("wire");
+        let plan_json = serde_json::to_string_pretty(&plan_wire).expect("plan json");
+        std::fs::write(out_dir.join("plan.json"), plan_json).expect("write plan");
+
+        let settings = make_apply_settings(&root, &out_dir);
+
+        let git = StubGitPort {
+            head: Some("deadbeef".to_string()),
+            dirty: Some(false),
+        };
+
+        let outcome = run_apply(&settings, &git, tool()).expect("run_apply");
+        assert_eq!(outcome.apply.repo.dirty_after, Some(false));
+    }
+
+    #[test]
+    fn plan_outcome_fields_populated_correctly() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let receipts = crate::adapters::InMemoryReceiptSource::new(vec![resolver_receipt()]);
+
+        let settings = build_plan_settings(&root);
+        let git = StubGitPort::default();
+
+        let outcome = run_plan(&settings, &receipts, &git, tool()).expect("run_plan");
+
+        assert!(!outcome.plan.repo.root.is_empty());
+        assert!(!outcome.patch.is_empty());
+        assert!(!outcome.report.schema.is_empty());
+    }
+
+    #[test]
+    fn apply_outcome_fields_populated_correctly() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let out_dir = root.join("artifacts").join("buildfix");
+        std::fs::create_dir_all(&out_dir).expect("out dir");
+
+        let plan = make_plan(vec![make_op(SafetyClass::Safe, false, None)], None);
+        let plan_wire = PlanV1::try_from(&plan).expect("wire");
+        let plan_json = serde_json::to_string_pretty(&plan_wire).expect("plan json");
+        std::fs::write(out_dir.join("plan.json"), plan_json).expect("write plan");
+
+        let settings = make_apply_settings(&root, &out_dir);
+        let git = StubGitPort::default();
+
+        let outcome = run_apply(&settings, &git, tool()).expect("run_apply");
+
+        assert!(!outcome.apply.repo.root.is_empty());
+        assert!(!outcome.apply.plan_ref.path.is_empty());
+        assert!(!outcome.report.schema.is_empty());
+    }
+
+    #[test]
+    fn run_plan_with_custom_backup_suffix() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let receipts = crate::adapters::InMemoryReceiptSource::new(vec![resolver_receipt()]);
+
+        let mut settings = build_plan_settings(&root);
+        settings.backup_suffix = ".bak".to_string();
+
+        let git = StubGitPort::default();
+
+        let outcome = run_plan(&settings, &receipts, &git, tool()).expect("run_plan");
+        assert!(!outcome.plan.ops.is_empty());
+    }
+
+    #[test]
+    fn run_plan_preserves_artifacts_dir_in_context() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let receipts = crate::adapters::InMemoryReceiptSource::new(vec![resolver_receipt()]);
+
+        let mut settings = build_plan_settings(&root);
+        settings.artifacts_dir = root.join("custom_artifacts");
+
+        let git = StubGitPort::default();
+
+        let outcome = run_plan(&settings, &receipts, &git, tool()).expect("run_plan");
+        assert!(!outcome.plan.ops.is_empty());
+    }
+
+    #[test]
+    fn run_plan_calculates_files_touched_correctly() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let receipts = crate::adapters::InMemoryReceiptSource::new(vec![resolver_receipt()]);
+
+        let settings = build_plan_settings(&root);
+        let git = StubGitPort::default();
+
+        let outcome = run_plan(&settings, &receipts, &git, tool()).expect("run_plan");
+        assert!(outcome.plan.summary.files_touched >= 1);
+    }
+
+    #[test]
+    fn run_apply_no_auto_commit_by_default() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let out_dir = root.join("artifacts").join("buildfix");
+        std::fs::create_dir_all(&out_dir).expect("out dir");
+
+        let plan = make_plan(vec![make_op(SafetyClass::Safe, false, None)], None);
+        let plan_wire = PlanV1::try_from(&plan).expect("wire");
+        let plan_json = serde_json::to_string_pretty(&plan_wire).expect("plan json");
+        std::fs::write(out_dir.join("plan.json"), plan_json).expect("write plan");
+
+        let settings = make_apply_settings(&root, &out_dir);
+        let git = StubGitPort::default();
+
+        let outcome = run_apply(&settings, &git, tool()).expect("run_apply");
+        assert!(outcome.apply.auto_commit.is_none());
+    }
+
+    #[test]
+    fn run_apply_preserves_plan_ref_sha() {
+        let (_temp, root) = create_temp_repo("[workspace]\nresolver = \"1\"\n");
+        let out_dir = root.join("artifacts").join("buildfix");
+        std::fs::create_dir_all(&out_dir).expect("out dir");
+
+        let plan = make_plan(vec![make_op(SafetyClass::Safe, false, None)], None);
+        let plan_wire = PlanV1::try_from(&plan).expect("wire");
+        let plan_json = serde_json::to_string_pretty(&plan_wire).expect("plan json");
+        std::fs::write(out_dir.join("plan.json"), plan_json).expect("write plan");
+
+        let settings = make_apply_settings(&root, &out_dir);
+        let git = StubGitPort::default();
+
+        let outcome = run_apply(&settings, &git, tool()).expect("run_apply");
+        assert!(outcome.apply.plan_ref.sha256.is_some());
+        assert_eq!(outcome.apply.plan_ref.sha256.unwrap().len(), 64);
     }
 }

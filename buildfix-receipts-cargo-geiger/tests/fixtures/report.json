@@ -1,0 +1,46 @@
+{
+  "files": [
+    {
+      "path": "src/lib.rs",
+      "functions": {
+        "unsafe_fn": 1,
+        "unsafe_call": 2,
+        "unsafe block": 3,
+        "unsafe trait impl": 0
+      },
+      "lines": {
+        "unsafe": 10,
+        "total": 100
+      },
+      "percentage": 10.0
+    },
+    {
+      "path": "src/main.rs",
+      "functions": {
+        "unsafe_fn": 0,
+        "unsafe_call": 1,
+        "unsafe block": 0,
+        "unsafe trait impl": 0
+      },
+      "lines": {
+        "unsafe": 2,
+        "total": 50
+      },
+      "percentage": 4.0
+    }
+  ],
+  "dependencies": [
+    {
+      "name": "some-crate",
+      "unsafe_functions": 5,
+      "unsafe_traits": 1,
+      "unsafe_blocks": 2
+    },
+    {
+      "name": "another-crate",
+      "unsafe_functions": 0,
+      "unsafe_traits": 0,
+      "unsafe_blocks": 0
+    }
+  ]
+}

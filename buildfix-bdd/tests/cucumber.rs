@@ -2197,7 +2197,6 @@ async fn assert_crate_a_workspace_serde_features(world: &mut BuildfixWorld) {
 
 #[when(expr = "I run buildfix explain {word}")]
 async fn run_explain(world: &mut BuildfixWorld, fix_key: String) {
-    // Explain command doesn't need a repo, so create minimal temp dir if none exists
     if world.temp.is_none() {
         let td = tempfile::tempdir().expect("tempdir");
         let root = Utf8PathBuf::from_path_buf(td.path().to_path_buf()).unwrap();
@@ -2212,9 +2211,10 @@ async fn run_explain(world: &mut BuildfixWorld, fix_key: String) {
         .output()
         .expect("run explain");
 
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    // Store in world for later assertions
-    world.explain_output = Some(stdout);
+    world.last_command_stdout = Some(String::from_utf8_lossy(&output.stdout).to_string());
+    world.last_command_stderr = Some(String::from_utf8_lossy(&output.stderr).to_string());
+    world.last_command_status = output.status.code();
+    world.explain_output = Some(String::from_utf8_lossy(&output.stdout).to_string());
 }
 
 #[then("the output contains the fix description")]
@@ -2223,6 +2223,22 @@ async fn assert_explain_output(world: &mut BuildfixWorld) {
     assert!(
         output.contains("FIX:") && output.contains("DESCRIPTION"),
         "expected explain output to contain FIX: and DESCRIPTION, got:\n{}",
+        output
+    );
+}
+
+#[then(expr = "the output contains {string}")]
+async fn assert_output_contains_string(world: &mut BuildfixWorld, expected: String) {
+    let output = world
+        .explain_output
+        .as_ref()
+        .or(world.last_command_stdout.as_ref())
+        .or(world.last_command_stderr.as_ref())
+        .expect("output");
+    assert!(
+        output.contains(&expected),
+        "expected output to contain '{}', got:\n{}",
+        expected,
         output
     );
 }
@@ -2247,17 +2263,6 @@ async fn run_list_fixes_json(world: &mut BuildfixWorld) {
         .output()
         .unwrap();
     world.explain_output = Some(String::from_utf8_lossy(&output.stdout).to_string());
-}
-
-#[then(expr = "the output contains {string}")]
-async fn assert_output_contains(world: &mut BuildfixWorld, expected: String) {
-    let output = world.explain_output.as_ref().expect("output");
-    assert!(
-        output.contains(&expected),
-        "expected output to contain '{}', got:\n{}",
-        expected,
-        output
-    );
 }
 
 #[then("the output is valid JSON")]
@@ -2933,6 +2938,264 @@ edition = "2021"
 
     world.temp = Some(td);
     world.repo_root = Some(root);
+}
+
+#[given("a builddiag receipt with no findings")]
+async fn builddiag_receipt_no_findings(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let artifacts = root.join("artifacts").join("builddiag");
+    fs::create_dir_all(&artifacts).unwrap();
+
+    let receipt = serde_json::json!({
+        "schema": "builddiag.report.v1",
+        "tool": { "name": "builddiag", "version": "0.0.0" },
+        "verdict": { "status": "pass", "counts": { "findings": 0, "errors": 0, "warnings": 0 } },
+        "findings": []
+    });
+
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
+}
+
+#[given("a builddiag receipt with only warnings")]
+async fn builddiag_receipt_only_warnings(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let artifacts = root.join("artifacts").join("builddiag");
+    fs::create_dir_all(&artifacts).unwrap();
+
+    let receipt = serde_json::json!({
+        "schema": "builddiag.report.v1",
+        "tool": { "name": "builddiag", "version": "0.0.0" },
+        "verdict": { "status": "warn", "counts": { "findings": 1, "errors": 0, "warnings": 1 } },
+        "findings": [{
+            "severity": "warn",
+            "check_id": "test.warning",
+            "code": "warning_only",
+            "message": "this is just a warning"
+        }]
+    });
+
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
+}
+
+#[when("I corrupt the plan.json")]
+async fn corrupt_plan_json(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let mut contents = fs::read_to_string(&plan_path).unwrap();
+    contents.push_str("\n{invalid json");
+    fs::write(&plan_path, contents).unwrap();
+}
+
+#[when("I run buildfix validate")]
+async fn run_validate(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let output = Command::cargo_bin("buildfix")
+        .expect("buildfix binary")
+        .current_dir(root.as_str())
+        .arg("validate")
+        .output()
+        .expect("run validate");
+
+    world.last_command_stdout = Some(String::from_utf8_lossy(&output.stdout).to_string());
+    world.last_command_stderr = Some(String::from_utf8_lossy(&output.stderr).to_string());
+    world.last_command_status = output.status.code();
+}
+
+#[when("I run buildfix with --help")]
+async fn run_buildfix_help(world: &mut BuildfixWorld) {
+    let output = Command::cargo_bin("buildfix")
+        .expect("buildfix binary")
+        .arg("--help")
+        .output()
+        .expect("run buildfix --help");
+
+    world.last_command_stdout = Some(String::from_utf8_lossy(&output.stdout).to_string());
+    world.last_command_stderr = Some(String::from_utf8_lossy(&output.stderr).to_string());
+    world.last_command_status = output.status.code();
+}
+
+#[then(expr = "the resolver v2 fix has safety class {string}")]
+async fn assert_resolver_safety_class(world: &mut BuildfixWorld, expected: String) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    let op = plan_ops(&v)
+        .iter()
+        .find(|op| {
+            op["kind"]["type"] == "toml_transform"
+                && op["kind"]["rule_id"] == "ensure_workspace_resolver_v2"
+        })
+        .expect("resolver v2 op");
+
+    assert_eq!(
+        op["safety"].as_str(),
+        Some(expected.as_str()),
+        "expected safety class '{}', got: {}",
+        expected,
+        op["safety"]
+    );
+}
+
+#[then(expr = "the MSRV fix has safety class {string}")]
+async fn assert_msrv_safety_class(world: &mut BuildfixWorld, expected: String) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    let op = plan_ops(&v)
+        .iter()
+        .find(|op| {
+            op["kind"]["type"] == "toml_transform"
+                && op["kind"]["rule_id"] == "set_package_rust_version"
+        })
+        .expect("MSRV op");
+
+    assert_eq!(
+        op["safety"].as_str(),
+        Some(expected.as_str()),
+        "expected safety class '{}', got: {}",
+        expected,
+        op["safety"]
+    );
+}
+
+#[then(expr = "the unused dep removal fix has safety class {string}")]
+async fn assert_unused_dep_safety_class(world: &mut BuildfixWorld, expected: String) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    let op = plan_ops(&v)
+        .iter()
+        .find(|op| op["kind"]["type"] == "toml_remove")
+        .expect("unused dep removal op");
+
+    assert_eq!(
+        op["safety"].as_str(),
+        Some(expected.as_str()),
+        "expected safety class '{}', got: {}",
+        expected,
+        op["safety"]
+    );
+}
+
+#[then(expr = "the path dep version fix has safety class {string}")]
+async fn assert_path_dep_safety_class(world: &mut BuildfixWorld, expected: String) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    let op = plan_ops(&v)
+        .iter()
+        .find(|op| {
+            op["kind"]["type"] == "toml_transform"
+                && op["kind"]["rule_id"] == "ensure_path_dep_has_version"
+        })
+        .expect("path dep version op");
+
+    assert_eq!(
+        op["safety"].as_str(),
+        Some(expected.as_str()),
+        "expected safety class '{}', got: {}",
+        expected,
+        op["safety"]
+    );
+}
+
+#[then(expr = "at least one fix has safety class {string}")]
+async fn assert_at_least_one_fix_has_safety_class(world: &mut BuildfixWorld, expected: String) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    let ops = plan_ops(&v);
+    let found = ops
+        .iter()
+        .any(|op| op["safety"].as_str() == Some(expected.as_str()));
+
+    assert!(
+        found,
+        "expected at least one op with safety class '{}', got: {:?}",
+        expected,
+        ops.iter()
+            .map(|op| op["safety"].as_str())
+            .collect::<Vec<_>>()
+    );
+}
+
+// ============================================================================
+// Exit code contract scenarios (v0.2.1 operational hardening)
+// ============================================================================
+
+#[when("I run buildfix plan and capture exit code")]
+async fn run_plan_capture_exit_code(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let output = Command::cargo_bin("buildfix")
+        .expect("buildfix binary")
+        .current_dir(root.as_str())
+        .arg("plan")
+        .output()
+        .expect("run plan");
+
+    world.last_command_stdout = Some(String::from_utf8_lossy(&output.stdout).to_string());
+    world.last_command_stderr = Some(String::from_utf8_lossy(&output.stderr).to_string());
+    world.last_command_status = output.status.code();
+}
+
+#[when("I run buildfix apply with --apply and capture exit code")]
+async fn run_apply_capture_exit_code(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let output = Command::cargo_bin("buildfix")
+        .expect("buildfix binary")
+        .current_dir(root.as_str())
+        .arg("apply")
+        .arg("--apply")
+        .output()
+        .expect("run apply");
+
+    world.last_command_stdout = Some(String::from_utf8_lossy(&output.stdout).to_string());
+    world.last_command_stderr = Some(String::from_utf8_lossy(&output.stderr).to_string());
+    world.last_command_status = output.status.code();
+}
+
+#[when("I run buildfix apply without --apply and capture exit code")]
+async fn run_apply_dry_run_capture_exit_code(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let output = Command::cargo_bin("buildfix")
+        .expect("buildfix binary")
+        .current_dir(root.as_str())
+        .arg("apply")
+        .output()
+        .expect("run apply dry-run");
+
+    world.last_command_stdout = Some(String::from_utf8_lossy(&output.stdout).to_string());
+    world.last_command_stderr = Some(String::from_utf8_lossy(&output.stderr).to_string());
+    world.last_command_status = output.status.code();
+}
+
+#[then(expr = "the command exits with code {int}")]
+async fn assert_command_exit_code(world: &mut BuildfixWorld, expected: i32) {
+    assert_eq!(
+        world.last_command_status,
+        Some(expected),
+        "expected exit code {}, got {:?}",
+        expected,
+        world.last_command_status
+    );
 }
 
 #[tokio::main]

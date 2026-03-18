@@ -1,0 +1,46 @@
+{
+  "cargo_audit": {
+    "version": "0.18.0",
+    "advisories": [
+      {
+        "id": "RUSTSEC-0001-0001",
+        "package": {
+          "name": "vulnerable-crate",
+          "version": "1.0.0"
+        },
+        "title": "Vulnerability in vulnerable-crate",
+        "date": "2023-01-01",
+        "description": "Description of vulnerability",
+        "severity": "High",
+        "categories": ["security"],
+        "url": "https://rustsec.org/advisories/RUSTSEC-0001-0001"
+      },
+      {
+        "id": "RUSTSEC-0002-0002",
+        "package": {
+          "name": "another-crate",
+          "version": "2.1.0"
+        },
+        "title": "Moderate security issue",
+        "date": "2023-06-15",
+        "description": "This crate has a moderate severity issue that should be addressed.",
+        "severity": "Medium",
+        "categories": ["security", "crypto"],
+        "url": "https://rustsec.org/advisories/RUSTSEC-0002-0002"
+      },
+      {
+        "id": "RUSTSEC-0003-0003",
+        "package": {
+          "name": "old-crate",
+          "version": "0.5.0"
+        },
+        "title": "Deprecated crate",
+        "date": "2022-12-01",
+        "description": "This crate is deprecated and no longer maintained.",
+        "severity": "Low",
+        "categories": ["maintenance"],
+        "url": "https://rustsec.org/advisories/RUSTSEC-0003-0003"
+      }
+    ]
+  }
+}

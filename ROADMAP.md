@@ -1,68 +1,216 @@
-# Roadmap
+# buildfix Roadmap
 
-This document outlines the planned features and improvements for buildfix.
+> **Post-v0.2.0 Productization Direction**
+> PR #2 merged to main — bootstrap complete, now shipping.
 
-## Current Status
+## Strategic Vision
 
-buildfix is feature-complete with eight built-in fixers:
-- Receipt-driven planning from sensor outputs
-- Safe, deterministic TOML editing
-- Precondition verification and backup system
-- Eight built-in fixers covering common Cargo workspace issues
-- Wire format with versioned JSON schemas (V1)
-- Capabilities block for sensor capability negotiation
+buildfix is the **actuator layer** for Cargo workspace hygiene — not a scanner, not a linter, and definitely not a tool that "rewrites your repo in place."
 
-## Completed
+### What Makes buildfix Different
 
-### v0.2
+| Aspect | buildfix | Typical "Fix-It" Tools |
+|--------|----------|------------------------|
+| **Input** | Sensor receipts only | Inline analysis / heuristics |
+| **Output** | Deterministic, reviewable patches | Direct filesystem mutation |
+| **Safety** | Policy-aware (safe/guarded/unsafe) | Often all-or-nothing |
+| **Audit** | Full artifact trail (plan.md, patch.diff, report.json) | Minimal or none |
+| **Philosophy** | Evidence over guessing | Best-effort inference |
 
-- **Edition Upgrade Fixer** (`cargo.normalize_edition`): Normalizes per-crate Rust edition to workspace canonical value. Guarded safety; falls back to Unsafe when no canonical edition exists.
-- **Wire representation**: Versioned V1 formats for plan, apply, and report artifacts
-- **JSON schemas**: Embedded schemas for artifact validation
-- **Capabilities block**: "No Green By Omission" pattern for tracking input availability
-- **CLI commands**: `explain`, `list-fixes`, `validate`
+buildfix consumes findings from sensors (cargo-deny, cargo-machete, rustc, etc.) and emits **deterministic, reviewable repair plans**. Every operation is classified by safety, bounded by SHA256 preconditions, and fully auditable. We don't guess at fixes — we translate evidence into mechanical edits.
 
-### v0.3
+---
 
-- **Duplicate Dependency Consolidation Fixer** (`cargo.consolidate_duplicate_deps`): Consolidates duplicate member dependency versions into `[workspace.dependencies]` and rewrites members to `workspace = true`. Safe safety class; receipt-driven from depguard findings.
+## Five Strategic Pillars
 
-### v0.4
+### 1. Release Operations Stability
+The CLI must be installable and releasable without heroics. Publishing a new version should be boring.
 
-- **Unused Dependency Removal Fixer** (`cargo.remove_unused_deps`): Removes dependency entries reported as unused by sensors using deterministic `TomlRemove` ops. Unsafe safety class; apply requires `--allow-unsafe`.
-- **Anchored Text Replace Op** (`text_replace_anchored`): Line-based non-TOML edits with strict before/after anchors and bounded replacement count.
+### 2. Adapter Ergonomics
+Adding new intake sources should be straightforward. Intake adapters are first-class microcrates with a clear SDK.
 
-### v0.5
+### 3. Explanation Integrity
+What `buildfix explain` says must match what `buildfix apply` does. Drift between documentation and implementation is a bug.
 
-- **Auto-Commit Mode**: Optional `buildfix apply --apply --auto-commit` flow with clean-tree enforcement and structured commit metadata in apply artifacts.
+### 4. CI Adoption
+Integration into CI pipelines must be copy-pasteable. Users shouldn't need to read source code to use buildfix in automation.
 
-### v0.6
+### 5. Evidence-Rich Receipts Over Guessing
+Safety improves via better evidence, not loosened standards. We prefer richer receipts over heuristics.
 
-- **License Normalization Fixer** (`cargo.normalize_license`): Normalizes per-crate `package.license` to workspace canonical license when triggered by `cargo-deny` findings. Guarded safety by default; falls back to Unsafe with explicit `--param license=...` when no canonical value exists.
-- **JSON/YAML Op Types**: Added `json_set`, `json_remove`, `yaml_set`, and `yaml_remove` for deterministic mechanical non-TOML edits.
-- **First-party cargo-deny integration**: New receipt routing for license compliance findings.
+---
 
-## Planned Features
+## "Properly Working" Standard
 
-### Long-Term (v0.5+)
+buildfix is considered properly working when:
 
-#### Additional File Format Support
-- Expand beyond current TOML/JSON/YAML support for additional file types when edits are provably mechanical.
+- [ ] **CLI installable and releasable without heroics**
+  - `cargo install buildfix` works
+  - crates.io publish is automated
+  - Version bumps are mechanical
+
+- [ ] **plan/apply output deterministic and auditable**
+  - Same inputs → byte-identical outputs
+  - plan.md, patch.diff, report.json tell the full story
+  - Preconditions verified before writes
+
+- [ ] **Explanation surfaces match implementation**
+  - `buildfix explain <fix>` describes actual behavior
+  - Docs don't drift from code
+  - Metadata tests catch divergence
+
+- [ ] **Adding new intake sources is straightforward**
+  - Clear adapter SDK
+  - Test harness for new adapters
+  - Example templates
+
+- [ ] **CI integration is copy-pasteable**
+  - Documented workflow templates
+  - Exit codes documented and stable
+  - Common patterns covered
+
+- [ ] **Safety improves via better evidence, not loosened standards**
+  - Fewer `unsafe` classifications over time
+  - Richer receipts enable safer ops
+  - No guessing — derive from repo or ask user
+
+---
+
+## Milestones
+
+### v0.2.1 — Operational Hardening
+
+**Theme:** Make releases boring, make docs trustworthy.
+
+| Deliverable | Description |
+|-------------|-------------|
+| Publish workflow | Automated crates.io publishing on tag |
+| Runbook | Step-by-step release process documentation |
+| Docs cleanup | Remove bootstrap-era stale content |
+| Explain/metadata drift tests | Automated checks that `explain` matches implementation |
+| Exit code audit | Verify exit codes (0/1/2) are consistent and documented |
+
+**Success Criteria:**
+- Releasing v0.2.1 requires zero institutional knowledge
+- `buildfix explain <fix>` is verified by tests
+- All exit codes documented in `docs/reference/exit-codes.md`
+
+---
+
+### v0.3.0 — Adapter Productization
+
+**Theme:** Make intake adapters a first-class extension point.
+
+| Deliverable | Description |
+|-------------|-------------|
+| Adapter SDK | `buildfix-adapter-sdk` crate with traits and test utilities |
+| Adapter harness | Test framework for validating new adapters |
+| First intake microcrates | See [Planned Intake Adapters](#planned-intake-adapters) |
+| CI templates | Copy-pasteable GitHub Actions workflows |
+| Adapter documentation | How-to guide for writing new adapters |
+
+**Success Criteria:**
+- Adding a new adapter requires no buildfix core changes
+- CI integration is one copy-paste away
+- At least 2 intake microcrates published
+
+---
+
+### v0.4.0 — Evidence-Rich Unsafe Reduction
+
+**Theme:** Reduce `unsafe` classifications through better evidence.
+
+| Deliverable | Description |
+|-------------|-------------|
+| Richer receipt schemas | More context in sensor outputs |
+| Unsafe → guarded promotion | Cases that were unsafe due to missing evidence become guarded |
+| Guarded → safe promotion | Cases that were guarded due to ambiguity become safe |
+| No guessing policy | Document and enforce "derive from repo or ask user" |
+
+**Success Criteria:**
+- Measurable reduction in `unsafe` classifications
+- All promotions justified by receipt improvements
+- Policy documented and tested
+
+---
+
+## Planned Intake Adapters
+
+Intake adapters are microcrates that translate sensor outputs into buildfix receipts. Each adapter is a separate crate with minimal dependencies.
+
+| Microcrate | Sensor | Purpose |
+|------------|--------|---------|
+| `buildfix-receipts-sarif` | SARIF producers | Generic SARIF intake for tools emitting Static Analysis Results Interchange Format |
+| `buildfix-receipts-cargo-deny` | cargo-deny | License, advisory, and ban findings |
+| `buildfix-receipts-cargo-udeps` | cargo-udeps | Unused dependency detection |
+| `buildfix-receipts-cargo-machete` | cargo-machete | Unused dependency detection (alternative) |
+| `buildfix-receipts-rustc-json` | rustc JSON messages | Edition, MSRV, and compilation findings |
+
+### Adapter Architecture
+
+```
+┌─────────────────┐     ┌──────────────────────┐     ┌─────────────────┐
+│  Sensor Output  │────▶│  Intake Microcrate   │────▶│  buildfix-core  │
+│  (JSON/SARIF)   │     │  (buildfix-receipts-│     │  (planner)      │
+└─────────────────┘     │   <sensor>)          │     └─────────────────┘
+                        └──────────────────────┘
+                                 │
+                                 ▼
+                        ┌──────────────────────┐
+                        │  Normalized Receipt  │
+                        │  (buildfix-types)    │
+                        └──────────────────────┘
+```
+
+Each microcrate:
+- Depends only on `buildfix-types` and `buildfix-adapter-sdk`
+- Exposes a single `fn load(path: &Path) -> Result<Vec<Receipt>>`
+- Includes golden tests for sample sensor outputs
+- Is independently versionable
+
+---
 
 ## Design Principles
 
-These principles guide all roadmap items:
+These principles remain invariant across all milestones:
 
 1. **Receipt-driven**: All fixes triggered by sensor findings, never invented
 2. **Deterministic**: Same inputs always produce byte-identical outputs
 3. **Safety-first**: Conservative classification, explicit approval for risky changes
 4. **Reversible**: Backups and preconditions ensure recovery
 5. **Transparent**: Full audit trail in JSON artifacts
+6. **No guessing**: Derive from repo truth or require explicit user parameters
+
+---
+
+## Out of Scope
+
+buildfix will NOT:
+
+- Perform inline code analysis or linting
+- Rewrite repositories in place without review
+- Infer values that aren't explicitly provided or derivable
+- Bypass safety classifications for convenience
+
+---
 
 ## Contributing
 
 Feature requests and sensor integration ideas are welcome. Please open an issue to discuss before implementing.
 
-When proposing new fixers, include:
+When proposing new fixers or adapters, include:
 - Receipt format from the triggering sensor
 - Safety classification rationale
 - Example input/output transformation
+- Evidence requirements (what's needed to promote from unsafe)
+
+---
+
+## Version History
+
+| Version | Theme | Status |
+|---------|-------|--------|
+| v0.2.0 | Bootstrap release | ✅ Merged to main |
+| v0.2.1 | Operational hardening | 🔄 Planned |
+| v0.3.0 | Adapter productization | 📋 Planned |
+| v0.4.0 | Evidence-rich unsafe reduction | 📋 Planned |

@@ -294,12 +294,163 @@ Feature: Plan and apply
     Then the crate-a Cargo.toml has workspace serde with features preserved
 
   # ============================================================================
-  # CLI explain command
+  # CLI explain command - additional scenarios
   # ============================================================================
 
-  Scenario: Explain command describes a fix
+  Scenario: Explain command describes resolver-v2 fix
     When I run buildfix explain resolver-v2
-    Then the output contains the fix description
+    Then the output contains "Key:"
+
+  Scenario: Explain command describes path-dep-version fix
+    When I run buildfix explain path-dep-version
+    Then the output contains "Key:"
+
+  Scenario: Explain command describes workspace-inheritance fix
+    When I run buildfix explain workspace-inheritance
+    Then the output contains "Key:"
+
+  Scenario: Explain command describes msrv-normalize fix
+    When I run buildfix explain msrv
+    Then the output contains "Key:"
+
+  Scenario: Explain command describes edition-normalize fix
+    When I run buildfix explain edition
+    Then the output contains "Key:"
+
+  Scenario: Explain command fails with unknown fix key
+    When I run buildfix explain unknown-fix-key
+    Then the command fails with exit code 1
+    And the command output mentions "Unknown fix key"
+
+  # ============================================================================
+  # CLI list-fixes command - additional scenarios
+  # ============================================================================
+
+  Scenario: List fixes output contains safety classes
+    When I run buildfix list-fixes
+    Then the output contains "Safe"
+    And the output contains "Guarded"
+    And the output contains "Unsafe"
+
+  Scenario: List fixes JSON output has all required fields
+    When I run buildfix list-fixes --format json
+    Then the output is valid JSON
+
+  # ============================================================================
+  # CLI validate command - additional scenarios
+  # ============================================================================
+
+  Scenario: Validate command succeeds with missing artifacts directory
+    Given a repo missing workspace resolver v2
+    When I run buildfix validate
+    Then the command exits with code 0
+
+  Scenario: Validate command fails with invalid plan.json
+    Given a repo missing workspace resolver v2
+    And a builddiag receipt for resolver v2
+    When I run buildfix plan
+    And I corrupt the plan.json
+    And I run buildfix validate
+    Then the command fails with exit code 1
+    And the command output mentions "json"
+
+  # ============================================================================
+  # Safety class verification
+  # ============================================================================
+
+  Scenario: Resolver v2 fix is classified as safe
+    Given a repo missing workspace resolver v2
+    And a builddiag receipt for resolver v2
+    When I run buildfix plan
+    Then the plan contains a resolver v2 fix
+    And the resolver v2 fix has safety class "safe"
+
+  Scenario: MSRV normalize fix is classified as guarded
+    Given a repo with inconsistent MSRV
+    And a builddiag receipt for MSRV inconsistency
+    When I run buildfix plan
+    Then the plan contains an MSRV normalization fix
+    And the MSRV fix has safety class "guarded"
+
+  Scenario: Unused dependency removal is classified as unsafe
+    Given a repo with an unused dependency
+    And a cargo-machete receipt for unused dependency
+    When I run buildfix plan
+    Then the plan contains an unused dependency removal fix
+    And the unused dep removal fix has safety class "unsafe"
+
+  Scenario: Path dependency version fix is classified as safe
+    Given a repo with a path dependency missing version
+    And a depguard receipt for missing path dependency version
+    When I run buildfix plan
+    Then the plan contains a path dep version fix
+    And the path dep version fix has safety class "safe"
+
+  # ============================================================================
+  # max_ops limiting - additional edge cases
+  # ============================================================================
+
+  Scenario: max-ops zero blocks all operations
+    Given a repo missing workspace resolver v2
+    And a builddiag receipt for resolver v2
+    When I run buildfix plan with --max-ops 0
+    Then all plan ops are blocked with reason containing "max_ops"
+
+  Scenario: Plan succeeds when max-ops exceeds operation count
+    Given a repo missing workspace resolver v2
+    And a builddiag receipt for resolver v2
+    When I run buildfix plan with --max-ops 100
+    Then the plan contains a resolver v2 fix
+
+  # ============================================================================
+  # Error handling - additional scenarios
+  # ============================================================================
+
+  Scenario: Plan with empty artifacts directory succeeds
+    Given a repo missing workspace resolver v2
+    And an empty artifacts directory
+    When I run buildfix plan
+    Then the plan contains no fixes
+    And buildfix validate succeeds
+
+  # ============================================================================
+  # CLI help and version
+  # ============================================================================
+
+  Scenario: Help output shows available commands
+    When I run buildfix with --help
+    Then the output contains "plan"
+    And the output contains "apply"
+    And the output contains "explain"
+    And the output contains "list-fixes"
+    And the output contains "validate"
+
+  # ============================================================================
+  # Complex multi-step scenarios
+  # ============================================================================
+
+  Scenario: Multiple fixes with mixed safety classes
+    Given a repo with multiple issues
+    And receipts for multiple issues
+    When I run buildfix plan
+    Then the plan contains multiple fixes
+    And at least one fix has safety class "safe"
+
+  # ============================================================================
+  # Edge cases and robustness
+  # ============================================================================
+
+  Scenario: Plan handles receipt with no findings
+    Given a repo missing workspace resolver v2
+    And a builddiag receipt with no findings
+    When I run buildfix plan
+    Then the plan contains no fixes
+
+  Scenario: Plan handles receipt with only warnings
+    Given a repo missing workspace resolver v2
+    And a builddiag receipt with only warnings
+    When I run buildfix plan
+    Then the plan contains no fixes
 
   # ============================================================================
   # CLI list-fixes command
@@ -386,3 +537,35 @@ Feature: Plan and apply
     And the artifacts directory contains apply.md
     And the apply.json has valid schema version
     And buildfix validate succeeds
+
+  # ============================================================================
+  # Exit code contracts (v0.2.1 operational hardening)
+  # ============================================================================
+
+  Scenario: Exit code 0 on successful plan
+    Given a repo missing workspace resolver v2
+    And a builddiag receipt for resolver v2
+    When I run buildfix plan and capture exit code
+    Then the command exits with code 0
+
+  Scenario: Exit code 0 on successful apply with --apply
+    Given a repo missing workspace resolver v2
+    And a builddiag receipt for resolver v2
+    When I run buildfix plan
+    And I run buildfix apply with --apply and capture exit code
+    Then the command exits with code 0
+    And the root Cargo.toml sets workspace resolver to "2"
+
+  Scenario: Exit code 0 on successful dry-run apply without --apply flag
+    Given a repo missing workspace resolver v2
+    And a builddiag receipt for resolver v2
+    When I run buildfix plan
+    And I run buildfix apply without --apply and capture exit code
+    Then the command exits with code 0
+    And the root Cargo.toml does not have workspace resolver
+
+  Scenario: Exit code 1 for missing plan file
+    Given a repo missing workspace resolver v2
+    When I run buildfix apply with --apply and capture exit code
+    Then the command exits with code 1
+    And the command output mentions "plan.json"

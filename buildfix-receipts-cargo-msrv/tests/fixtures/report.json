@@ -1,0 +1,26 @@
+{
+  "results": [
+    {
+      "name": "my-crate",
+      "version": "1.0.0",
+      "msrv": "1.56.0",
+      "rustc": "1.56.0",
+      "status": "incompatible"
+    },
+    {
+      "name": "serde",
+      "version": "1.0.100",
+      "msrv": "1.56.0",
+      "rustc": "1.56.0",
+      "status": "compatible"
+    },
+    {
+      "name": "tokio",
+      "version": "1.35.0",
+      "msrv": "1.70.0",
+      "rustc": "1.70.0",
+      "status": "incompatible"
+    }
+  ],
+  "minimum_supported_rust_version": "1.40.0"
+}

@@ -1,0 +1,29 @@
+{
+  "data": [
+    {
+      "name": "serde::ser::serialize",
+      "paths": ["src/serialize.rs"],
+      "sessions": 1,
+      "lines": 50000,
+      "instances": 10,
+      "percent": "15.0"
+    },
+    {
+      "name": "tokio::runtime::block_on",
+      "paths": ["src/runtime.rs"],
+      "sessions": 1,
+      "lines": 30000,
+      "instances": 5,
+      "percent": "9.0"
+    },
+    {
+      "name": "small_helper",
+      "paths": ["src/helper.rs"],
+      "sessions": 1,
+      "lines": 1000,
+      "instances": 2,
+      "percent": "0.3"
+    }
+  ],
+  "total_lines": 333333
+}

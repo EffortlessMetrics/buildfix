@@ -1,0 +1,76 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "CodeAnalyzer",
+          "version": "2.3.1",
+          "informationUri": "https://example.com/tools/code-analyzer"
+        }
+      },
+      "results": [
+        {
+          "ruleId": "SAST001",
+          "level": "error",
+          "message": {
+            "text": "SQL injection vulnerability detected in user input"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/database/query.rs"
+                },
+                "region": {
+                  "startLine": 127,
+                  "startColumn": 15
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SAST002",
+          "level": "warning",
+          "message": {
+            "text": "Use of hardcoded credentials detected"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "config/auth.toml"
+                },
+                "region": {
+                  "startLine": 5,
+                  "startColumn": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SAST003",
+          "level": "note",
+          "message": {
+            "text": "Consider using const instead of let for immutable values"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/utils/helper.rs"
+                },
+                "region": {
+                  "startLine": 42,
+                  "startColumn": 5
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

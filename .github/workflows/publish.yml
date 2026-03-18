@@ -1,6 +1,19 @@
+# Publish workflow for releasing buildfix crates to crates.io
+# Reference: docs/release-runbook.md
+#
+# Triggered by:
+#   - Push of version tags (v* pattern)
+#   - Manual workflow dispatch
+#
+# Publish order follows the dependency graph to ensure dependencies
+# are indexed by crates.io before dependents are published.
+
 name: Publish
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -64,6 +77,8 @@ jobs:
       - name: Authenticate to crates.io
         id: auth
         uses: rust-lang/crates-io-auth-action@v1
+
+      # === LAYER 0: No internal dependencies ===
       - name: Publish buildfix-hash
         run: cargo publish -p buildfix-hash
         env:
@@ -72,32 +87,78 @@ jobs:
         run: cargo publish -p buildfix-types
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+      # Wait for Layer 0 to be indexed
+      - name: Wait for index (Layer 0)
+        run: sleep 60
+
+      # === LAYER 1: Depends on Layer 0 ===
+      - name: Publish buildfix-receipts
+        run: cargo publish -p buildfix-receipts
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - name: Publish buildfix-render
+        run: cargo publish -p buildfix-render
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
       - name: Publish buildfix-edit
         run: cargo publish -p buildfix-edit
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+      # Wait for Layer 1 to be indexed
+      - name: Wait for index (Layer 1)
+        run: sleep 60
+
+      # === LAYER 2: Depends on Layer 1 ===
+      - name: Publish buildfix-fixer-api
+        run: cargo publish -p buildfix-fixer-api
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - name: Publish buildfix-report
+        run: cargo publish -p buildfix-report
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - name: Publish buildfix-artifacts
+        run: cargo publish -p buildfix-artifacts
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
       - name: Publish buildfix-fixer-catalog
         run: cargo publish -p buildfix-fixer-catalog
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-receipts
-        run: cargo publish -p buildfix-receipts
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-core-runtime
-        run: cargo publish -p buildfix-core-runtime
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-fixer-api
-        run: cargo publish -p buildfix-fixer-api
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+      # Wait for Layer 2 to be indexed
+      - name: Wait for index (Layer 2)
+        run: sleep 60
+
+      # === LAYER 3: Depends on Layer 2 ===
       - name: Publish buildfix-domain-policy
         run: cargo publish -p buildfix-domain-policy
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - name: Publish buildfix-fixer-resolver-v2
+        run: cargo publish -p buildfix-fixer-resolver-v2
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - name: Publish buildfix-fixer-path-dep-version
+        run: cargo publish -p buildfix-fixer-path-dep-version
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - name: Publish buildfix-fixer-workspace-inheritance
+        run: cargo publish -p buildfix-fixer-workspace-inheritance
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
       - name: Publish buildfix-fixer-duplicate-deps
         run: cargo publish -p buildfix-fixer-duplicate-deps
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - name: Publish buildfix-fixer-remove-unused-deps
+        run: cargo publish -p buildfix-fixer-remove-unused-deps
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - name: Publish buildfix-fixer-msrv
+        run: cargo publish -p buildfix-fixer-msrv
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
       - name: Publish buildfix-fixer-edition
@@ -108,46 +169,36 @@ jobs:
         run: cargo publish -p buildfix-fixer-license
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-fixer-msrv
-        run: cargo publish -p buildfix-fixer-msrv
+      - name: Publish buildfix-core-runtime
+        run: cargo publish -p buildfix-core-runtime
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-fixer-path-dep-version
-        run: cargo publish -p buildfix-fixer-path-dep-version
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-fixer-remove-unused-deps
-        run: cargo publish -p buildfix-fixer-remove-unused-deps
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-fixer-resolver-v2
-        run: cargo publish -p buildfix-fixer-resolver-v2
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-fixer-workspace-inheritance
-        run: cargo publish -p buildfix-fixer-workspace-inheritance
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+      # Wait for Layer 3 to be indexed
+      - name: Wait for index (Layer 3)
+        run: sleep 60
+
+      # === LAYER 4: Depends on Layer 3 ===
       - name: Publish buildfix-domain
         run: cargo publish -p buildfix-domain
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-render
-        run: cargo publish -p buildfix-render
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-artifacts
-        run: cargo publish -p buildfix-artifacts
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-report
-        run: cargo publish -p buildfix-report
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+      # Wait for Layer 4 to be indexed
+      - name: Wait for index (Layer 4)
+        run: sleep 60
+
+      # === LAYER 5: Depends on Layer 4 ===
       - name: Publish buildfix-core
         run: cargo publish -p buildfix-core
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+      # Wait for Layer 5 to be indexed
+      - name: Wait for index (Layer 5)
+        run: sleep 60
+
+      # === LAYER 6: Final CLI package ===
       - name: Publish buildfix
         run: cargo publish -p buildfix
         env:

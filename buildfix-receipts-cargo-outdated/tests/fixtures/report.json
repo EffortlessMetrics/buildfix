@@ -1,0 +1,28 @@
+{
+  "dependencies": [
+    {
+      "name": "serde",
+      "version": "1.0.0",
+      "latest": "1.0.200",
+      "kind": "Prod",
+      "project": "1.0.0",
+      "registry": "crates-io"
+    },
+    {
+      "name": "tokio",
+      "version": "1.0.0",
+      "latest": "1.40.0",
+      "kind": "Dev",
+      "project": "1.0.0",
+      "registry": "crates-io"
+    },
+    {
+      "name": "reqwest",
+      "version": "0.11.0",
+      "latest": "0.12.0",
+      "kind": "Prod",
+      "project": "0.11.0",
+      "registry": "crates-io"
+    }
+  ]
+}

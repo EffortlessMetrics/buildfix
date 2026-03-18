@@ -1,0 +1,16 @@
+{
+  "warnings": [
+    {
+      "manifestPath": "Cargo.toml",
+      "message": "dependency dev-duplicate is unused",
+      "code": "unused-dependency",
+      "severity": "warning"
+    },
+    {
+      "manifestPath": "Cargo.toml",
+      "message": "dependency workspace is transitive",
+      "code": "transitive-dependency",
+      "severity": "warning"
+    }
+  ]
+}

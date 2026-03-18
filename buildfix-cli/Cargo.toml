@@ -19,6 +19,10 @@ include = [
   "Cargo.toml",
 ]
 
+[lib]
+name = "buildfix_cli"
+path = "src/lib.rs"
+
 [[bin]]
 name = "buildfix"
 path = "src/main.rs"

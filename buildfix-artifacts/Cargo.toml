@@ -18,3 +18,6 @@ buildfix-render = { version = "0.2.0", path = "../buildfix-render" }
 buildfix-types = { version = "0.2.0", path = "../buildfix-types" }
 camino.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

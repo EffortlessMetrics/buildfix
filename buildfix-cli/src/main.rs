@@ -1,5 +1,5 @@
 mod config;
-mod explain;
+use buildfix_cli::explain;
 
 use anyhow::Context;
 use buildfix_core::pipeline::{run_apply, run_plan, write_apply_artifacts, write_plan_artifacts};

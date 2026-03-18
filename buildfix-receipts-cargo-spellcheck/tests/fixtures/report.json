@@ -1,0 +1,44 @@
+{
+  "findings": [
+    {
+      "file": "src/lib.rs",
+      "line": 10,
+      "column": 5,
+      "kind": "Misspelled",
+      "context": "This is a documint",
+      "suggestion": "document",
+      "words": ["documint"]
+    },
+    {
+      "file": "src/main.rs",
+      "line": 25,
+      "column": 12,
+      "kind": "Misspelled",
+      "context": "The functoin is defined",
+      "suggestion": "function",
+      "words": ["functoin"]
+    },
+    {
+      "file": "README.md",
+      "line": 5,
+      "column": 30,
+      "kind": "Misspelled",
+      "context": "instalation instructions",
+      "suggestion": "installation",
+      "words": ["instalation"]
+    },
+    {
+      "file": "tests/integration.rs",
+      "line": 42,
+      "column": 8,
+      "kind": "UnknownWord",
+      "context": "recieve the message",
+      "suggestion": "receive",
+      "words": ["recieve"]
+    }
+  ],
+  "summary": {
+    "total": 4,
+    "files": 4
+  }
+}

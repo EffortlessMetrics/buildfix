@@ -1,134 +1,261 @@
 # buildfix — Implementation Plan
 
-This plan assumes:
-- receipts-first ecosystem (envelope ABI)
-- microcrate workspace
-- test-heavy posture (BDD + golden fixtures + proptest + fuzz + mutation)
+> **Post-v0.2.0 Milestone-Based Plan**
+> 
+> The bootstrap release (v0.2.0) is complete. This plan shifts from bootstrap phases to release-shaped milestones focused on operational hardening and productization.
+>
+> For strategic context, see [ROADMAP.md](../ROADMAP.md).
 
-## Phase 0 — Contracts and skeleton (weekend-sized, but foundational)
-Deliverables:
-- schemas committed under `schemas/`
-- protocol DTOs in `buildfix-protocol`
-- minimal CLI:
-  - `buildfix plan` writes an empty plan when no candidates exist
-  - `buildfix apply` refuses without a plan
-- CI:
-  - schema validation for plan/apply/report artifacts
-  - golden test harness skeleton
+---
 
-Tasks:
-- Define schema IDs + jsonschema files:
-  - buildfix.plan.v1
-  - buildfix.apply.v1
-  - buildfix.report.v1 (optional)
-- Create xtask:
-  - `xtask schema` (regen + verify)
-  - `xtask fixtures` (create/update fixture repos)
-- Create artifact writer utilities and canonical paths.
-- Establish stable ordering helpers.
+## Milestone Overview
 
-Acceptance:
-- Running `buildfix plan` on an empty fixture produces byte-stable artifacts.
+| Version | Theme | Status |
+|---------|-------|--------|
+| v0.2.1 | Operational Hardening | 🔄 Next |
+| v0.3.0 | Adapter Productization | 📋 Planned |
+| v0.4.0 | Evidence-Rich Unsafe Reduction | 📋 Planned |
 
-## Phase 1 — Receipt ingestion and normalization (read-only core)
-Deliverables:
-- Receipt discovery and parsing
-- NormalizedFinding + FixKey extraction
-- Allow/deny matching + safety gating model
-- Plan JSON + Plan MD skeleton
+---
 
-Tasks:
-- Implement receipt ingestion:
-  - scan artifacts
-  - parse JSON
-  - tolerate missing optional fields
-  - normalize paths
-- Implement policy parsing from `buildfix.toml`.
-- Implement planner skeleton:
-  - findings → candidates (stub fixers)
-  - deterministic ordering
-  - blocked ops recorded explicitly
+## v0.2.1 — Operational Hardening
 
-Tests:
-- BDD: “plan empty”, “denied fix is blocked”, “allowlist restricts fixes”
-- Golden: plan.json stable regardless of receipt discovery order
-- Fuzz: receipt parse never panics
+### Objective
 
-## Phase 2 — Editing engine and patch preview
-Deliverables:
-- TOML editing ops (TomlSet/TomlRemove)
-- precondition snapshot and verification
-- patch preview generation
-- apply engine with backups and atomic writes
+Make releases boring and documentation trustworthy. Establish the operational foundation for sustainable productization.
 
-Tasks:
-- Implement RepoPort adapter:
-  - backups (suffix strategy)
-  - atomic writes (temp + rename)
-- Implement precondition snapshot:
-  - sha256 per file
-  - best-effort head sha
-  - dirty flag
-- Implement apply flow:
-  - verify preconditions
-  - apply ops deterministically
-  - emit apply.json
+### Dependencies
 
-Tests:
-- BDD: apply blocked on precondition mismatch, no writes
-- Proptest: atomic write preserves file content integrity on failure paths
+- **Prerequisite**: v0.2.0 bootstrap release completed ✅
 
-## Phase 3 — Fixers (v0.1 allowlist)
-Each fixer must ship with:
-- at least one BDD scenario
-- golden plan/apply outputs
-- proptest invariants where semantic preservation matters
+### Tasks
 
-### Fixer A: workspace resolver v2
-- Find from builddiag receipt (or detect directly as plan-time validation)
-- Edit root Cargo.toml `[workspace].resolver = "2"`
-- Safety: safe
+#### Release Automation
 
-### Fixer B: depguard path dep requires version
-- Resolve target crate version from repo-local `Cargo.toml`
-- If missing/ambiguous → unsafe, blocked unless user provides param
-- Safety: safe/unsafe depending on determinism
+- [ ] Re-enable post-bootstrap release automation
+  - [ ] Enable tag-triggered `publish.yml` workflow
+  - [ ] Verify `cargo publish` dry-run passes
+  - [ ] Test workflow on a release branch before merging
+- [ ] Create release runbook (`docs/release-runbook.md`)
+  - [ ] Document version bump procedure
+  - [ ] Document changelog update process
+  - [ ] Document tag and publish steps
+  - [ ] Include rollback procedure
 
-### Fixer C: workspace inheritance normalization
-- Replace member dep entries with `{ workspace = true }` while preserving flags
-- Conflicts → guarded by default
-- Safety: safe/guarded
+#### Documentation Cleanup
 
-### Fixer D: MSRV normalization to workspace standard
-- Only safe if workspace standard exists
-- Otherwise unsafe
+- [ ] Rewrite stale docs to reflect current architecture
+  - [ ] Audit `docs/architecture.md` for accuracy
+  - [ ] Update `docs/design.md` with current patterns
+  - [ ] Verify all code examples compile and run
+  - [ ] Remove or archive bootstrap-era notes
+- [ ] Ensure exit codes are documented
+  - [ ] Verify `docs/reference/exit-codes.md` is complete
+  - [ ] Cross-reference exit codes in CLI help text
 
-## Phase 4 — buildfix.report.v1 envelope output (cockpit integration)
-Deliverables:
-- buildfix emits an envelope-compatible report summarizing plan/apply results
-- stable internal codes for buildfix itself
-- `buildfix explain` registry for fix keys and internal codes
+#### Quality Gates
 
-Tests:
-- golden report.json output for each fixture
-- conformance: report validates against schema
+- [ ] Add tests to prevent `explain` / metadata drift
+  - [ ] Create test that validates `buildfix explain <fix>` output matches fixer implementation
+  - [ ] Add metadata consistency test for fix registry
+  - [ ] Ensure fix keys are documented and discoverable
+- [ ] Restore and sort parked stash
+  - [ ] Review git stash for parked changes
+  - [ ] File relevant items into docs cleanup or non-release notes
+  - [ ] Discard obsolete items
 
-## Phase 5 — Hardening and release discipline
-Deliverables:
-- fuzz targets:
-  - receipt parser
-  - TOML transform
-- mutation testing in scheduled CI (domain crates only)
-- cross-platform build matrix
-- packaging includes schemas and templates in cargo package
+#### Repository Hygiene
 
-Acceptance:
-- No panics under fuzz
-- Mutation tests catch trivial regressions in safety logic
-- Release binaries published and installable via workflow
+- [ ] Reset local `main` to `origin/main`
+  - [ ] Ensure clean sync with remote
+  - [ ] Verify no stray commits
 
-## Phase 6 — Optional convenience (post-v0.1)
-Only add if demanded:
-- apply-from-plan with optional auto-commit (maintainer-only)
-- more op types (anchored text replace) with strict constraints
-- support for additional file types beyond TOML when they are provably mechanical
+### Success Criteria
+
+- [ ] Releasing v0.2.1 requires zero institutional knowledge (follow runbook)
+- [ ] `buildfix explain <fix>` output is verified by automated tests
+- [ ] All exit codes documented in `docs/reference/exit-codes.md`
+- [ ] No stale bootstrap-era content in docs
+
+### Effort Guidance
+
+- **Estimated effort**: 1-2 days
+- **Risk level**: Low
+- **Blockers**: None
+
+---
+
+## v0.3.0 — Adapter Productization
+
+### Objective
+
+Make intake adapters a first-class extension point. Enable third-party contributors to add new sensor integrations without modifying buildfix core.
+
+### Dependencies
+
+- **Prerequisite**: v0.2.1 completed (release automation and docs trustworthy)
+
+### Tasks
+
+#### Receipt Model Documentation
+
+- [ ] Document the receipt model with schema and versioning notes
+  - [ ] Create `docs/reference/receipt-schema.md`
+  - [ ] Document receipt envelope structure
+  - [ ] Document versioning strategy for receipt formats
+  - [ ] Add examples for common receipt patterns
+
+#### Adapter SDK and Test Harness
+
+- [ ] Add shared adapter test harness
+  - [ ] Create `buildfix-adapter-sdk` crate with test utilities
+  - [ ] Define `AdapterTestHarness` trait or struct
+  - [ ] Provide golden test macros for adapter validation
+  - [ ] Document harness usage patterns
+- [ ] Create adapter authoring guide
+  - [ ] Create `docs/how-to/write-adapter.md`
+  - [ ] Document input → normalized finding → receipt flow
+  - [ ] Include worked example with SARIF
+  - [ ] Document error handling best practices
+
+#### First Adapter Microcrates
+
+- [ ] Publish `buildfix-receipts-sarif`
+  - [ ] Create microcrate structure
+  - [ ] Implement SARIF parsing
+  - [ ] Add golden tests with sample SARIF outputs
+  - [ ] Document supported SARIF producers
+- [ ] Publish `buildfix-receipts-cargo-deny`
+  - [ ] Create microcrate structure
+  - [ ] Implement cargo-deny JSON output parsing
+  - [ ] Add golden tests with sample outputs
+  - [ ] Document mapping from cargo-deny findings to receipts
+
+#### CI Integration Examples
+
+- [ ] Ship CI integration examples teams can copy
+  - [ ] Create `.github/workflows-templates/` directory
+  - [ ] PR lane workflow: plan only, upload artifacts, optional PR comment
+  - [ ] Main lane workflow: apply safe fixes, optional bot commit, no CI loop
+  - [ ] Document workflow customization points
+- [ ] Update `docs/how-to/ci-integration.md` with templates
+
+#### Configuration Profiles
+
+- [ ] Add `buildfix.toml` profile examples
+  - [ ] Create `examples/profiles/conservative.toml` (safe ops only)
+  - [ ] Create `examples/profiles/balanced.toml` (safe + guarded with review)
+  - [ ] Create `examples/profiles/aggressive-but-reviewed.toml` (all ops, human review required)
+  - [ ] Document profile selection guidance
+
+### Success Criteria
+
+- [ ] Adding a new adapter requires no buildfix core changes
+- [ ] CI integration is one copy-paste away
+- [ ] At least 2 intake microcrates published to crates.io
+- [ ] Adapter authoring guide is complete with worked example
+
+### Effort Guidance
+
+- **Estimated effort**: 3-5 days
+- **Risk level**: Medium (new crate infrastructure)
+- **Blockers**: None expected
+
+---
+
+## v0.4.0 — Evidence-Rich Unsafe Reduction
+
+### Objective
+
+Reduce `unsafe` classifications through better evidence, not loosened standards. Maintain the "no guessing" rule while enabling more operations to be classified as safe or guarded.
+
+### Dependencies
+
+- **Prerequisite**: v0.3.0 completed (adapter infrastructure in place)
+
+### Tasks
+
+#### Receipt Enrichment
+
+- [ ] Enrich receipts with feature/target context
+  - [ ] Extend receipt schema to include feature flags
+  - [ ] Extend receipt schema to include target triples
+  - [ ] Update adapter SDK to support enrichment
+  - [ ] Document enrichment requirements for adapters
+- [ ] Add confidence level metadata to receipts
+  - [ ] Define confidence levels (high, medium, low)
+  - [ ] Add source sensor metadata field
+  - [ ] Document how confidence affects safety classification
+
+#### Safety Classification Review
+
+- [ ] Reduce unnecessary `unsafe` classifications
+  - [ ] Audit current `unsafe` classifications
+  - [ ] Identify cases where additional receipt evidence enables promotion
+  - [ ] Implement promotion logic: unsafe → guarded where justified
+  - [ ] Implement promotion logic: guarded → safe where justified
+- [ ] Keep the "no guessing" rule intact
+  - [ ] Document the rule in `docs/safety-model.md`
+  - [ ] Add tests that verify no guessing in fixers
+  - [ ] Code review checklist for new fixers
+
+#### Scope Documentation
+
+- [ ] Document workspace-wide vs crate-local scope
+  - [ ] Define which operations are workspace-wide
+  - [ ] Define which operations are crate-local
+  - [ ] Document scope in fixer registry
+  - [ ] Update `docs/reference/fixes.md` with scope info
+
+### Success Criteria
+
+- [ ] Measurable reduction in `unsafe` classifications (target: 20%+ reduction)
+- [ ] All promotions justified by receipt improvements (documented rationale)
+- [ ] "No guessing" policy documented and tested
+- [ ] Scope clearly documented for all fixers
+
+### Effort Guidance
+
+- **Estimated effort**: 2-4 days
+- **Risk level**: Medium (requires careful safety analysis)
+- **Blockers**: v0.3.0 adapter infrastructure
+
+---
+
+## Future Milestones (Post-v0.4.0)
+
+The following milestones are planned but not yet detailed:
+
+| Version | Theme | Notes |
+|---------|-------|-------|
+| v0.5.0 | Fixer Catalog Expansion | Additional fixers based on user demand |
+| v0.6.0 | Performance Optimization | Large workspace support, incremental planning |
+| v1.0.0 | Stable API | API stability guarantees, semantic versioning |
+
+See [ROADMAP.md](../ROADMAP.md) for strategic direction.
+
+---
+
+## Implementation Principles
+
+These principles remain invariant across all milestones:
+
+1. **Receipt-driven**: All fixes triggered by sensor findings, never invented
+2. **Deterministic**: Same inputs always produce byte-identical outputs
+3. **Safety-first**: Conservative classification, explicit approval for risky changes
+4. **Reversible**: Backups and preconditions ensure recovery
+5. **Transparent**: Full audit trail in JSON artifacts
+6. **No guessing**: Derive from repo truth or require explicit user parameters
+
+---
+
+## Contributing
+
+When implementing tasks from this plan:
+
+1. Create a feature branch from `main`
+2. Reference the task in commit messages (e.g., `v0.2.1: add release runbook`)
+3. Update the checkbox in this file when complete
+4. Ensure all tests pass before merging
+
+For larger changes, open an issue first to discuss approach.

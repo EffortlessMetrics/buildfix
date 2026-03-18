@@ -1,0 +1,25 @@
+[package]
+name = "buildfix-receipts-rustfmt"
+version = "0.2.0"
+publish = ["crates-io"]
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Adapter that parses rustfmt JSON output and converts it to buildfix receipts."
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["cargo", "adapter", "rustfmt", "receipt", "json"]
+categories = ["development-tools"]
+
+[dependencies]
+anyhow.workspace = true
+buildfix-types = { version = "0.2.0", path = "../buildfix-types" }
+buildfix-adapter-sdk = { version = "0.2.0", path = "../buildfix-adapter-sdk" }
+camino.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+pretty_assertions.workspace = true
+tempfile.workspace = true
