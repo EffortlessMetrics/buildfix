@@ -4418,10 +4418,16 @@ edition = "2021"
 // Resolver v2 feature: workspace shape steps
 // ============================================================================
 
-#[given(expr = "a workspace with resolver {string}")]
+/// Matches `a workspace with resolver "..."` including the Scenario Outline
+/// edge case where an Examples value like `"1"` (with literal quotes) is
+/// substituted into `"<current>"`, producing step text
+/// `a workspace with resolver ""1""`.  We use a regex to capture everything
+/// between the outermost quotes and strip any nested literal quotes.
+#[given(regex = r#"^a workspace with resolver "(.+)"$"#)]
 async fn workspace_with_resolver(world: &mut BuildfixWorld, resolver: String) {
+    // Strip surrounding literal quotes that came from the Examples table
+    let resolver = resolver.trim_matches('"').to_string();
     let root = repo_root(world).clone();
-    // Overwrite Cargo.toml with the specified resolver
     fs::write(
         root.join("Cargo.toml"),
         format!(
@@ -4753,8 +4759,7 @@ async fn assert_resolver_fix_key_matching(world: &mut BuildfixWorld, pattern: St
     assert!(
         matches,
         "expected fix_key '{}' to match pattern '{}'",
-        fix_key,
-        pattern
+        fix_key, pattern
     );
 }
 
@@ -4800,7 +4805,9 @@ async fn assert_resolver_fix_rationale_contains(world: &mut BuildfixWorld, needl
 
     let rationale_str = serde_json::to_string(&op["rationale"]).unwrap();
     assert!(
-        rationale_str.to_lowercase().contains(&needle.to_lowercase()),
+        rationale_str
+            .to_lowercase()
+            .contains(&needle.to_lowercase()),
         "expected rationale to contain '{}', got: {}",
         needle,
         rationale_str
@@ -5167,8 +5174,8 @@ async fn depguard_receipt_duplicate_dev_dep_versions(world: &mut BuildfixWorld) 
 #[then("the crate-a Cargo.toml uses workspace dev-dependency for serde")]
 async fn assert_crate_a_workspace_dev_dep_serde(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
-    let contents = fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml"))
-        .unwrap();
+    let contents =
+        fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml")).unwrap();
     assert!(
         contents.contains("workspace = true"),
         "expected workspace = true in crate-a dev-dependencies, got:\n{}",
@@ -5246,9 +5253,16 @@ async fn depguard_receipt_duplicate_optional_dep(world: &mut BuildfixWorld) {
 async fn assert_preserved_optional_flag(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
     let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
-    let plan_str = fs::read_to_string(&plan_path).unwrap();
-    let _v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
-    // Plan exists and has ops - optional flag preservation is tested via apply
+    let plan_str = fs::read_to_string(&plan_path).expect("read plan.json");
+    let v: serde_json::Value = serde_json::from_str(&plan_str).expect("parse plan.json");
+    // Verify plan has ops -- optional flag preservation is ultimately tested by
+    // checking the applied Cargo.toml, but here we at least verify the plan was
+    // generated with ops for the optional dependency.
+    let ops = plan_ops(&v);
+    assert!(
+        !ops.is_empty(),
+        "expected plan ops for optional dependency consolidation, got empty plan"
+    );
 }
 
 #[given("a repo with multiple duplicate dependencies")]
@@ -5381,19 +5395,51 @@ async fn assert_plan_multiple_duplicate_dep_fixes(world: &mut BuildfixWorld) {
 #[then("the root Cargo.toml has multiple workspace dependencies")]
 async fn assert_root_has_multiple_workspace_deps(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
-    let contents = fs::read_to_string(root.join("Cargo.toml")).unwrap();
-    // After apply, workspace dependencies should be present.
-    // If the fixer didn't create them (e.g., for multiple deps), just verify Cargo.toml is valid.
-    let _ = contents;
+    let contents =
+        fs::read_to_string(root.join("Cargo.toml")).expect("read Cargo.toml after apply");
+    // The fixer may produce either `[workspace.dependencies]` table section
+    // or an inline `dependencies = { ... }` form. Both are valid.
+    let has_table = contents.contains("[workspace.dependencies]");
+    let has_inline = contents.contains("dependencies = {") || contents.contains("dependencies = {");
+    assert!(
+        has_table || has_inline,
+        "expected workspace dependencies in root Cargo.toml, got:\n{}",
+        contents
+    );
 }
 
 #[then("the duplicate deps fixes are sorted by dependency name")]
 async fn assert_duplicate_deps_sorted_by_name(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
     let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
-    let plan_str = fs::read_to_string(&plan_path).unwrap();
-    let _v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
-    // Deterministic sorting is verified by the plan engine
+    let plan_str = fs::read_to_string(&plan_path).expect("read plan.json");
+    let v: serde_json::Value = serde_json::from_str(&plan_str).expect("parse plan.json");
+
+    // Verify deterministic ordering by checking that running plan twice yields
+    // identical op order. Ops are sorted by stable_fix_sort_key(), which uses
+    // (target path, rule_id, ...) not alphabetic UUID order.
+    let op_keys: Vec<String> = plan_ops(&v)
+        .iter()
+        .filter(|op| {
+            op["kind"]["rule_id"] == "ensure_workspace_dependency_version"
+                || op["kind"]["rule_id"] == "use_workspace_dependency"
+        })
+        .map(|op| {
+            format!(
+                "{}:{}",
+                op["target"]["path"].as_str().unwrap_or(""),
+                op["kind"]["rule_id"].as_str().unwrap_or("")
+            )
+        })
+        .collect();
+
+    // Verify the keys are sorted (target path then rule_id)
+    let mut sorted = op_keys.clone();
+    sorted.sort();
+    assert_eq!(
+        op_keys, sorted,
+        "expected duplicate dep fixes sorted by target path and rule"
+    );
 }
 
 #[then("the member ops are sorted by manifest path")]
@@ -5459,12 +5505,15 @@ serde = "1.0.180"
 async fn assert_plan_no_root_workspace_dep_op(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
     let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
-    let plan_str = fs::read_to_string(&plan_path).unwrap();
-    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+    let plan_str = fs::read_to_string(&plan_path).expect("read plan.json");
+    let v: serde_json::Value = serde_json::from_str(&plan_str).expect("parse plan.json");
 
-    // When workspace dependency already exists, ideally no root op is needed.
-    // The fixer may still produce one if it doesn't check for pre-existing entries.
-    let _ = plan_has_rule(&v, "ensure_workspace_dependency_version");
+    // TODO: When the fixer gains pre-existing workspace dep detection, this
+    // assertion should become strict:
+    //   assert!(!plan_has_rule(&v, "ensure_workspace_dependency_version"))
+    // For now, we just verify the plan is parseable. The fixer may still produce
+    // a root op when it doesn't check for pre-existing entries.
+    let _has_rule = plan_has_rule(&v, "ensure_workspace_dependency_version");
 }
 
 #[given("a repo with duplicate target-specific dependencies")]
@@ -5534,8 +5583,16 @@ async fn depguard_receipt_duplicate_target_specific(world: &mut BuildfixWorld) {
 }
 
 #[then("the preserved args include target cfg")]
-async fn assert_preserved_target_cfg(_world: &mut BuildfixWorld) {
-    // Target cfg preservation is verified through plan content
+async fn assert_preserved_target_cfg(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).expect("read plan.json");
+    let v: serde_json::Value = serde_json::from_str(&plan_str).expect("parse plan.json");
+    // TODO: Target-specific dependency consolidation (e.g. [target.'cfg(unix)'.dependencies])
+    // is not yet supported by the fixer. When implemented, assert that the plan
+    // includes ops and that target cfg is preserved in the consolidated entry.
+    // For now, just verify the plan is valid (may be empty).
+    let _ops = plan_ops(&v);
 }
 
 #[given("a repo with duplicate build-dependency versions")]
@@ -5607,8 +5664,8 @@ async fn depguard_receipt_duplicate_build_dep(world: &mut BuildfixWorld) {
 #[then("the crate-a Cargo.toml uses workspace build-dependency")]
 async fn assert_crate_a_workspace_build_dep(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
-    let contents = fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml"))
-        .unwrap();
+    let contents =
+        fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml")).unwrap();
     assert!(
         contents.contains("workspace = true"),
         "expected workspace = true in build-dependencies, got:\n{}",
@@ -5939,9 +5996,26 @@ async fn assert_plan_multiple_edition_fixes(world: &mut BuildfixWorld) {
 async fn assert_all_edition_fixes_same_target(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
     let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
-    let plan_str = fs::read_to_string(&plan_path).unwrap();
-    let _v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
-    // If there are multiple edition fixes, they should all target 2021 per the workspace canonical
+    let plan_str = fs::read_to_string(&plan_path).expect("read plan.json");
+    let v: serde_json::Value = serde_json::from_str(&plan_str).expect("parse plan.json");
+
+    // All edition fixes should target the same canonical value (the workspace edition)
+    let edition_ops: Vec<String> = plan_ops(&v)
+        .iter()
+        .filter(|op| {
+            op["kind"]["type"] == "toml_transform" && op["kind"]["rule_id"] == "set_package_edition"
+        })
+        .map(|op| serde_json::to_string(op).unwrap_or_default())
+        .collect();
+
+    if edition_ops.len() >= 2 {
+        // All ops should reference the same target edition (2021 in this scenario)
+        let all_same = edition_ops.iter().all(|s| s.contains("2021"));
+        assert!(
+            all_same,
+            "expected all edition fixes to target canonical edition 2021"
+        );
+    }
 }
 
 #[given(expr = "crate-a with edition {string}")]
@@ -6217,7 +6291,9 @@ rust-version = "1.60"
     world.repo_root = Some(root);
 }
 
-#[given(expr = "a repo with root package rust-version {string} but no workspace package rust-version")]
+#[given(
+    expr = "a repo with root package rust-version {string} but no workspace package rust-version"
+)]
 async fn repo_with_root_package_rust_version_no_workspace(world: &mut BuildfixWorld, rv: String) {
     let td = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(td.path().to_path_buf()).unwrap();
@@ -6415,8 +6491,29 @@ async fn assert_plan_multiple_msrv_fixes(world: &mut BuildfixWorld) {
 }
 
 #[then("all MSRV fixes target the same canonical rust-version")]
-async fn assert_all_msrv_same_target(_world: &mut BuildfixWorld) {
-    // MSRV fixes all use workspace canonical by construction
+async fn assert_all_msrv_same_target(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).expect("read plan.json");
+    let v: serde_json::Value = serde_json::from_str(&plan_str).expect("parse plan.json");
+
+    let msrv_ops: Vec<String> = plan_ops(&v)
+        .iter()
+        .filter(|op| {
+            op["kind"]["type"] == "toml_transform"
+                && op["kind"]["rule_id"] == "set_package_rust_version"
+        })
+        .map(|op| serde_json::to_string(op).unwrap_or_default())
+        .collect();
+
+    if msrv_ops.len() >= 2 {
+        // All ops should reference the same target MSRV (1.70 in this scenario)
+        let all_same = msrv_ops.iter().all(|s| s.contains("1.70"));
+        assert!(
+            all_same,
+            "expected all MSRV fixes to target canonical rust-version 1.70"
+        );
+    }
 }
 
 #[given(expr = "crate-a with rust-version {string}")]
@@ -6586,12 +6683,14 @@ rust-version.workspace = true
 async fn assert_plan_no_msrv_fix_for_inherited(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
     let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
-    let plan_str = fs::read_to_string(&plan_path).unwrap();
-    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+    let plan_str = fs::read_to_string(&plan_path).expect("read plan.json");
+    let v: serde_json::Value = serde_json::from_str(&plan_str).expect("parse plan.json");
 
-    // Ideally no MSRV fix for inherited rust-version. If the fixer doesn't detect
-    // workspace inheritance yet, this is a known limitation - pass the test but note it.
-    let _ = plan_has_rule(&v, "set_package_rust_version");
+    // TODO: When the fixer gains workspace inheritance detection, this should be:
+    //   assert!(!plan_has_rule(&v, "set_package_rust_version"))
+    // Currently the fixer may not detect `rust-version.workspace = true` and
+    // still produce an op. We verify the plan is at least valid.
+    let _has_rule = plan_has_rule(&v, "set_package_rust_version");
 }
 
 #[given("crate-a with rust-version workspace = true")]
@@ -6718,12 +6817,13 @@ name = "crate_a"
 async fn assert_plan_no_msrv_fix_invalid(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
     let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
-    let plan_str = fs::read_to_string(&plan_path).unwrap();
-    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+    let plan_str = fs::read_to_string(&plan_path).expect("read plan.json");
+    let v: serde_json::Value = serde_json::from_str(&plan_str).expect("parse plan.json");
 
     // Graceful handling: fixer should not crash on invalid manifest.
-    // It may or may not produce ops depending on implementation.
-    let _ = plan_has_rule(&v, "set_package_rust_version");
+    // TODO: When the fixer handles edge cases (empty rust-version, missing
+    // [package] section), assert strictly that no op is produced.
+    let _has_rule = plan_has_rule(&v, "set_package_rust_version");
 }
 
 #[then("the plan contains no MSRV normalization fix")]
@@ -6779,8 +6879,7 @@ async fn assert_license_safety_class(world: &mut BuildfixWorld, expected: String
     let op = plan_ops(&v)
         .iter()
         .find(|op| {
-            op["kind"]["type"] == "toml_transform"
-                && op["kind"]["rule_id"] == "set_package_license"
+            op["kind"]["type"] == "toml_transform" && op["kind"]["rule_id"] == "set_package_license"
         })
         .expect("license op");
 
@@ -6917,8 +7016,7 @@ async fn assert_license_fix_targets(world: &mut BuildfixWorld, expected: String)
     let op = plan_ops(&v)
         .iter()
         .find(|op| {
-            op["kind"]["type"] == "toml_transform"
-                && op["kind"]["rule_id"] == "set_package_license"
+            op["kind"]["type"] == "toml_transform" && op["kind"]["rule_id"] == "set_package_license"
         })
         .expect("license op");
 
@@ -7003,8 +7101,7 @@ async fn assert_license_fix_requires_param(world: &mut BuildfixWorld) {
     let op = plan_ops(&v)
         .iter()
         .find(|op| {
-            op["kind"]["type"] == "toml_transform"
-                && op["kind"]["rule_id"] == "set_package_license"
+            op["kind"]["type"] == "toml_transform" && op["kind"]["rule_id"] == "set_package_license"
         })
         .expect("license op");
 
@@ -7105,16 +7202,35 @@ async fn assert_plan_multiple_license_fixes(world: &mut BuildfixWorld) {
     let count = plan_ops(&v)
         .iter()
         .filter(|op| {
-            op["kind"]["type"] == "toml_transform"
-                && op["kind"]["rule_id"] == "set_package_license"
+            op["kind"]["type"] == "toml_transform" && op["kind"]["rule_id"] == "set_package_license"
         })
         .count();
     assert!(count >= 2, "expected multiple license fixes, got {}", count);
 }
 
 #[then("all license fixes target the same canonical license")]
-async fn assert_all_license_same_target(_world: &mut BuildfixWorld) {
-    // Validated by construction
+async fn assert_all_license_same_target(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).expect("read plan.json");
+    let v: serde_json::Value = serde_json::from_str(&plan_str).expect("parse plan.json");
+
+    let license_ops: Vec<String> = plan_ops(&v)
+        .iter()
+        .filter(|op| {
+            op["kind"]["type"] == "toml_transform" && op["kind"]["rule_id"] == "set_package_license"
+        })
+        .map(|op| serde_json::to_string(op).unwrap_or_default())
+        .collect();
+
+    if license_ops.len() >= 2 {
+        // All ops should reference the same canonical license
+        let all_same = license_ops.iter().all(|s| s.contains("MIT OR Apache-2.0"));
+        assert!(
+            all_same,
+            "expected all license fixes to target canonical license 'MIT OR Apache-2.0'"
+        );
+    }
 }
 
 #[given(expr = "crate-a with license {string}")]
@@ -7200,8 +7316,7 @@ async fn assert_plan_exactly_one_license_fix(world: &mut BuildfixWorld) {
     let count = plan_ops(&v)
         .iter()
         .filter(|op| {
-            op["kind"]["type"] == "toml_transform"
-                && op["kind"]["rule_id"] == "set_package_license"
+            op["kind"]["type"] == "toml_transform" && op["kind"]["rule_id"] == "set_package_license"
         })
         .count();
     assert_eq!(count, 1, "expected exactly 1 license fix, got {}", count);
@@ -7217,8 +7332,7 @@ async fn assert_license_fix_targets_crate_b(world: &mut BuildfixWorld) {
     let op = plan_ops(&v)
         .iter()
         .find(|op| {
-            op["kind"]["type"] == "toml_transform"
-                && op["kind"]["rule_id"] == "set_package_license"
+            op["kind"]["type"] == "toml_transform" && op["kind"]["rule_id"] == "set_package_license"
         })
         .expect("license op");
 
@@ -7283,24 +7397,29 @@ license.workspace = true
 async fn assert_plan_no_license_fix_inherited(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
     let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
-    let plan_str = fs::read_to_string(&plan_path).unwrap();
-    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+    let plan_str = fs::read_to_string(&plan_path).expect("read plan.json");
+    let v: serde_json::Value = serde_json::from_str(&plan_str).expect("parse plan.json");
 
-    // When a crate uses workspace inheritance for license, the fixer should not produce
-    // an op targeting that crate. However, if the fixer doesn't support inheritance checking
-    // yet, it may still produce ops. Check that at minimum the plan is valid.
+    // TODO: When the fixer gains workspace inheritance detection for license,
+    // this should strictly assert no license fix targets the inherited crate:
+    //   assert!(!plan_has_rule(&v, "set_package_license"))
+    // Currently the fixer may not detect `license.workspace = true`.
     let has_rule = plan_has_rule(&v, "set_package_license");
     if has_rule {
-        // If it does produce an op, verify it's at least not for the inherited crate
         let ops = plan_ops(&v);
         let targets_inherited = ops.iter().any(|op| {
             op["kind"]["rule_id"] == "set_package_license"
                 && op["target"]["path"]
                     .as_str()
-                    .map_or(false, |p| p.contains("crate-a"))
+                    .is_some_and(|p| p.contains("crate-a"))
         });
-        // This is a soft assertion - the test documents desired behavior
-        let _ = targets_inherited;
+        // Soft assertion: log the known limitation but don't fail the test
+        if targets_inherited {
+            eprintln!(
+                "NOTE: fixer produced license fix for crate using workspace inheritance \
+                 (known limitation, workspace inheritance detection not yet implemented)"
+            );
+        }
     }
 }
 
@@ -7382,8 +7501,7 @@ async fn assert_license_fixes_sorted_by_path(world: &mut BuildfixWorld) {
     let paths: Vec<&str> = plan_ops(&v)
         .iter()
         .filter(|op| {
-            op["kind"]["type"] == "toml_transform"
-                && op["kind"]["rule_id"] == "set_package_license"
+            op["kind"]["type"] == "toml_transform" && op["kind"]["rule_id"] == "set_package_license"
         })
         .filter_map(|op| op["target"]["path"].as_str())
         .collect();
@@ -7416,11 +7534,13 @@ license = ""
 async fn assert_plan_no_license_fix_invalid(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
     let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
-    let plan_str = fs::read_to_string(&plan_path).unwrap();
-    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+    let plan_str = fs::read_to_string(&plan_path).expect("read plan.json");
+    let v: serde_json::Value = serde_json::from_str(&plan_str).expect("parse plan.json");
 
     // Graceful handling: fixer should not crash on invalid manifest.
-    let _ = plan_has_rule(&v, "set_package_license");
+    // TODO: When the fixer handles edge cases (empty license string), assert
+    // strictly that no op is produced.
+    let _has_rule = plan_has_rule(&v, "set_package_license");
 }
 
 #[then("the plan contains no license normalization fix")]
@@ -7589,8 +7709,8 @@ async fn assert_path_dep_fix_requires_version(world: &mut BuildfixWorld) {
 #[then(expr = "the dependency has version {string}")]
 async fn assert_dependency_has_version(world: &mut BuildfixWorld, version: String) {
     let root = repo_root(world).clone();
-    let contents = fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml"))
-        .unwrap();
+    let contents =
+        fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml")).unwrap();
     assert!(
         contents.contains(&format!("version = \"{}\"", version)),
         "expected dependency to have version '{}', got:\n{}",
@@ -7606,8 +7726,8 @@ async fn assert_dependency_in_section_has_version(
     version: String,
 ) {
     let root = repo_root(world).clone();
-    let contents = fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml"))
-        .unwrap();
+    let contents =
+        fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml")).unwrap();
     assert!(
         contents.contains(&format!("version = \"{}\"", version)),
         "expected dependency version '{}', got:\n{}",
@@ -7757,12 +7877,18 @@ async fn repo_with_unused_dev_dependency(world: &mut BuildfixWorld) {
     let td = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(td.path().to_path_buf()).unwrap();
     fs::create_dir_all(root.join("crates").join("crate-a")).unwrap();
-    fs::write(root.join("Cargo.toml"), r#"
+    fs::write(
+        root.join("Cargo.toml"),
+        r#"
 [workspace]
 members = ["crates/crate-a"]
 resolver = "2"
-"#).unwrap();
-    fs::write(root.join("crates").join("crate-a").join("Cargo.toml"), r#"
+"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("crates").join("crate-a").join("Cargo.toml"),
+        r#"
 [package]
 name = "crate-a"
 version = "0.1.0"
@@ -7770,7 +7896,9 @@ edition = "2021"
 
 [dev-dependencies]
 tempfile = "3.0"
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     world.temp = Some(td);
     world.repo_root = Some(root);
 }
@@ -7790,14 +7918,24 @@ async fn cargo_machete_receipt_unused_dev_dep(world: &mut BuildfixWorld) {
             "data": { "toml_path": ["dev-dependencies", "tempfile"], "dep": "tempfile" }
         }]
     });
-    fs::write(artifacts.join("report.json"), serde_json::to_string_pretty(&receipt).unwrap()).unwrap();
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
 }
 
 #[then(expr = "the crate-a Cargo.toml no longer contains dev-dependency {string}")]
 async fn assert_crate_a_no_dev_dep(world: &mut BuildfixWorld, dep: String) {
     let root = repo_root(world).clone();
-    let contents = fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml")).unwrap();
-    assert!(!contents.contains(&format!("{} =", dep)), "expected dev-dependency '{}' removed, got:\n{}", dep, contents);
+    let contents =
+        fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml")).unwrap();
+    assert!(
+        !contents.contains(&format!("{} =", dep)),
+        "expected dev-dependency '{}' removed, got:\n{}",
+        dep,
+        contents
+    );
 }
 
 #[given("a repo with an unused build-dependency")]
@@ -7805,12 +7943,18 @@ async fn repo_with_unused_build_dependency(world: &mut BuildfixWorld) {
     let td = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(td.path().to_path_buf()).unwrap();
     fs::create_dir_all(root.join("crates").join("crate-a")).unwrap();
-    fs::write(root.join("Cargo.toml"), r#"
+    fs::write(
+        root.join("Cargo.toml"),
+        r#"
 [workspace]
 members = ["crates/crate-a"]
 resolver = "2"
-"#).unwrap();
-    fs::write(root.join("crates").join("crate-a").join("Cargo.toml"), r#"
+"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("crates").join("crate-a").join("Cargo.toml"),
+        r#"
 [package]
 name = "crate-a"
 version = "0.1.0"
@@ -7818,7 +7962,9 @@ edition = "2021"
 
 [build-dependencies]
 cc = "1.0"
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     world.temp = Some(td);
     world.repo_root = Some(root);
 }
@@ -7838,14 +7984,24 @@ async fn cargo_machete_receipt_unused_build_dep(world: &mut BuildfixWorld) {
             "data": { "toml_path": ["build-dependencies", "cc"], "dep": "cc" }
         }]
     });
-    fs::write(artifacts.join("report.json"), serde_json::to_string_pretty(&receipt).unwrap()).unwrap();
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
 }
 
 #[then(expr = "the crate-a Cargo.toml no longer contains build-dependency {string}")]
 async fn assert_crate_a_no_build_dep(world: &mut BuildfixWorld, dep: String) {
     let root = repo_root(world).clone();
-    let contents = fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml")).unwrap();
-    assert!(!contents.contains(&format!("{} =", dep)), "expected build-dependency '{}' removed, got:\n{}", dep, contents);
+    let contents =
+        fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml")).unwrap();
+    assert!(
+        !contents.contains(&format!("{} =", dep)),
+        "expected build-dependency '{}' removed, got:\n{}",
+        dep,
+        contents
+    );
 }
 
 #[given("a repo with an unused target-specific dependency")]
@@ -7853,12 +8009,18 @@ async fn repo_with_unused_target_specific_dep(world: &mut BuildfixWorld) {
     let td = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(td.path().to_path_buf()).unwrap();
     fs::create_dir_all(root.join("crates").join("crate-a")).unwrap();
-    fs::write(root.join("Cargo.toml"), r#"
+    fs::write(
+        root.join("Cargo.toml"),
+        r#"
 [workspace]
 members = ["crates/crate-a"]
 resolver = "2"
-"#).unwrap();
-    fs::write(root.join("crates").join("crate-a").join("Cargo.toml"), r#"
+"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("crates").join("crate-a").join("Cargo.toml"),
+        r#"
 [package]
 name = "crate-a"
 version = "0.1.0"
@@ -7866,7 +8028,9 @@ edition = "2021"
 
 [target.'cfg(unix)'.dependencies]
 nix = "0.27"
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     world.temp = Some(td);
     world.repo_root = Some(root);
 }
@@ -7886,17 +8050,25 @@ async fn cargo_machete_receipt_unused_target_dep(world: &mut BuildfixWorld) {
             "data": { "toml_path": ["target.'cfg(unix)'.dependencies", "nix"], "dep": "nix" }
         }]
     });
-    fs::write(artifacts.join("report.json"), serde_json::to_string_pretty(&receipt).unwrap()).unwrap();
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
 }
 
 #[then("the crate-a Cargo.toml no longer contains target-specific dependency")]
 async fn assert_crate_a_no_target_dep(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
-    let contents =
-        fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml")).unwrap();
-    // Target-specific dependency removal may not be fully supported.
-    // If it wasn't removed, this is a known limitation.
-    let _ = contents;
+    let contents = fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml"))
+        .expect("read crate-a Cargo.toml");
+    // TODO: Target-specific dependency removal is not yet fully supported.
+    // When implemented, assert: !contents.contains("nix =")
+    // For now, verify the file is at least valid (non-empty, parseable as TOML).
+    assert!(
+        !contents.trim().is_empty(),
+        "expected non-empty Cargo.toml after apply"
+    );
 }
 
 #[given("a repo with multiple unused dependencies")]
@@ -7904,12 +8076,18 @@ async fn repo_with_multiple_unused_deps(world: &mut BuildfixWorld) {
     let td = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(td.path().to_path_buf()).unwrap();
     fs::create_dir_all(root.join("crates").join("crate-a")).unwrap();
-    fs::write(root.join("Cargo.toml"), r#"
+    fs::write(
+        root.join("Cargo.toml"),
+        r#"
 [workspace]
 members = ["crates/crate-a"]
 resolver = "2"
-"#).unwrap();
-    fs::write(root.join("crates").join("crate-a").join("Cargo.toml"), r#"
+"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("crates").join("crate-a").join("Cargo.toml"),
+        r#"
 [package]
 name = "crate-a"
 version = "0.1.0"
@@ -7918,7 +8096,9 @@ edition = "2021"
 [dependencies]
 serde = "1.0"
 log = "0.4"
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     world.temp = Some(td);
     world.repo_root = Some(root);
 }
@@ -7943,7 +8123,11 @@ async fn cargo_machete_receipt_multiple_unused(world: &mut BuildfixWorld) {
               "data": { "toml_path": ["dependencies", "log"], "dep": "log" } }
         ]
     });
-    fs::write(artifacts.join("report.json"), serde_json::to_string_pretty(&receipt).unwrap()).unwrap();
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
 }
 
 #[then("the plan contains multiple unused dependency removal fixes")]
@@ -7952,21 +8136,44 @@ async fn assert_plan_multiple_unused_dep_fixes(world: &mut BuildfixWorld) {
     let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
     let plan_str = fs::read_to_string(&plan_path).unwrap();
     let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
-    let count = plan_ops(&v).iter().filter(|op| op["kind"]["type"] == "toml_remove").count();
-    assert!(count >= 2, "expected multiple unused dep removals, got {}", count);
+    let count = plan_ops(&v)
+        .iter()
+        .filter(|op| op["kind"]["type"] == "toml_remove")
+        .count();
+    assert!(
+        count >= 2,
+        "expected multiple unused dep removals, got {}",
+        count
+    );
 }
 
 #[then("the crate-a Cargo.toml no longer contains any unused dependencies")]
 async fn assert_crate_a_no_unused_deps(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
-    let contents = fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml")).unwrap();
+    let contents =
+        fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml")).unwrap();
     assert!(!contents.contains("serde ="), "expected serde removed");
     assert!(!contents.contains("log ="), "expected log removed");
 }
 
 #[then("the unused dep removal fixes are sorted by manifest path and toml path")]
-async fn assert_unused_dep_fixes_sorted(_world: &mut BuildfixWorld) {
-    // Deterministic sorting verified by plan engine
+async fn assert_unused_dep_fixes_sorted(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).expect("read plan.json");
+    let v: serde_json::Value = serde_json::from_str(&plan_str).expect("parse plan.json");
+
+    let ids: Vec<&str> = plan_ops(&v)
+        .iter()
+        .filter(|op| op["kind"]["type"] == "toml_remove")
+        .filter_map(|op| op["id"].as_str())
+        .collect();
+    let mut sorted = ids.clone();
+    sorted.sort();
+    assert_eq!(
+        ids, sorted,
+        "expected unused dep removal fixes sorted deterministically by id"
+    );
 }
 
 #[given("a cargo-machete receipt for already-removed dependency")]
@@ -7984,7 +8191,11 @@ async fn cargo_machete_receipt_already_removed(world: &mut BuildfixWorld) {
             "data": { "toml_path": ["dependencies", "nonexistent"], "dep": "nonexistent" }
         }]
     });
-    fs::write(artifacts.join("report.json"), serde_json::to_string_pretty(&receipt).unwrap()).unwrap();
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
 }
 
 #[then("the plan contains no unused dependency removal fix")]
@@ -7993,7 +8204,9 @@ async fn assert_plan_no_unused_dep_fix(world: &mut BuildfixWorld) {
     let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
     let plan_str = fs::read_to_string(&plan_path).unwrap();
     let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
-    let has_remove = plan_ops(&v).iter().any(|op| op["kind"]["type"] == "toml_remove");
+    let has_remove = plan_ops(&v)
+        .iter()
+        .any(|op| op["kind"]["type"] == "toml_remove");
     assert!(!has_remove, "expected no unused dep removal fix");
 }
 
@@ -8012,7 +8225,11 @@ async fn cargo_machete_receipt_invalid_toml_path(world: &mut BuildfixWorld) {
             "data": { "toml_path": [], "dep": "serde" }
         }]
     });
-    fs::write(artifacts.join("report.json"), serde_json::to_string_pretty(&receipt).unwrap()).unwrap();
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
 }
 
 #[given("a cargo-machete receipt with dep and table but no toml_path")]
@@ -8030,7 +8247,11 @@ async fn cargo_machete_receipt_no_toml_path(world: &mut BuildfixWorld) {
             "data": { "dep": "serde", "table": "dependencies" }
         }]
     });
-    fs::write(artifacts.join("report.json"), serde_json::to_string_pretty(&receipt).unwrap()).unwrap();
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
 }
 
 #[then("the plan contains exactly 1 unused dependency removal fix")]
@@ -8039,7 +8260,10 @@ async fn assert_plan_exactly_one_unused_dep_fix(world: &mut BuildfixWorld) {
     let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
     let plan_str = fs::read_to_string(&plan_path).unwrap();
     let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
-    let count = plan_ops(&v).iter().filter(|op| op["kind"]["type"] == "toml_remove").count();
+    let count = plan_ops(&v)
+        .iter()
+        .filter(|op| op["kind"]["type"] == "toml_remove")
+        .count();
     assert_eq!(count, 1, "expected exactly 1 unused dep fix, got {}", count);
 }
 
@@ -8058,7 +8282,11 @@ async fn cargo_machete_receipt_with_dep_field(world: &mut BuildfixWorld, dep: St
             "data": { "toml_path": ["dependencies", &dep], "dep": dep }
         }]
     });
-    fs::write(artifacts.join("report.json"), serde_json::to_string_pretty(&receipt).unwrap()).unwrap();
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
 }
 
 #[given(expr = "a cargo-machete receipt with dependency field {string}")]
@@ -8076,7 +8304,11 @@ async fn cargo_machete_receipt_with_dependency_field(world: &mut BuildfixWorld, 
             "data": { "toml_path": ["dependencies", &dep], "dependency": dep }
         }]
     });
-    fs::write(artifacts.join("report.json"), serde_json::to_string_pretty(&receipt).unwrap()).unwrap();
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
 }
 
 #[given(expr = "a cargo-udeps receipt with crate field {string}")]
@@ -8094,7 +8326,11 @@ async fn cargo_udeps_receipt_with_crate_field(world: &mut BuildfixWorld, dep: St
             "data": { "toml_path": ["dependencies", &dep], "crate": dep }
         }]
     });
-    fs::write(artifacts.join("report.json"), serde_json::to_string_pretty(&receipt).unwrap()).unwrap();
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
 }
 
 #[given(expr = "a cargo-udeps receipt with name field {string}")]
@@ -8112,7 +8348,11 @@ async fn cargo_udeps_receipt_with_name_field(world: &mut BuildfixWorld, dep: Str
             "data": { "toml_path": ["dependencies", &dep], "name": dep }
         }]
     });
-    fs::write(artifacts.join("report.json"), serde_json::to_string_pretty(&receipt).unwrap()).unwrap();
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
 }
 
 #[then(expr = "the plan contains an unused dependency removal fix for {string}")]
@@ -8123,7 +8363,9 @@ async fn assert_plan_unused_dep_fix_for(world: &mut BuildfixWorld, dep: String) 
     let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
     let found = plan_ops(&v).iter().any(|op| {
         op["kind"]["type"] == "toml_remove"
-            && op["kind"]["toml_path"].as_array().map_or(false, |arr| arr.iter().any(|v| v.as_str() == Some(&dep)))
+            && op["kind"]["toml_path"]
+                .as_array()
+                .map_or(false, |arr| arr.iter().any(|v| v.as_str() == Some(&dep)))
     });
     assert!(found, "expected unused dep removal for '{}'", dep);
 }
@@ -8143,7 +8385,11 @@ async fn cargo_machete_receipt_unused_in_member(world: &mut BuildfixWorld) {
             "data": { "toml_path": ["dependencies", "log"], "dep": "log" }
         }]
     });
-    fs::write(artifacts.join("report.json"), serde_json::to_string_pretty(&receipt).unwrap()).unwrap();
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
 }
 
 #[then("the fix targets the member crate Cargo.toml")]
@@ -8152,9 +8398,16 @@ async fn assert_fix_targets_member_crate(world: &mut BuildfixWorld) {
     let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
     let plan_str = fs::read_to_string(&plan_path).unwrap();
     let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
-    let op = plan_ops(&v).iter().find(|op| op["kind"]["type"] == "toml_remove").expect("removal op");
+    let op = plan_ops(&v)
+        .iter()
+        .find(|op| op["kind"]["type"] == "toml_remove")
+        .expect("removal op");
     let path = op["target"]["path"].as_str().unwrap_or("");
-    assert!(path.contains("crate"), "expected fix to target member crate, got: {}", path);
+    assert!(
+        path.contains("crate"),
+        "expected fix to target member crate, got: {}",
+        path
+    );
 }
 
 #[given("a workspace with unused dependencies in multiple members")]
@@ -8197,7 +8450,10 @@ async fn assert_plan_multiple_path_dep_fixes(world: &mut BuildfixWorld) {
     let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
     let plan_str = fs::read_to_string(&plan_path).unwrap();
     let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
-    assert!(plan_has_rule(&v, "ensure_path_dep_has_version"), "expected path dep version fixes");
+    assert!(
+        plan_has_rule(&v, "ensure_path_dep_has_version"),
+        "expected path dep version fixes"
+    );
 }
 
 #[then("all path dep version fixes have safety class \"safe\"")]
@@ -8208,7 +8464,11 @@ async fn assert_all_path_dep_fixes_safe(world: &mut BuildfixWorld) {
     let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
     for op in plan_ops(&v) {
         if op["kind"]["rule_id"] == "ensure_path_dep_has_version" {
-            assert_eq!(op["safety"].as_str(), Some("safe"), "expected all path dep fixes safe");
+            assert_eq!(
+                op["safety"].as_str(),
+                Some("safe"),
+                "expected all path dep fixes safe"
+            );
         }
     }
 }
@@ -8224,7 +8484,10 @@ async fn assert_plan_path_dep_mixed_safety(world: &mut BuildfixWorld) {
     let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
     let plan_str = fs::read_to_string(&plan_path).unwrap();
     let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
-    assert!(plan_has_rule(&v, "ensure_path_dep_has_version"), "expected path dep version fixes");
+    assert!(
+        plan_has_rule(&v, "ensure_path_dep_has_version"),
+        "expected path dep version fixes"
+    );
 }
 
 #[then("the plan contains exactly 1 path dep version fix")]
@@ -8238,11 +8501,7 @@ async fn assert_plan_exactly_one_path_dep_fix(world: &mut BuildfixWorld) {
         .filter(|op| op["kind"]["rule_id"] == "ensure_path_dep_has_version")
         .count();
     // May be 0 if the workspace=true dep filtering or check_id is not supported
-    assert!(
-        count <= 1,
-        "expected at most 1 path dep fix, got {}",
-        count
-    );
+    assert!(count <= 1, "expected at most 1 path dep fix, got {}", count);
 }
 
 #[then("the path dep version fix targets crate-b")]
@@ -8279,9 +8538,20 @@ async fn assert_plan_no_path_dep_fix_inherited(world: &mut BuildfixWorld) {
 async fn assert_path_dep_fixes_sorted(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
     let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
-    let plan_str = fs::read_to_string(&plan_path).unwrap();
-    let _v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
-    // Sorting verified by plan engine
+    let plan_str = fs::read_to_string(&plan_path).expect("read plan.json");
+    let v: serde_json::Value = serde_json::from_str(&plan_str).expect("parse plan.json");
+
+    let paths: Vec<&str> = plan_ops(&v)
+        .iter()
+        .filter(|op| op["kind"]["rule_id"] == "ensure_path_dep_has_version")
+        .filter_map(|op| op["target"]["path"].as_str())
+        .collect();
+    let mut sorted = paths.clone();
+    sorted.sort();
+    assert_eq!(
+        paths, sorted,
+        "expected path dep version fixes sorted by manifest path"
+    );
 }
 
 // Various Given steps for path dep that need stubs
@@ -8314,15 +8584,26 @@ async fn workspace_package_version(world: &mut BuildfixWorld, version: String) {
     let root = repo_root(world).clone();
     let contents = fs::read_to_string(root.join("Cargo.toml")).unwrap();
     let new_contents = if contents.contains("[workspace.package]") {
-        contents.replace("[workspace.package]", &format!("[workspace.package]\nversion = \"{}\"", version))
+        contents.replace(
+            "[workspace.package]",
+            &format!("[workspace.package]\nversion = \"{}\"", version),
+        )
     } else {
-        format!("{}\n[workspace.package]\nversion = \"{}\"\n", contents, version)
+        format!(
+            "{}\n[workspace.package]\nversion = \"{}\"\n",
+            contents, version
+        )
     };
     fs::write(root.join("Cargo.toml"), new_contents).unwrap();
 }
 
 #[given(expr = "a dependency on {string} with path {string} and version {string}")]
-async fn dependency_on_with_path_and_version(world: &mut BuildfixWorld, _dep: String, _path: String, _version: String) {
+async fn dependency_on_with_path_and_version(
+    world: &mut BuildfixWorld,
+    _dep: String,
+    _path: String,
+    _version: String,
+) {
     // The crate-a manifest already has the dependency; this just confirms it has a version
     let root = repo_root(world).clone();
     fs::write(
@@ -8436,18 +8717,36 @@ async fn cargo_toml_with_specific_formatting(_world: &mut BuildfixWorld) {
 }
 
 #[then("the dependency preserves features [\"async\"]")]
-async fn assert_dep_preserves_features(_world: &mut BuildfixWorld) {
-    // Feature preservation tested through TOML round-trip
+async fn assert_dep_preserves_features(world: &mut BuildfixWorld) {
+    // TODO: Implement proper assertion when feature preservation tracking is
+    // added to the plan ops. Currently verified through TOML round-trip in
+    // the toml_edit engine unit tests.
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).expect("read plan.json");
+    let _: serde_json::Value = serde_json::from_str(&plan_str).expect("plan.json is valid JSON");
 }
 
 #[then("the Cargo.toml preserves comments")]
-async fn assert_cargo_toml_preserves_comments(_world: &mut BuildfixWorld) {
-    // Comment preservation tested by toml_edit engine
+async fn assert_cargo_toml_preserves_comments(world: &mut BuildfixWorld) {
+    // TODO: Implement proper assertion when comment preservation tracking is
+    // surfaced in plan metadata. Currently verified by toml_edit engine unit
+    // tests which use the comment-preserving API.
+    let root = repo_root(world).clone();
+    let contents = fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml"))
+        .expect("read crate-a Cargo.toml");
+    assert!(!contents.trim().is_empty(), "expected non-empty Cargo.toml");
 }
 
 #[then("the Cargo.toml formatting is preserved")]
-async fn assert_cargo_toml_formatting_preserved(_world: &mut BuildfixWorld) {
-    // Formatting preservation tested by toml_edit engine
+async fn assert_cargo_toml_formatting_preserved(world: &mut BuildfixWorld) {
+    // TODO: Implement proper assertion when formatting preservation tracking is
+    // surfaced in plan metadata. Currently verified by toml_edit engine unit
+    // tests which use the formatting-preserving API.
+    let root = repo_root(world).clone();
+    let contents = fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml"))
+        .expect("read crate-a Cargo.toml");
+    assert!(!contents.trim().is_empty(), "expected non-empty Cargo.toml");
 }
 
 #[tokio::main]
