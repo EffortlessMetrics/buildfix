@@ -66,3 +66,9 @@ Key invariants:
 - `Fixer` trait: `plan(ctx, repo, receipts) -> Vec<PlanOp>`
 - Paths normalized: repo-relative, forward slashes, no leading `./`
 - Deterministic sorting via `stable_fix_sort_key()` for byte-stable outputs
+
+### Publishing
+
+- Most sub-crates set `readme = false` in Cargo.toml (no individual README files). This is intentional.
+- `buildfix-bdd`, `xtask`, `buildfix-receipts-template` are `publish = false`.
+- CI uses `cargo-workspaces` for automatic dependency-ordered publishing.

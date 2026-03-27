@@ -1,6 +1,6 @@
 # buildfix Release Runbook
 
-> **Version**: 1.3
+> **Version**: 1.4
 > **Last Updated**: 2026-03-26
 > **Applies to**: v0.3.x releases and beyond
 
@@ -71,6 +71,11 @@ grep -r "^version = " --include="Cargo.toml" | grep -v target
 ---
 
 ## 2. Publish Order
+
+> **Note:** The primary CI workflow (`.github/workflows/publish.yml`) uses
+> `cargo-workspaces publish`, which resolves the dependency graph and publishes
+> crates in the correct order automatically. The manual layer ordering below is
+> a **fallback for debugging** or when publishing individual crates by hand.
 
 The publish order is determined by the dependency graph. **Do not deviate from this order** or publishes will fail due to missing dependencies.
 
@@ -567,6 +572,7 @@ buildfix --version
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-03-26 | 1.4 | Added note that cargo-workspaces handles ordering automatically; manual layers are fallback/debugging only |
 | 2026-03-26 | 1.3 | Recomputed layer assignments from real dependency graph; moved fixer-catalog to L1, core-runtime and adapters to L2, fixers to L3; added buildfix-receipts-template to NOT Published list; fixed xtask description |
 | 2026-03-26 | 1.2 | Added missing buildfix-receipts to publish order; moved buildfix-receipts-sarif to Layer 2; completed verification crate list |
 | 2026-03-20 | 1.1 | Updated dependency graph to include all intake adapters; added missing adapter crates to publish sequence |
