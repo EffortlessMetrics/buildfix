@@ -65,9 +65,7 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Install cargo-workspaces
-        uses: cargo-bins/cargo-binstall@main
-        with:
-          tool: cargo-workspaces
+        run: cargo install cargo-workspaces --locked
 
       - name: Publish crates
         env:
