@@ -2,6 +2,14 @@
 
 This tutorial is for operators who already have sensor receipts and want buildfix to explain and repair a Cargo workspace.
 
+The supported lane we have verified is the safe `builddiag` and `depguard`
+path:
+
+- `resolver-v2`
+- `path-dep-version`
+- `workspace-inheritance`
+- `duplicate-deps`
+
 ## Prerequisites
 
 - Rust toolchain
@@ -13,10 +21,21 @@ This tutorial is for operators who already have sensor receipts and want buildfi
 Install from crates.io or build from source:
 
 ```bash
-cargo install buildfix --locked
+cargo install buildfix
 ```
 
-If you want a concrete sandbox, use [`examples/demo`](../../examples/demo/README.md) or pick a profile from [`examples/profiles`](../../examples/profiles/README.md).
+After installation, verify the binary and available fixes:
+
+```bash
+buildfix --help
+buildfix list-fixes
+```
+
+For the current published `0.2.0` release, this unlocked install path is the
+clean verified path. The locked install remains part of release verification
+for the next cut.
+
+If you want a concrete sandbox, use [`examples/demo`](../../examples/demo/README.md) or pick a profile from [`examples/profiles`](../../examples/profiles/README.md). That is the shortest path to reproducing the supported lane with known-good receipts.
 
 ## Your First Plan
 
@@ -42,6 +61,9 @@ This produces:
 - `artifacts/buildfix/plan.md`
 - `artifacts/buildfix/patch.diff`
 - `artifacts/buildfix/report.json`
+
+In the supported lane, the plan should describe one of the verified safe
+fixes rather than an experimental or guarded change.
 
 ### 3. Review the plan
 

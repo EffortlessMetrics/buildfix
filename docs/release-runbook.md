@@ -68,6 +68,65 @@ Before publishing, update versions in all crate `Cargo.toml` files:
 grep -r "^version = " --include="Cargo.toml" | grep -v target
 ```
 
+### 1.5 Install and Smoke Checklist
+
+Use this checklist to verify the release path on a clean machine before
+cutting a tag. Separate the current operator install path from the locked
+release-candidate gate so the docs do not overstate what the published crate
+can currently guarantee.
+
+```bash
+# Current operator install path (verified locally)
+export CARGO_HOME="$(mktemp -d)"
+cargo install buildfix
+
+# Verify the installed CLI
+buildfix --help
+buildfix list-fixes
+
+# Verify the supported lane on a clean workspace copied from the demo
+cp -R examples/demo/repo /tmp/buildfix-smoke
+cp -R examples/demo/artifacts /tmp/buildfix-smoke/artifacts
+cd /tmp/buildfix-smoke
+buildfix plan
+cat artifacts/buildfix/plan.md
+buildfix apply
+buildfix apply --apply
+```
+
+Expected results:
+
+- `cargo install buildfix --locked` succeeds from a clean cargo home
+- `buildfix --help` and `buildfix list-fixes` run from the installed binary
+- `buildfix plan` writes `plan.json`, `plan.md`, `patch.diff`, and `report.json`
+- `buildfix apply` is a dry run and does not modify the workspace
+- `buildfix apply --apply` writes `apply.json`, `apply.md`, `patch.diff`, and `report.json`
+- policy blocks and stale-plan refusals return exit code `2`
+
+### 1.6 Locked Install Gate
+
+Before cutting the next release, also verify the packaged lock:
+
+```bash
+export CARGO_HOME="$(mktemp -d)"
+cargo install buildfix --locked
+buildfix --help
+buildfix list-fixes
+cargo audit --deny warnings --ignore RUSTSEC-2024-0384
+```
+
+Current status:
+
+- `cargo install buildfix --locked` succeeds for the published `0.2.0` crate
+- the packaged `0.2.0` lock still pulls `rustls-webpki 0.103.9`
+- `cargo audit` reports `RUSTSEC-2026-0049`
+
+Treat that advisory as a release blocker for the next cut. Keep the public
+install guidance on `cargo install buildfix` until the locked path audits clean.
+
+If any of the smoke or locked-gate steps fail, stop and fix the release path
+before tagging.
+
 ---
 
 ## 2. Publish Order
