@@ -1,7 +1,7 @@
 # buildfix Release Runbook
 
-> **Version**: 1.4
-> **Last Updated**: 2026-03-26
+> **Version**: 1.5
+> **Last Updated**: 2026-03-27
 > **Applies to**: v0.3.x releases and beyond
 
 This runbook captures the lessons learned from the v0.2.0 release to make future releases repeatable and require zero institutional knowledge.
@@ -105,7 +105,25 @@ Expected results:
 
 ### 1.6 Locked Install Gate
 
-Before cutting the next release, also verify the packaged lock:
+Before cutting a release tag, verify the release-candidate source lock from a
+clean cargo home:
+
+```bash
+export CARGO_HOME="$(mktemp -d)"
+cargo install --path buildfix-cli --locked
+buildfix --help
+buildfix list-fixes
+cargo audit --deny warnings --ignore RUSTSEC-2024-0384
+```
+
+Expected pre-tag results:
+
+- the local release-candidate install succeeds from a clean cargo home
+- `buildfix --help` and `buildfix list-fixes` run from the installed binary
+- `cargo audit` passes with the documented ignore set
+- the release-candidate lock resolves `rustls-webpki 0.103.10`
+
+After the tag has published successfully, rerun the same gate against crates.io:
 
 ```bash
 export CARGO_HOME="$(mktemp -d)"
@@ -115,14 +133,12 @@ buildfix list-fixes
 cargo audit --deny warnings --ignore RUSTSEC-2024-0384
 ```
 
-Current status:
+Current public status:
 
-- `cargo install buildfix --locked` succeeds for the published `0.2.0` crate
-- the packaged `0.2.0` lock still pulls `rustls-webpki 0.103.9`
-- `cargo audit` reports `RUSTSEC-2026-0049`
-
-Treat that advisory as a release blocker for the next cut. Keep the public
-install guidance on `cargo install buildfix` until the locked path audits clean.
+- the published `0.2.0` crate still requires the unlocked `cargo install buildfix` path for clean operator guidance
+- the source tree for the next release now carries the refreshed lock and passes the pre-tag audit gate
+- keep the public install guidance on `cargo install buildfix` until the newly published cut passes the post-publish `--locked` gate from crates.io
+- once that post-publish check passes, switch the public install guidance back to `cargo install buildfix --locked`
 
 If any of the smoke or locked-gate steps fail, stop and fix the release path
 before tagging.
@@ -280,7 +296,7 @@ error: failed to publish to registry at https://crates.io
 
 Caused by:
   the remote server responded with an error (status 400): Crate `buildfix-foo` 
-  depends on `buildfix-bar ^0.2.0`, but that version does not exist.
+  depends on `buildfix-bar ^0.3.1`, but that version does not exist.
 ```
 
 **Crate already exists (skip, not an error):**
@@ -288,7 +304,7 @@ Caused by:
 error: failed to publish to registry at https://crates.io
 
 Caused by:
-  crate version `0.2.0` is already uploaded
+  crate version `0.3.1` is already uploaded
 ```
 
 ---
@@ -326,7 +342,7 @@ cargo publish -p buildfix-<crate> --registry crates-io
 This error means the crate version is already published — **this is not a failure**:
 
 ```bash
-# If you see "crate version `0.2.0` is already uploaded"
+# If you see "crate version `0.3.1` is already uploaded"
 # Simply skip that crate and continue to the next one
 echo "Crate already published, continuing..."
 ```
@@ -351,7 +367,7 @@ cargo search buildfix-receipts
 
 ```bash
 # Check if a specific version exists
-curl -s https://crates.io/api/v1/crates/buildfix-types/0.2.0 | head -20
+curl -s https://crates.io/api/v1/crates/buildfix-types/0.3.1 | head -20
 
 # Or use cargo's internal check
 cargo search buildfix-types --limit 1
@@ -520,7 +536,7 @@ buildfix = "0.2"' >> Cargo.toml
 cargo fetch
 
 # Or install the CLI globally
-cargo install buildfix --version 0.2.0
+cargo install buildfix --version 0.3.1
 
 # Verify the CLI works
 buildfix --version
@@ -531,15 +547,15 @@ buildfix --help
 
 ```bash
 # Tag the release
-git tag -a v0.2.0 -m "Release v0.2.0"
-git push origin v0.2.0
+git tag -a v0.3.1 -m "Release v0.3.1"
+git push origin v0.3.1
 ```
 
 ### 6.4 Create GitHub Release
 
 1. Go to https://github.com/EffortlessMetrics/buildfix/releases/new
-2. Select the tag (e.g., `v0.2.0`)
-3. Title: `v0.2.0`
+2. Select the tag (e.g., `v0.3.1`)
+3. Title: `v0.3.1`
 4. Copy release notes from `CHANGELOG.md`
 5. Attach any relevant artifacts (optional)
 6. Publish release
@@ -548,7 +564,7 @@ git push origin v0.2.0
 
 ```bash
 # Verify docs.rs built successfully
-open https://docs.rs/buildfix/0.2.0/buildfix/
+open https://docs.rs/buildfix/0.3.1/buildfix/
 
 # Check crate page on crates.io
 open https://crates.io/crates/buildfix
@@ -585,7 +601,7 @@ Yank a release **only** if:
 
 ```bash
 # Yank a specific version
-cargo yank --vers 0.2.0 buildfix-types
+cargo yank --vers 0.3.1 buildfix-types
 
 # This prevents new projects from using that version
 # Existing Cargo.lock files continue to work
@@ -619,9 +635,9 @@ cargo publish -p buildfix-core && sleep 30
 cargo publish -p buildfix
 
 # === POST-RELEASE ===
-git tag -a v0.2.0 -m "Release v0.2.0"
-git push origin v0.2.0
-cargo install buildfix --version 0.2.0
+git tag -a v0.3.1 -m "Release v0.3.1"
+git push origin v0.3.1
+cargo install buildfix --version 0.3.1
 buildfix --version
 ```
 
@@ -631,6 +647,7 @@ buildfix --version
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-03-27 | 1.5 | Split locked-install verification into pre-tag source and post-publish crates.io gates; updated release examples to 0.3.1 |
 | 2026-03-26 | 1.4 | Added note that cargo-workspaces handles ordering automatically; manual layers are fallback/debugging only |
 | 2026-03-26 | 1.3 | Recomputed layer assignments from real dependency graph; moved fixer-catalog to L1, core-runtime and adapters to L2, fixers to L3; added buildfix-receipts-template to NOT Published list; fixed xtask description |
 | 2026-03-26 | 1.2 | Added missing buildfix-receipts to publish order; moved buildfix-receipts-sarif to Layer 2; completed verification crate list |

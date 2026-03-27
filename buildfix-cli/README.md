@@ -15,8 +15,10 @@ from crates.io can run `buildfix --help` and `buildfix list-fixes` before you
 move on to `plan` and `apply`.
 
 For the current published `0.2.0` release, prefer the unlocked install path.
-We keep `cargo install buildfix --locked` as a release-check item until the
-published lock is refreshed.
+Keep that public path until the next published cut is available and the
+`cargo install buildfix --locked` smoke is rerun against crates.io. The source
+tree for the upcoming release now carries the refreshed lock, but the install
+docs should not switch before the published artifact is verified.
 
 ## Commands
 

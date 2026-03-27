@@ -32,8 +32,9 @@ buildfix list-fixes
 ```
 
 For the current published `0.2.0` release, this unlocked install path is the
-clean verified path. The locked install remains part of release verification
-for the next cut.
+clean verified path. Keep it as the public path until the next published cut is
+available and the `cargo install buildfix --locked` smoke is rerun against
+crates.io.
 
 If you want a concrete sandbox, use [`examples/demo`](../../examples/demo/README.md) or pick a profile from [`examples/profiles`](../../examples/profiles/README.md). That is the shortest path to reproducing the supported lane with known-good receipts.
 

@@ -42,8 +42,10 @@ The documented path above is the one we have verified end to end:
 - `buildfix apply --apply`
 
 The current published `0.2.0` release installs cleanly with `cargo install buildfix`.
-We treat `cargo install buildfix --locked` as a release-candidate gate until the
-packaged lock is refreshed in the next cut.
+Keep using that public path until the next published cut is available and the
+`cargo install buildfix --locked` smoke is rerun against crates.io. The source
+tree for the upcoming release now carries the refreshed lock, but the public
+install guidance should not switch before the published artifact is verified.
 
 If you want to try it on a known-good example, start with [`examples/demo`](examples/demo/README.md) and [`examples/profiles`](examples/profiles/README.md). Those examples are the best place to inspect the supported lane before using buildfix on a real workspace.
 

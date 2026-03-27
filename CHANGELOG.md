@@ -7,10 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-03-27
+
 ### Added
 
+- **Problem-first operator docs**: Rewrote the top-level README, tutorials, and support matrix around the safe `builddiag` and `depguard` lane instead of the internal crate layout.
+- **Operator proof artifacts**: Added a dogfood demo plus checked-in example profiles that show raw receipts, plan output, patch preview, and apply results for the supported lane.
+- **Supported-lane integration coverage**: Added end-to-end tests that keep receipt intake, normalization, planning, patch generation, and apply behavior green for the first supported sensor paths.
+- **Install and release smoke coverage**: Added clean cargo-home install checks, supported-lane CLI smoke tests, and refusal-case assertions for policy blocks and stale-plan exits.
 - **Unused Dependency Removal Fixer** (`cargo.remove_unused_deps`): Creates deterministic `toml_remove` plan ops from sensor-reported unused dependency paths. Classified as Unsafe and requires `buildfix apply --apply --allow-unsafe`.
 - **Golden fixture + BDD coverage** for unused dependency removal, including safety-gate behavior (blocked without `--allow-unsafe`, applied with `--allow-unsafe`).
+
+### Changed
+
+- **Release alignment**: Coordinated the publishable workspace crates onto `0.3.1` so the CLI and its internal dependency closure can be tagged and published together.
+- **Release runbook**: Split the locked-install verification into a pre-tag source gate and a post-publish crates.io confirmation so release docs match what can be proven at each stage.
+- **Public install guidance**: Kept the public README and tutorial path on `cargo install buildfix` until the next published cut is verified from crates.io with `--locked`.
+
+### Fixed
+
+- **Locked-install release blocker**: Refreshed the source lock so the release-candidate `--locked` install path resolves `rustls-webpki 0.103.10` and passes `cargo audit` with the documented ignore set.
+- **Publishability drift**: Removed the mismatch where current source depended on unreleased internal crate versions that were not available from crates.io.
 
 ## [0.2.0] - 2026-02-16
 
