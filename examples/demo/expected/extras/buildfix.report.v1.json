@@ -5,10 +5,10 @@
     "version": "0.2.0"
   },
   "run": {
-    "started_at": "2026-03-27T06:33:23.902180500+00:00",
-    "ended_at": "2026-03-27T06:33:23.902200900+00:00",
+    "started_at": "<timestamp>",
+    "ended_at": "<timestamp>",
     "duration_ms": 0,
-    "git_head_sha": "55d891eeae3c0e03bf877b7d339cd48bafa915f1"
+    "git_head_sha": "<git-head-sha>"
   },
   "verdict": {
     "status": "warn",
@@ -27,8 +27,8 @@
     ],
     "partial": false,
     "inputs_available": [
-      "examples\\demo\\artifacts\\builddiag\\report.json",
-      "examples\\demo\\artifacts\\depguard\\report.json"
+      "examples/demo/artifacts/builddiag/report.json",
+      "examples/demo/artifacts/depguard/report.json"
     ]
   },
   "artifacts": {
@@ -44,7 +44,7 @@
         "ops_applicable": 8,
         "ops_blocked": 0,
         "ops_total": 8,
-        "patch_bytes": 1282,
+        "patch_bytes": 1783,
         "plan_available": true,
         "safety_counts": {
           "guarded": 0,

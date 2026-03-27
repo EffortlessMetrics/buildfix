@@ -6,17 +6,17 @@
   },
   "repo": {
     "root": "examples/demo/repo",
-    "head_sha": "55d891eeae3c0e03bf877b7d339cd48bafa915f1",
-    "dirty": true
+    "head_sha": "<git-head-sha>",
+    "dirty": false
   },
   "inputs": [
     {
-      "path": "examples\\demo\\artifacts\\builddiag\\report.json",
+      "path": "examples/demo/artifacts/builddiag/report.json",
       "schema": "builddiag.report.v1",
       "tool": "builddiag"
     },
     {
-      "path": "examples\\demo\\artifacts\\depguard\\report.json",
+      "path": "examples/demo/artifacts/depguard/report.json",
       "schema": "depguard.report.v1",
       "tool": "depguard"
     }
@@ -30,7 +30,7 @@
   },
   "preconditions": {
     "files": [],
-    "dirty": true
+    "dirty": false
   },
   "ops": [
     {
@@ -325,7 +325,7 @@
     "ops_total": 8,
     "ops_blocked": 0,
     "files_touched": 4,
-    "patch_bytes": 1282,
+    "patch_bytes": 1783,
     "safety_counts": {
       "safe": 8,
       "guarded": 0,

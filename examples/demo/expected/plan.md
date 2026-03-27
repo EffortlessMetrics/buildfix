@@ -2,7 +2,7 @@
 
 - Ops: 8 (blocked 0)
 - Files touched: 4
-- Patch bytes: 1282
+- Patch bytes: 1783
 - Safety: 8 safe, 0 guarded, 0 unsafe
 - Inputs: 2
 
