@@ -100,3 +100,9 @@ Key invariants:
 - `Fixer` trait: `plan(ctx, repo, receipts) -> Vec<PlanOp>`
 - Paths normalized: repo-relative, forward slashes, no leading `./`
 - Deterministic sorting via `stable_fix_sort_key()` for byte-stable outputs
+
+### Publishing Conventions
+
+- Most sub-crates use `readme = false` in `Cargo.toml` because they have no individual README.md files. This is intentional -- it prevents `cargo package` failures. The workspace-root `README.md` serves as the project documentation.
+- Crates not intended for crates.io (`buildfix-bdd`, `xtask`, `buildfix-receipts-template`) have `publish = false` in their `Cargo.toml`.
+- The CI publish workflow uses `cargo-workspaces` which resolves dependency ordering automatically. See `docs/release-runbook.md` for manual publish order as a fallback.

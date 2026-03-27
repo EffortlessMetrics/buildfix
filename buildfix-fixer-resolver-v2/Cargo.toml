@@ -8,6 +8,7 @@ license.workspace = true
 description = "Resolver-v2 fixer implementation."
 repository.workspace = true
 homepage.workspace = true
+readme = false
 categories = ["development-tools"]
 keywords = ["cargo", "fixer", "buildfix", "resolver-v2"]
 

@@ -8,7 +8,7 @@ license.workspace = true
 description = "Adapter that parses rustc JSON output and converts it to buildfix receipts."
 repository.workspace = true
 homepage.workspace = true
-readme = "README.md"
+readme = false
 keywords = ["cargo", "adapter", "rustc", "receipt", "json"]
 categories = ["development-tools"]
 
