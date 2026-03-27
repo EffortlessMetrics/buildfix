@@ -1,6 +1,6 @@
 [package]
 name = "buildfix-types"
-version = "0.3.0"
+version = "0.3.1"
 publish = ["crates-io"]
 edition.workspace = true
 rust-version.workspace = true

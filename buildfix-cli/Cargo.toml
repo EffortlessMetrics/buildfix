@@ -1,6 +1,6 @@
 [package]
 name = "buildfix"
-version = "0.2.0"
+version = "0.3.1"
 publish = ["crates-io"]
 edition.workspace = true
 rust-version.workspace = true
@@ -39,11 +39,11 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 jsonschema.workspace = true
 
-buildfix-core = { version = "0.2.0", path = "../buildfix-core" }
-buildfix-core-runtime = { version = "0.2.0", path = "../buildfix-core-runtime" }
-buildfix-receipts = { version = "0.2.0", path = "../buildfix-receipts" }
+buildfix-core = { version = "0.3.1", path = "../buildfix-core" }
+buildfix-core-runtime = { version = "0.3.1", path = "../buildfix-core-runtime" }
+buildfix-receipts = { version = "0.3.1", path = "../buildfix-receipts" }
 buildfix-types = { version = "0.3.0", path = "../buildfix-types" }
-buildfix-fixer-catalog = { version = "0.2.0", path = "../buildfix-fixer-catalog" }
+buildfix-fixer-catalog = { version = "0.3.1", path = "../buildfix-fixer-catalog" }
 
 [dev-dependencies]
 assert_cmd.workspace = true
