@@ -96,7 +96,7 @@ buildfix apply --apply
 
 Expected results:
 
-- `cargo install buildfix --locked` succeeds from a clean cargo home
+- `cargo install buildfix` succeeds from a clean cargo home
 - `buildfix --help` and `buildfix list-fixes` run from the installed binary
 - `buildfix plan` writes `plan.json`, `plan.md`, `patch.diff`, and `report.json`
 - `buildfix apply` is a dry run and does not modify the workspace

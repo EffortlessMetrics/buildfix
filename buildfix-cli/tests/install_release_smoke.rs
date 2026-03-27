@@ -141,7 +141,9 @@ fn install_release_smoke_stale_plan_returns_exit_2() {
 
     buildfix().current_dir(root).arg("plan").assert().success();
 
-    fs::write(root.join("Cargo.toml"), "\n# stale-plan-smoke\n").expect("stale edit");
+    let cargo_toml = root.join("Cargo.toml");
+    let original = read_file(&cargo_toml);
+    fs::write(&cargo_toml, format!("{original}\n# stale-plan-smoke\n")).expect("stale edit");
 
     buildfix()
         .current_dir(root)
