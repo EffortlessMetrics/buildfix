@@ -61,10 +61,22 @@ pub trait Fixer {
     ) -> anyhow::Result<Vec<buildfix_types::plan::PlanOp>>;
 }
 
+/// A finding matched from receipts with its associated data and evidence.
+///
+/// Evidence fields (`confidence`, `provenance`, `context`) enable fixers
+/// to make informed decisions about safety classification.
 #[derive(Debug, Clone)]
 pub struct MatchedFinding {
+    /// The core finding reference with source, check_id, code, and location.
     pub finding: FindingRef,
+    /// Tool-specific payload data.
     pub data: Option<serde_json::Value>,
+    /// Confidence score (0.0 to 1.0) indicating certainty of the finding.
+    pub confidence: Option<f64>,
+    /// Provenance chain describing how the finding was derived.
+    pub provenance: Option<buildfix_types::receipt::Provenance>,
+    /// Context metadata including analysis depth and workspace consensus.
+    pub context: Option<buildfix_types::receipt::FindingContext>,
 }
 
 #[derive(Debug, Clone)]
@@ -156,6 +168,9 @@ impl ReceiptSet {
                         fingerprint: f.fingerprint.clone(),
                     },
                     data: f.data.clone(),
+                    confidence: f.confidence,
+                    provenance: f.provenance.clone(),
+                    context: f.context.clone(),
                 });
             }
         }
@@ -179,4 +194,181 @@ fn stable_finding_key(f: &FindingRef) -> String {
         f.code,
         loc
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use buildfix_types::receipt::{Finding, Location, ReceiptEnvelope, Severity, ToolInfo};
+
+    fn make_receipt(sensor_id: &str, findings: Vec<Finding>) -> ReceiptEnvelope {
+        ReceiptEnvelope {
+            schema: "test".to_string(),
+            tool: ToolInfo {
+                name: sensor_id.to_string(),
+                version: None,
+                repo: None,
+                commit: None,
+            },
+            run: Default::default(),
+            verdict: Default::default(),
+            findings,
+            capabilities: None,
+            data: None,
+        }
+    }
+
+    fn make_finding(check_id: &str, code: Option<&str>) -> Finding {
+        Finding {
+            severity: Severity::Error,
+            check_id: Some(check_id.to_string()),
+            code: code.map(String::from),
+            message: None,
+            location: Some(Location {
+                path: "Cargo.toml".into(),
+                line: Some(1),
+                column: None,
+            }),
+            fingerprint: None,
+            data: None,
+            confidence: None,
+            provenance: None,
+            context: None,
+        }
+    }
+
+    #[test]
+    fn test_matching_findings_exact_match() {
+        let receipt = make_receipt(
+            "cargo-deny",
+            vec![make_finding("licenses.unlicensed", None)],
+        );
+        let loaded = vec![buildfix_receipts::LoadedReceipt {
+            path: "artifacts/cargo-deny/report.json".into(),
+            sensor_id: "cargo-deny".to_string(),
+            receipt: Ok(receipt),
+        }];
+        let set = ReceiptSet::from_loaded(&loaded);
+
+        let matches = set.matching_findings(&["cargo-deny"], &["licenses.unlicensed"], &[]);
+        assert_eq!(matches.len(), 1);
+    }
+
+    #[test]
+    fn test_matching_findings_no_match_wrong_check_id() {
+        let receipt = make_receipt("cargo-deny", vec![make_finding("bans.multi", None)]);
+        let loaded = vec![buildfix_receipts::LoadedReceipt {
+            path: "artifacts/cargo-deny/report.json".into(),
+            sensor_id: "cargo-deny".to_string(),
+            receipt: Ok(receipt),
+        }];
+        let set = ReceiptSet::from_loaded(&loaded);
+
+        let matches = set.matching_findings(&["cargo-deny"], &["licenses.unlicensed"], &[]);
+        assert!(matches.is_empty());
+    }
+
+    #[test]
+    fn test_matching_findings_filters_by_code() {
+        let finding = make_finding("deps.path_requires_version", Some("missing_version"));
+        let receipt = make_receipt("depguard", vec![finding]);
+        let loaded = vec![buildfix_receipts::LoadedReceipt {
+            path: "artifacts/depguard/report.json".into(),
+            sensor_id: "depguard".to_string(),
+            receipt: Ok(receipt),
+        }];
+        let set = ReceiptSet::from_loaded(&loaded);
+
+        let matches = set.matching_findings(
+            &["depguard"],
+            &["deps.path_requires_version"],
+            &["missing_version"],
+        );
+        assert_eq!(matches.len(), 1);
+
+        let no_code_matches = set.matching_findings(
+            &["depguard"],
+            &["deps.path_requires_version"],
+            &["other_code"],
+        );
+        assert!(no_code_matches.is_empty());
+    }
+
+    #[test]
+    fn test_matching_findings_empty_filters_match_all() {
+        let receipt = make_receipt(
+            "cargo-deny",
+            vec![
+                make_finding("licenses.unlicensed", None),
+                make_finding("bans.multi", None),
+            ],
+        );
+        let loaded = vec![buildfix_receipts::LoadedReceipt {
+            path: "artifacts/cargo-deny/report.json".into(),
+            sensor_id: "cargo-deny".to_string(),
+            receipt: Ok(receipt),
+        }];
+        let set = ReceiptSet::from_loaded(&loaded);
+
+        // Empty check_ids should match all
+        let matches = set.matching_findings(&["cargo-deny"], &[], &[]);
+        assert_eq!(matches.len(), 2);
+    }
+
+    #[test]
+    fn test_matching_findings_skips_erroneous_receipts() {
+        let loaded = vec![
+            buildfix_receipts::LoadedReceipt {
+                path: "artifacts/cargo-deny/report.json".into(),
+                sensor_id: "cargo-deny".to_string(),
+                receipt: Err(buildfix_receipts::ReceiptLoadError::Io {
+                    message: "not found".to_string(),
+                }),
+            },
+            buildfix_receipts::LoadedReceipt {
+                path: "artifacts/depguard/report.json".into(),
+                sensor_id: "depguard".to_string(),
+                receipt: Ok(make_receipt(
+                    "depguard",
+                    vec![make_finding("deps.path_requires_version", None)],
+                )),
+            },
+        ];
+        let set = ReceiptSet::from_loaded(&loaded);
+
+        let matches = set.matching_findings(&["depguard"], &["deps.path_requires_version"], &[]);
+        assert_eq!(matches.len(), 1);
+    }
+
+    #[test]
+    fn test_matching_findings_with_data() {
+        let finding = Finding {
+            severity: Severity::Error,
+            check_id: Some("test.check".to_string()),
+            code: Some("code1".to_string()),
+            message: None,
+            location: Some(Location {
+                path: "test.toml".into(),
+                line: Some(10),
+                column: None,
+            }),
+            fingerprint: None,
+            data: Some(serde_json::json!({"key": "value"})),
+            ..Default::default()
+        };
+        let receipt = make_receipt("test-tool", vec![finding]);
+        let loaded = vec![buildfix_receipts::LoadedReceipt {
+            path: "artifacts/test-tool/report.json".into(),
+            sensor_id: "test-tool".to_string(),
+            receipt: Ok(receipt),
+        }];
+        let set = ReceiptSet::from_loaded(&loaded);
+
+        let matches = set.matching_findings_with_data(&["test-tool"], &["test.check"], &["code1"]);
+        assert_eq!(matches.len(), 1);
+        assert_eq!(
+            matches[0].data.as_ref().unwrap().get("key").unwrap(),
+            "value"
+        );
+    }
 }

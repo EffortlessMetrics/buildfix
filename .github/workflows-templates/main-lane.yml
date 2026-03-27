@@ -1,0 +1,330 @@
+# buildfix Main Lane Workflow Template
+#
+# This workflow runs buildfix on pushes to the main branch.
+# It auto-applies safe fixes and optionally commits changes as a bot.
+# Designed to avoid CI loops by ignoring subsequent changes to Cargo files.
+#
+# Usage:
+# 1. Copy this file to .github/workflows/main-lane.yml
+# 2. Customize the configuration below
+# 3. Set up bot credentials for auto-commits (optional)
+#
+# Exit Codes:
+# - 0: Success (no changes or changes applied successfully)
+# - 2: Policy block (precondition mismatch, denied fix)
+# - 1: Tool error
+
+name: buildfix Main Lane
+
+on:
+  push:
+    branches: [main, master]
+    # Ignore changes to Cargo files to prevent CI loops
+    paths-ignore:
+      - '**/Cargo.toml'
+      - '**/Cargo.lock'
+      - '.github/workflows/main-lane.yml'
+  workflow_dispatch:
+
+# Required permissions for bot commits
+permissions:
+  contents: write
+  actions: read
+
+# Prevent concurrent runs
+concurrency:
+  group: buildfix-main
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  # Bot identity for commits (customize these)
+  GIT_AUTHOR_NAME: buildfix-bot
+  GIT_AUTHOR_EMAIL: buildfix-bot@users.noreply.github.com
+  GIT_COMMITTER_NAME: buildfix-bot
+  GIT_COMMITTER_EMAIL: buildfix-bot@users.noreply.github.com
+
+jobs:
+  # ============================================================================
+  # Sensor Job - Run tools and generate receipts
+  # ============================================================================
+  sensors:
+    name: Run Sensors
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.BUILDFIX_BOT_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      # =========================================================================
+      # Sensor Phase - Run all configured tools
+      # =========================================================================
+      - name: Setup artifacts directory
+        run: mkdir -p artifacts/{cargo-machete,cargo-deny,cargo-outdated,clippy}
+
+      - name: Run cargo-machete
+        continue-on-error: true
+        run: |
+          cargo install cargo-machete --locked
+          cargo machete --with-metadata 2>&1 | tee artifacts/cargo-machete/report.json || true
+
+      - name: Run cargo-deny
+        continue-on-error: true
+        run: |
+          cargo install cargo-deny --locked
+          cargo deny check --format json 2>&1 | tee artifacts/cargo-deny/report.json || true
+
+      - name: Run cargo-outdated
+        continue-on-error: true
+        run: |
+          cargo install cargo-outdated --locked
+          cargo outdated --format json 2>&1 | tee artifacts/cargo-outdated/report.json || true
+
+      - name: Run Clippy
+        continue-on-error: true
+        run: |
+          cargo clippy --message-format=json 2>&1 > artifacts/clippy/report.json || true
+
+      - name: Upload receipts
+        uses: actions/upload-artifact@v4
+        with:
+          name: buildfix-receipts
+          path: artifacts/
+          retention-days: 7
+
+  # ============================================================================
+  # Apply Job - Generate plan and apply safe fixes
+  # ============================================================================
+  apply:
+    name: Apply Safe Fixes
+    runs-on: ubuntu-latest
+    needs: sensors
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.BUILDFIX_BOT_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Download receipts
+        uses: actions/download-artifact@v4
+        with:
+          name: buildfix-receipts
+          path: artifacts/
+
+      - name: Install buildfix
+        run: cargo install buildfix --locked || cargo build --release -p buildfix
+
+      # =========================================================================
+      # Plan Phase - Generate repair plan
+      # =========================================================================
+      - name: Generate repair plan
+        id: plan
+        run: |
+          mkdir -p buildfix-output
+          
+          cargo run -p buildfix -- plan \
+            --artifacts-dir artifacts \
+            --out-dir buildfix-output \
+            --format json markdown
+          
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+
+      - name: Upload plan artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: buildfix-plan-${{ github.run_id }}
+          path: |
+            buildfix-output/plan.json
+            buildfix-output/plan.md
+            buildfix-output/patch.diff
+          retention-days: 30
+
+      # =========================================================================
+      # Apply Phase - Apply safe fixes only
+      # =========================================================================
+      - name: Apply safe fixes (dry-run)
+        id: dryrun
+        run: |
+          cargo run -p buildfix -- apply \
+            --artifacts-dir artifacts \
+            --out-dir buildfix-output
+          
+          echo "dryrun_exit_code=$?" >> $GITHUB_OUTPUT
+
+      - name: Apply safe fixes
+        id: apply
+        run: |
+          cargo run -p buildfix -- apply \
+            --artifacts-dir artifacts \
+            --out-dir buildfix-output \
+            --apply
+          
+          APPLY_EXIT=$?
+          echo "apply_exit_code=$APPLY_EXIT" >> $GITHUB_OUTPUT
+          
+          if [ $APPLY_EXIT -eq 0 ]; then
+            echo "changes_applied=true" >> $GITHUB_OUTPUT
+          elif [ $APPLY_EXIT -eq 2 ]; then
+            echo "changes_applied=false" >> $GITHUB_OUTPUT
+            echo "::warning::Some fixes were blocked by policy"
+          else
+            echo "changes_applied=false" >> $GITHUB_OUTPUT
+            echo "::error::Apply failed with exit code $APPLY_EXIT"
+          fi
+
+      # =========================================================================
+      # Commit Phase - Commit changes if any were applied
+      # =========================================================================
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet --exit-code; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "Changed files:"
+            git diff --name-only
+          fi
+
+      - name: Commit and push changes
+        if: steps.changes.outputs.has_changes == 'true'
+        run: |
+          git config user.name "$GIT_COMMITTER_NAME"
+          git config user.email "$GIT_COMMITTER_EMAIL"
+          
+          # Stage all changes
+          git add -A
+          
+          # Create commit with detailed message
+          git commit -m "chore: apply buildfix safe fixes [skip ci]
+          
+          Applied safe fixes from buildfix plan.
+          
+          Run ID: ${{ github.run_id }}
+          Commit: ${{ github.sha }}
+          
+          Co-authored-by: ${{ github.actor }} <${{ github.actor }}@users.noreply.github.com>"
+          
+          # Push changes
+          git push origin HEAD:${{ github.ref_name }}
+
+      - name: Upload apply artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: buildfix-apply-${{ github.run_id }}
+          path: |
+            buildfix-output/apply.json
+            buildfix-output/report.json
+          retention-days: 30
+
+      # =========================================================================
+      # Summary Phase - Generate workflow summary
+      # =========================================================================
+      - name: Generate summary
+        if: always()
+        run: |
+          echo "## buildfix Apply Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f buildfix-output/plan.md ]; then
+            echo "### Plan Summary" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            cat buildfix-output/plan.md >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Exit Code:** ${{ steps.apply.outputs.apply_exit_code }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Changes Applied:** ${{ steps.changes.outputs.has_changes }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Run ID:** ${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY
+
+  # ============================================================================
+  # Guarded Apply Job - Apply guarded fixes (optional, requires manual trigger)
+  # ============================================================================
+  guarded-apply:
+    name: Apply Guarded Fixes
+    runs-on: ubuntu-latest
+    needs: apply
+    # Only run on manual dispatch or if explicitly enabled
+    if: github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.BUILDFIX_BOT_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Download receipts
+        uses: actions/download-artifact@v4
+        with:
+          name: buildfix-receipts
+          path: artifacts/
+
+      - name: Download plan
+        uses: actions/download-artifact@v4
+        with:
+          name: buildfix-plan-${{ github.run_id }}
+          path: buildfix-output/
+
+      - name: Apply guarded fixes (dry-run)
+        run: |
+          cargo run -p buildfix -- apply \
+            --artifacts-dir artifacts \
+            --out-dir buildfix-output \
+            --apply \
+            --allow-guarded
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet --exit-code; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit and push guarded changes
+        if: steps.changes.outputs.has_changes == 'true'
+        run: |
+          git config user.name "$GIT_COMMITTER_NAME"
+          git config user.email "$GIT_COMMITTER_EMAIL"
+          
+          git add -A
+          
+          git commit -m "chore: apply buildfix guarded fixes [skip ci]
+          
+          Applied guarded fixes from buildfix plan.
+          
+          Run ID: ${{ github.run_id }}
+          Commit: ${{ github.sha }}
+          
+          Co-authored-by: ${{ github.actor }} <${{ github.actor }}@users.noreply.github.com>"
+          
+          git push origin HEAD:${{ github.ref_name }}

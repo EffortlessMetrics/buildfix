@@ -1,0 +1,20 @@
+{
+  "frozen": [
+    {
+      "name": "serde",
+      "version": "1.0.200",
+      "locked_version": "1.0.200"
+    },
+    {
+      "name": "tokio",
+      "version": "1.40.0",
+      "locked_version": "1.40.0"
+    },
+    {
+      "name": "thiserror",
+      "version": "2.0.18",
+      "locked_version": "2.0.18"
+    }
+  ],
+  "updates_available": []
+}

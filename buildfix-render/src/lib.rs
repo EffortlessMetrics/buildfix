@@ -201,7 +201,7 @@ mod tests {
     };
     use buildfix_types::ops::{OpKind, OpTarget};
     use buildfix_types::plan::{
-        FindingRef, PlanOp, PlanPolicy, PlanSummary, Rationale, RepoInfo, SafetyCounts,
+        FindingRef, PlanInput, PlanOp, PlanPolicy, PlanSummary, Rationale, RepoInfo, SafetyCounts,
     };
     use buildfix_types::receipt::ToolInfo;
 
@@ -524,5 +524,406 @@ mod tests {
         assert!(md.contains("Status: `failed`"));
         assert!(md.contains("Status: `skipped`"));
         assert!(md.contains("Blocked reason: reason"));
+    }
+
+    #[test]
+    fn plan_md_various_configurations() {
+        let mut plan = make_plan(vec![], None);
+        plan.summary.files_touched = 5;
+        plan.summary.patch_bytes = Some(1024);
+        plan.inputs = vec![PlanInput {
+            path: "artifacts/builddiag/report.json".into(),
+            schema: None,
+            tool: None,
+        }];
+
+        let md = render_plan_md(&plan);
+        assert!(md.contains("Files touched: 5"));
+        assert!(md.contains("Patch bytes: 1024"));
+        assert!(md.contains("Inputs: 1"));
+    }
+
+    #[test]
+    fn plan_md_empty_ops() {
+        let plan = make_plan(vec![], None);
+        let md = render_plan_md(&plan);
+        assert!(md.contains("_No ops planned._"));
+        assert!(!md.contains("### 1."));
+    }
+
+    #[test]
+    fn plan_md_many_ops() {
+        let ops: Vec<PlanOp> = (0..20)
+            .map(|i| {
+                let mut op = make_op(SafetyClass::Safe, false, None);
+                op.id = format!("op-{}", i);
+                op
+            })
+            .collect();
+        let plan = make_plan(ops, None);
+        let md = render_plan_md(&plan);
+        assert!(md.contains("Ops: 20 (blocked 0)"));
+        for i in 1..=20 {
+            assert!(md.contains(&format!("### {}. op-{}", i, i - 1)));
+        }
+    }
+
+    #[test]
+    fn plan_md_all_safety_classes() {
+        let safe_op = {
+            let mut op = make_op(SafetyClass::Safe, false, None);
+            op.id = "safe-op".to_string();
+            op
+        };
+        let guarded_op = {
+            let mut op = make_op(SafetyClass::Guarded, false, None);
+            op.id = "guarded-op".to_string();
+            op
+        };
+        let unsafe_op = {
+            let mut op = make_op(SafetyClass::Unsafe, true, Some("needs_param"));
+            op.id = "unsafe-op".to_string();
+            op
+        };
+
+        let plan = make_plan(
+            vec![safe_op, guarded_op, unsafe_op],
+            Some(SafetyCounts {
+                safe: 1,
+                guarded: 1,
+                unsafe_count: 1,
+            }),
+        );
+        let md = render_plan_md(&plan);
+        assert!(md.contains("Safety: `safe`"));
+        assert!(md.contains("Safety: `guarded`"));
+        assert!(md.contains("Safety: `unsafe`"));
+    }
+
+    #[test]
+    fn plan_md_blocked_ops() {
+        let mut blocked_op = make_op(SafetyClass::Safe, true, Some("policy_deny"));
+        blocked_op.blocked_reason = Some("Operation denied by policy".to_string());
+        blocked_op.rationale.findings.push(FindingRef {
+            source: "sensor".to_string(),
+            check_id: Some("check1".to_string()),
+            code: "CODE1".to_string(),
+            path: Some("file.toml".to_string()),
+            line: Some(10),
+            fingerprint: None,
+        });
+
+        let plan = make_plan(vec![blocked_op], None);
+        let md = render_plan_md(&plan);
+        assert!(md.contains("Blocked: `true`"));
+        assert!(md.contains("Blocked reason: Operation denied by policy"));
+    }
+
+    #[test]
+    fn comment_md_multiple_blocked_reasons() {
+        let tokens = vec![
+            "reason1", "reason2", "reason3", "reason4", "reason5", "reason6",
+        ];
+        let mut ops = vec![];
+        for token in &tokens {
+            let mut op = make_op(SafetyClass::Safe, true, Some(*token));
+            op.blocked_reason_token = Some(token.to_string());
+            ops.push(op);
+        }
+
+        let mut plan = make_plan(
+            ops,
+            Some(SafetyCounts {
+                safe: 6,
+                guarded: 0,
+                unsafe_count: 0,
+            }),
+        );
+        plan.summary.ops_blocked = 6;
+
+        let md = render_comment_md(&plan);
+        assert!(md.contains("all ops blocked"));
+        assert!(md.contains("**Blocked reasons**"));
+        assert!(md.contains("reason1"));
+        assert!(md.contains("reason2"));
+    }
+
+    #[test]
+    fn plan_md_all_op_kinds() {
+        let ops = vec![
+            {
+                let mut op = make_op(SafetyClass::Safe, false, None);
+                op.kind = OpKind::TomlSet {
+                    toml_path: vec!["a".into(), "b".into()],
+                    value: serde_json::json!("val"),
+                };
+                op.id = "toml_set".to_string();
+                op
+            },
+            {
+                let mut op = make_op(SafetyClass::Safe, false, None);
+                op.kind = OpKind::JsonSet {
+                    json_path: vec!["x".into(), "y".into()],
+                    value: serde_json::json!(123),
+                };
+                op.id = "json_set".to_string();
+                op
+            },
+            {
+                let mut op = make_op(SafetyClass::Safe, false, None);
+                op.kind = OpKind::YamlSet {
+                    yaml_path: vec!["p".into(), "q".into()],
+                    value: serde_json::json!(true),
+                };
+                op.id = "yaml_set".to_string();
+                op
+            },
+            {
+                let mut op = make_op(SafetyClass::Safe, false, None);
+                op.kind = OpKind::JsonRemove {
+                    json_path: vec!["old".into()],
+                };
+                op.id = "json_remove".to_string();
+                op
+            },
+            {
+                let mut op = make_op(SafetyClass::Safe, false, None);
+                op.kind = OpKind::TextReplaceAnchored {
+                    find: "old".to_string(),
+                    replace: "new".to_string(),
+                    anchor_before: vec![],
+                    anchor_after: vec![],
+                    max_replacements: None,
+                };
+                op.id = "text_replace".to_string();
+                op
+            },
+        ];
+
+        let plan = make_plan(ops, None);
+        let md = render_plan_md(&plan);
+        assert!(md.contains("Kind: `toml_set`"));
+        assert!(md.contains("Kind: `json_set`"));
+        assert!(md.contains("Kind: `yaml_set`"));
+        assert!(md.contains("Kind: `json_remove`"));
+        assert!(md.contains("Kind: `text_replace_anchored`"));
+    }
+
+    #[test]
+    fn comment_md_empty_inputs() {
+        let plan = make_plan(vec![], None);
+        let md = render_comment_md(&plan);
+        assert!(md.contains("no fixes needed"));
+        assert!(md.contains("Artifacts:"));
+    }
+
+    #[test]
+    fn comment_md_mixed_safety() {
+        let plan = make_plan(
+            vec![],
+            Some(SafetyCounts {
+                safe: 2,
+                guarded: 3,
+                unsafe_count: 1,
+            }),
+        );
+        let md = render_comment_md(&plan);
+        assert!(md.contains("| safe | 2 |"));
+        assert!(md.contains("| guarded | 3 |"));
+        assert!(md.contains("| unsafe | 1 |"));
+    }
+
+    #[test]
+    fn apply_md_multiple_files() {
+        let mut apply = BuildfixApply::new(
+            tool(),
+            ApplyRepoInfo {
+                root: ".".into(),
+                head_sha_before: None,
+                head_sha_after: None,
+                dirty_before: None,
+                dirty_after: None,
+            },
+            PlanRef {
+                path: "plan.json".into(),
+                sha256: None,
+            },
+        );
+        apply.summary = ApplySummary {
+            attempted: 1,
+            applied: 1,
+            blocked: 0,
+            failed: 0,
+            files_modified: 2,
+        };
+        apply.results.push(ApplyResult {
+            op_id: "multi-file".to_string(),
+            status: ApplyStatus::Applied,
+            message: None,
+            blocked_reason: None,
+            blocked_reason_token: None,
+            files: vec![
+                ApplyFile {
+                    path: "Cargo.toml".to_string(),
+                    sha256_before: Some("sha1".to_string()),
+                    sha256_after: Some("sha2".to_string()),
+                    backup_path: None,
+                },
+                ApplyFile {
+                    path: "src/main.rs".to_string(),
+                    sha256_before: Some("sha3".to_string()),
+                    sha256_after: Some("sha4".to_string()),
+                    backup_path: None,
+                },
+            ],
+        });
+
+        let md = render_apply_md(&apply);
+        assert!(md.contains("Files modified: 2"));
+        assert!(md.contains("Cargo.toml"));
+        assert!(md.contains("src/main.rs"));
+    }
+
+    #[test]
+    fn apply_md_no_sha256() {
+        let mut apply = BuildfixApply::new(
+            tool(),
+            ApplyRepoInfo {
+                root: ".".into(),
+                head_sha_before: None,
+                head_sha_after: None,
+                dirty_before: None,
+                dirty_after: None,
+            },
+            PlanRef {
+                path: "plan.json".into(),
+                sha256: None,
+            },
+        );
+        apply.summary = ApplySummary {
+            attempted: 1,
+            applied: 1,
+            blocked: 0,
+            failed: 0,
+            files_modified: 1,
+        };
+        apply.results.push(ApplyResult {
+            op_id: "op1".to_string(),
+            status: ApplyStatus::Applied,
+            message: None,
+            blocked_reason: None,
+            blocked_reason_token: None,
+            files: vec![ApplyFile {
+                path: "test.toml".to_string(),
+                sha256_before: None,
+                sha256_after: None,
+                backup_path: None,
+            }],
+        });
+
+        let md = render_apply_md(&apply);
+        assert!(md.contains("test.toml"));
+        assert!(md.contains("- → -"));
+    }
+
+    #[test]
+    fn plan_md_with_multiple_findings() {
+        let mut op = make_op(SafetyClass::Safe, false, None);
+        op.rationale.findings = vec![
+            FindingRef {
+                source: "sensor1".to_string(),
+                check_id: Some("check1".to_string()),
+                code: "CODE1".to_string(),
+                path: Some("file1.toml".to_string()),
+                line: Some(1),
+                fingerprint: None,
+            },
+            FindingRef {
+                source: "sensor2".to_string(),
+                check_id: Some("check2".to_string()),
+                code: "CODE2".to_string(),
+                path: Some("file2.rs".to_string()),
+                line: Some(42),
+                fingerprint: None,
+            },
+            FindingRef {
+                source: "sensor3".to_string(),
+                check_id: None,
+                code: "CODE3".to_string(),
+                path: None,
+                line: None,
+                fingerprint: None,
+            },
+        ];
+
+        let plan = make_plan(vec![op], None);
+        let md = render_plan_md(&plan);
+        assert!(md.contains("Findings"));
+        assert!(md.contains("sensor1/check1"));
+        assert!(md.contains("file1.toml:1"));
+        assert!(md.contains("sensor2/check2"));
+        assert!(md.contains("file2.rs:42"));
+        assert!(md.contains("sensor3/-"));
+        assert!(md.contains("CODE3"));
+        assert!(md.contains("-"));
+    }
+
+    #[test]
+    fn plan_md_description_only() {
+        let mut op = make_op(SafetyClass::Guarded, false, None);
+        op.rationale.description =
+            Some("This is a test fix that does something useful".to_string());
+        op.rationale.findings = vec![];
+
+        let plan = make_plan(vec![op], None);
+        let md = render_plan_md(&plan);
+        assert!(md.contains("This is a test fix"));
+    }
+
+    #[test]
+    fn plan_md_no_patch_bytes() {
+        let mut plan = make_plan(vec![], None);
+        plan.summary.patch_bytes = None;
+
+        let md = render_plan_md(&plan);
+        assert!(!md.contains("Patch bytes:"));
+    }
+
+    #[test]
+    fn apply_md_failed_with_message() {
+        let mut apply = BuildfixApply::new(
+            tool(),
+            ApplyRepoInfo {
+                root: ".".into(),
+                head_sha_before: None,
+                head_sha_after: None,
+                dirty_before: None,
+                dirty_after: None,
+            },
+            PlanRef {
+                path: "plan.json".into(),
+                sha256: None,
+            },
+        );
+        apply.summary = ApplySummary {
+            attempted: 1,
+            applied: 0,
+            blocked: 0,
+            failed: 1,
+            files_modified: 0,
+        };
+        apply.results.push(ApplyResult {
+            op_id: "failed-op".to_string(),
+            status: ApplyStatus::Failed,
+            message: Some("IO error: cannot write to file".to_string()),
+            blocked_reason: None,
+            blocked_reason_token: None,
+            files: vec![],
+        });
+
+        let md = render_apply_md(&apply);
+        assert!(md.contains("Failed: 1"));
+        assert!(md.contains("Status: `failed`"));
+        assert!(md.contains("Message: IO error"));
     }
 }

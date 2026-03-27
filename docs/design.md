@@ -142,11 +142,45 @@ New fixers must satisfy:
 
 ## Microcrate boundaries (internal)
 
+### Intake Layer
+- buildfix-adapter-sdk: Adapter SDK with traits, test harness, and receipt builder
+- buildfix-receipts-sarif: Generic SARIF intake
+- buildfix-receipts-cargo-*: Cargo tool adapters (deny, machete, udeps, outdated, lock, update, tree, bloat, llvm-lines, cyclonedds, geiger, semver-checks, warn, msrv, krate, audit, sec-audit, audit-freeze, crev, miri, spellcheck, unused-function)
+- buildfix-receipts-clippy: Clippy lint intake
+- buildfix-receipts-rustc-json: rustc JSON message intake
+- buildfix-receipts-rustfmt: rustfmt output intake
+- buildfix-receipts-depguard: depguard intake
+- buildfix-receipts-tarpaulin: tarpaulin coverage intake
+
+### Core Types
 - buildfix-types: DTOs + schema ids (wire format for all artifacts)
-- buildfix-receipts: receipt envelope ingestion + normalization
-- buildfix-domain: registry + policy + planner + ordering + Fixer trait
+- buildfix-hash: SHA256 utilities for precondition computation
+- buildfix-artifacts: Artifact path management and discovery
+
+### Fixer Layer
+- buildfix-fixer-api: Fixer trait + common types
+- buildfix-fixer-resolver-v2: Workspace resolver = "2"
+- buildfix-fixer-path-dep-version: Add version to path deps
+- buildfix-fixer-workspace-inheritance: Use workspace = true
+- buildfix-fixer-duplicate-deps: Consolidate duplicate dep versions
+- buildfix-fixer-remove-unused-deps: Remove unused dependencies
+- buildfix-fixer-msrv: Normalize MSRV
+- buildfix-fixer-edition: Normalize edition
+- buildfix-fixer-license: Normalize license
+- buildfix-fixer-catalog: Registry of all built-in fixers
+
+### Domain Layer
+- buildfix-domain: registry + planner + ordering + Fixer trait
+- buildfix-domain-policy: Policy evaluation (allow/deny/caps)
+- buildfix-core: Pipeline orchestration
+- buildfix-core-runtime: Runtime adapters (filesystem, git)
+
+### Output Layer
 - buildfix-edit: deterministic edit engine (TOML + JSON/YAML path edits + anchored text replace) + diff preview generation + preconditions
 - buildfix-render: plan.md + apply.md rendering
+- buildfix-report: Report generation
 - buildfix-cli: clap + filesystem wiring + config loading + explain
+
+### Testing
 - buildfix-bdd: cucumber BDD tests for workflow contracts
 - xtask: schema regen, fixture management, artifact init

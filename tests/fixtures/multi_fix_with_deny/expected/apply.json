@@ -21,7 +21,7 @@
         {
           "path": "crates/a/Cargo.toml",
           "sha256_after": "fb0529a8d92f766bd6d39e7e96b7652a6e8bce965a89bd488d284c8924932e4b",
-          "sha256_before": "f533ab1aae3ad95a7682102fa0b8220118ffbb73e93c3e98267e1e38a60517d5"
+          "sha256_before": "877da2fa7a58addcba745ba90953072e90803f4cd0a06c58005dce900bf93ee2"
         }
       ],
       "op_id": "cca08d34-3186-5420-9b9e-56f75695ef63",

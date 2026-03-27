@@ -1,0 +1,33 @@
+{
+  "files": [
+    {
+      "path": "crates/foo/Cargo.toml",
+      "messages": [
+        {
+          "message": "path dependency bar should have a version",
+          "code": "E001",
+          "type": "path_requires_version",
+          "line": 10,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "path": "Cargo.toml",
+      "messages": [
+        {
+          "message": "dependency baz should use workspace inheritance",
+          "code": "E002",
+          "type": "workspace_inheritance",
+          "line": 15,
+          "column": 5
+        },
+        {
+          "message": "duplicate dependency version for qux: 1.0.0 and 1.2.0",
+          "code": "E003",
+          "type": "duplicate_dependency_versions"
+        }
+      ]
+    }
+  ]
+}

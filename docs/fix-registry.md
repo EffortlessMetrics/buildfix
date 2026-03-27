@@ -12,7 +12,7 @@ Fallback:
 
 In practice, `sensor_id` should match receipt `tool.name`.
 
-## Registry entries (v0.1)
+## Registry entries
 
 ### 1) Workspace resolver v2
 - Fix key: `builddiag / workspace.resolver_v2 / missing_or_wrong`
@@ -49,11 +49,11 @@ Guarded cases:
 - Fix key: `builddiag / rust.msrv_consistent / mismatch`
 - Safety: safe only if `[workspace.package].rust-version` exists; unsafe otherwise
 - Targets: member manifests with drifting `rust-version` fields
-- Edit: set member `package.rust-version` to workspace value (or remove if policy says “inherit”)
+- Edit: set member `package.rust-version` to workspace value (or remove if policy says "inherit")
 
 Unsafe cases:
 - No declared workspace standard
-- Multiple competing “standards” in the workspace
+- Multiple competing "standards" in the workspace
 
 ### 5) Unused dependency removal
 - Fix key: `cargo-machete / deps.unused_dependency / *` (also `cargo-udeps`, `udeps`, `machete`)
@@ -77,6 +77,26 @@ Canonical source-of-truth:
 
 Unsafe fallback:
 - If no canonical license is declared, operation requires `--param license=...`.
+
+### 7) Duplicate dependency consolidation
+- Fix key: `builddiag / deps.duplicate_versions / *`
+- Safety: guarded
+- Target: member `Cargo.toml` with duplicate deps at different versions
+- Edit: consolidate to single version (workspace version preferred)
+
+Guarded rationale:
+- May affect feature flags or platform-specific code paths
+- Requires review before apply
+
+### 8) Edition normalization
+- Fix key: `builddiag / rust.edition_consistent / mismatch`
+- Safety: safe only if `[workspace.package].edition` exists; guarded otherwise
+- Targets: member manifests with drifting `edition` fields
+- Edit: set member `package.edition` to workspace value
+
+Guarded cases:
+- No declared workspace standard
+- Edition upgrade may require code changes
 
 ## buildfix-internal codes
 

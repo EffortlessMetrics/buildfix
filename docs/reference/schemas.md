@@ -26,7 +26,7 @@ Schema: `buildfix.plan.v1`
 ```json
 {
   "schema": "buildfix.plan.v1",
-  "tool": { "name": "buildfix", "version": "0.2.0" },
+  "tool": { "name": "buildfix", "version": "0.3.0" },
   "repo": { "root": "/repo", "head_sha": "...", "dirty": false },
   "inputs": [
     {
@@ -138,7 +138,7 @@ Schema: `buildfix.apply.v1`
 ```json
 {
   "schema": "buildfix.apply.v1",
-  "tool": { "name": "buildfix", "version": "0.2.0" },
+  "tool": { "name": "buildfix", "version": "0.3.0" },
   "repo": {
     "root": "/repo",
     "head_sha_before": "...",
@@ -224,7 +224,7 @@ Cockpit-compatible receipt envelope for integration with the director system.
 ```json
 {
   "schema": "buildfix.report.v1",
-  "tool": { "name": "buildfix", "version": "0.2.0" },
+  "tool": { "name": "buildfix", "version": "0.3.0" },
   "run": {
     "started_at": "2024-01-15T10:30:00Z",
     "ended_at": "2024-01-15T10:30:05Z",

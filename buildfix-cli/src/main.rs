@@ -1,5 +1,5 @@
 mod config;
-mod explain;
+use buildfix_cli::explain;
 
 use anyhow::Context;
 use buildfix_core::pipeline::{run_apply, run_plan, write_apply_artifacts, write_plan_artifacts};
@@ -24,11 +24,25 @@ const REPORT_SCHEMA: &str =
 /// Buildfix-specific extras report is validated against the buildfix schema.
 const BUILDFIX_REPORT_SCHEMA: &str = include_str!("../schemas/buildfix.report.v1.json");
 
+const AFTER_LONG_HELP: &str = "\
+EXIT CODES:
+  0   Success - Operation completed successfully
+  1   Error   - Tool or runtime error (invalid input, I/O failure, etc.)
+  2   Blocked - Policy-based refusal (precondition mismatch, safety gate)
+
+  Exit code 2 is intentional behavior, not an error. For example,
+  `buildfix apply --apply` exits 2 when guarded operations are in the plan
+  but --allow-guarded was not provided.
+
+  See: https://buildfix.dev/docs/reference/exit-codes
+";
+
 #[derive(Debug, Parser)]
 #[command(
     name = "buildfix",
     version,
-    about = "Receipt-driven repair tool for Cargo workspace hygiene."
+    about = "Receipt-driven repair tool for Cargo workspace hygiene.",
+    after_long_help = AFTER_LONG_HELP
 )]
 struct Cli {
     #[command(subcommand)]

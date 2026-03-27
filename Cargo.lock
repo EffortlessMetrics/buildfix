@@ -202,6 +202,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "buildfix-adapter-sdk"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-types",
+ "camino",
+ "chrono",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "buildfix-artifacts"
 version = "0.2.0"
 dependencies = [
@@ -210,6 +225,7 @@ dependencies = [
  "buildfix-types",
  "camino",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -218,6 +234,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
+ "buildfix",
  "buildfix-core",
  "buildfix-fixer-catalog",
  "buildfix-types",
@@ -249,6 +266,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
+ "toml_edit",
  "tracing",
  "uuid",
 ]
@@ -493,6 +511,413 @@ dependencies = [
 ]
 
 [[package]]
+name = "buildfix-receipts-cargo-audit"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-cargo-audit-freeze"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-cargo-bloat"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-cargo-crev"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-cargo-cyclonedds"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-cargo-deny"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "chrono",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-cargo-geiger"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-cargo-krate"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-cargo-llvm-lines"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-cargo-lock"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-cargo-machete"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-cargo-miri"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-cargo-msrv"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-cargo-outdated"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-cargo-sec-audit"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-cargo-semver-checks"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-cargo-spellcheck"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-cargo-tree"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-cargo-udeps"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-cargo-unused-function"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "buildfix-receipts-cargo-update"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-cargo-warn"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-clippy"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-depguard"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-rustc-json"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-rustfmt"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-sarif"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "chrono",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-tarpaulin"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "buildfix-receipts-template"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "buildfix-adapter-sdk",
+ "buildfix-types",
+ "camino",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "buildfix-render"
 version = "0.2.0"
 dependencies = [
@@ -517,7 +942,7 @@ dependencies = [
 
 [[package]]
 name = "buildfix-types"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "camino",
  "chrono",

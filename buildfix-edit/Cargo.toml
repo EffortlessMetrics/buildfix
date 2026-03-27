@@ -25,7 +25,7 @@ toml_edit.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 
-buildfix-types = { version = "0.2.0", path = "../buildfix-types" }
+buildfix-types = { version = "0.3.0", path = "../buildfix-types" }
 buildfix-hash = { version = "0.2.0", path = "../buildfix-hash" }
 
 [dev-dependencies]

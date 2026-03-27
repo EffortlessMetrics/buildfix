@@ -305,6 +305,32 @@ To let buildfix apply this class of fix:
                 check_id: "deps.unused_dependency",
                 code: None,
             },
+            // Additional triggers from catalog not in main sensor outputs
+            TriggerPattern {
+                sensor: "cargo-udeps",
+                check_id: "deps.unused_dependencies",
+                code: None,
+            },
+            TriggerPattern {
+                sensor: "cargo-udeps",
+                check_id: "cargo.unused_dependency",
+                code: None,
+            },
+            TriggerPattern {
+                sensor: "cargo-udeps",
+                check_id: "cargo.unused_dependencies",
+                code: None,
+            },
+            TriggerPattern {
+                sensor: "udeps",
+                check_id: "udeps.unused_dependency",
+                code: None,
+            },
+            TriggerPattern {
+                sensor: "machete",
+                check_id: "machete.unused_dependency",
+                code: None,
+            },
         ],
     },
     // 6) MSRV normalization
@@ -491,6 +517,37 @@ If no canonical value is available and you still want buildfix to apply:
             TriggerPattern {
                 sensor: "deny",
                 check_id: "licenses.missing_license",
+                code: None,
+            },
+            // Additional triggers from catalog
+            TriggerPattern {
+                sensor: "cargo-deny",
+                check_id: "licenses.missing",
+                code: None,
+            },
+            TriggerPattern {
+                sensor: "deny",
+                check_id: "license.unlicensed",
+                code: None,
+            },
+            TriggerPattern {
+                sensor: "deny",
+                check_id: "license.missing",
+                code: None,
+            },
+            TriggerPattern {
+                sensor: "deny",
+                check_id: "license.missing_license",
+                code: None,
+            },
+            TriggerPattern {
+                sensor: "cargo-deny",
+                check_id: "cargo.licenses.unlicensed",
+                code: None,
+            },
+            TriggerPattern {
+                sensor: "cargo-deny",
+                check_id: "cargo.licenses.missing_license",
                 code: None,
             },
         ],

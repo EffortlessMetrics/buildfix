@@ -4,3 +4,5 @@
 *.log
 *.swp
 .DS_Store
+/temp_artifacts
+/plans

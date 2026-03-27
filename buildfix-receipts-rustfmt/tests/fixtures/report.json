@@ -1,0 +1,26 @@
+{
+  "files": [
+    {
+      "name": "src/lib.rs",
+      "errors": [
+        {
+          "kind": "Formatting",
+          "message": "mismatched formatting found"
+        }
+      ]
+    },
+    {
+      "name": "src/main.rs",
+      "errors": [
+        {
+          "kind": "Formatting",
+          "message": "trailing whitespace"
+        }
+      ]
+    },
+    {
+      "name": "src/utils.rs",
+      "errors": []
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "semver_checks": [
+    {
+      "package": "my-crate",
+      "version": "1.0.0",
+      "errors": [
+        {
+          "code": "RUSTSEMVER-CRATE-1.0.0",
+          "message": "breaking change: removed public function",
+          "details": "function foo was removed"
+        },
+        {
+          "code": "RUSTSEMVER-CRATE-1.0.1",
+          "message": "breaking change: changed function signature",
+          "details": "function bar now takes additional parameter"
+        }
+      ]
+    },
+    {
+      "package": "another-crate",
+      "version": "2.1.0",
+      "errors": [
+        {
+          "code": "RUSTSEMVER-ITEM-2.0.0",
+          "message": "breaking change: removed public struct",
+          "details": "struct MyStruct was removed"
+        }
+      ]
+    }
+  ]
+}

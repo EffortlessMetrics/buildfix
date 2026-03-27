@@ -1,0 +1,25 @@
+[
+  {
+    "package": "my-crate",
+    "features": ["default", "full"],
+    "unstable_features": [
+      {
+        "feature": "generic_const_exprs",
+        "usage": "impl<T> Foo<T> { ... }"
+      }
+    ]
+  },
+  {
+    "package": "another-crate",
+    "features": ["default"],
+    "unstable_features": [
+      {
+        "feature": "asm",
+        "usage": "unsafe { asm!(\"nop\") }"
+      },
+      {
+        "feature": "never_type"
+      }
+    ]
+  }
+]

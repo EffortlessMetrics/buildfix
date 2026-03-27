@@ -537,6 +537,7 @@ mod tests {
                 }),
                 fingerprint: None,
                 data: None,
+                ..Default::default()
             }],
             capabilities: None,
             data: None,

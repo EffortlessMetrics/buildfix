@@ -1,0 +1,92 @@
+# buildfix Profile: Balanced
+#
+# This profile balances automation with safety review. It allows safe operations
+# to auto-apply while requiring explicit review for guarded operations.
+#
+# Guarded operations are deterministic but have higher impact - they may affect
+# compilation targets, MSRV requirements, or license metadata.
+#
+# Use this profile when:
+# - Running in development workflows or periodic maintenance
+# - You want to review MSRV, edition, and license changes before applying
+# - You're comfortable with safe ops auto-applying
+# - Your team reviews PRs carefully before merging
+#
+# Usage:
+#   cp examples/profiles/balanced.toml buildfix.toml
+#   cargo run -p buildfix -- apply --apply              # Safe ops only
+#   cargo run -p buildfix -- apply --apply --allow-guarded  # Include guarded ops
+#
+# Tradeoffs:
+# - Safe ops (resolver, path-dep-version, workspace-inheritance, duplicate-deps)
+#   are applied automatically without review
+# - Guarded ops (MSRV, edition, license) require --allow-guarded flag
+# - Unsafe ops (remove-unused-deps) remain blocked
+
+[policy]
+# Allow all safe operations automatically
+# Safe ops are fully determined from repo truth with no side effects
+allow = [
+  # === SAFE OPERATIONS (auto-applied with --apply) ===
+
+  # Resolver v2 - updates workspace resolver to version 2
+  # Safety: Only changes the resolver field, no dependency changes
+  "builddiag/workspace.resolver_v2/*",
+
+  # Path dependency version - adds version to path dependencies
+  # Safety: Only adds metadata, doesn't change dependency resolution
+  "depguard/deps.path_requires_version/*",
+
+  # Workspace inheritance - uses workspace = true for shared deps
+  # Safety: Consolidates existing deps, doesn't add new ones
+  "depguard/deps.workspace_inheritance/*",
+
+  # Duplicate dependencies - consolidates duplicate dep versions
+  # Safety: Picks the version already in use, deterministic selection
+  "depguard/deps.duplicate_dependency_versions/*",
+
+  # === GUARDED OPERATIONS (require --allow-guarded) ===
+  # These are included in the allowlist but won't apply without the flag
+
+  # MSRV normalization - standardizes rust-version across workspace
+  # Impact: May raise MSRV for some crates, affecting compatibility
+  "builddiag/rust.msrv_consistent/*",
+
+  # Edition normalization - standardizes edition across workspace
+  # Impact: May enable new language features, rarely breaks code
+  "builddiag/rust.edition_consistent/*",
+
+  # License normalization - standardizes license field
+  # Impact: May change license metadata, review for legal compliance
+  "cargo-deny/licenses/*",
+]
+
+# Explicitly deny nothing - use allowlist for control
+deny = []
+
+# Guarded ops require --allow-guarded flag to apply
+# This forces a review step for higher-impact changes
+allow_guarded = false
+
+# Unsafe ops remain blocked even with --allow-guarded
+# Remove-unused-deps can break code that uses implicit feature flags
+allow_unsafe = false
+
+# Require clean working tree before applying
+allow_dirty = false
+
+# Moderate limits suitable for most projects
+max_ops = 50          # Maximum 50 operations per plan
+max_files = 25        # Maximum 25 files to modify
+max_patch_bytes = 250000  # Maximum 250KB patch size
+
+[backups]
+# Always create backups before modifying files
+enabled = true
+suffix = ".buildfix.bak"
+
+[params]
+# No parameters needed for safe/guarded ops
+# MSRV normalization derives from workspace when available
+# If you need to specify a target MSRV for crates without one:
+# rust_version = "1.75"

@@ -7,7 +7,7 @@ use assert_cmd::Command;
 use camino::Utf8PathBuf;
 use cucumber::{World, given, then, when};
 use fs_err as fs;
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::process::Command as StdCommand;
 use tempfile::TempDir;
 
@@ -21,6 +21,9 @@ pub struct BuildfixWorld {
     last_command_stdout: Option<String>,
     last_command_stderr: Option<String>,
     last_command_status: Option<i32>,
+    // Explain drift test state
+    catalog_entries: Option<Vec<buildfix_fixer_catalog::FixerCatalogEntry>>,
+    explain_entries: Option<Vec<&'static buildfix_cli::explain::FixExplanation>>,
 }
 
 fn repo_root(world: &BuildfixWorld) -> &Utf8PathBuf {
@@ -2197,7 +2200,6 @@ async fn assert_crate_a_workspace_serde_features(world: &mut BuildfixWorld) {
 
 #[when(expr = "I run buildfix explain {word}")]
 async fn run_explain(world: &mut BuildfixWorld, fix_key: String) {
-    // Explain command doesn't need a repo, so create minimal temp dir if none exists
     if world.temp.is_none() {
         let td = tempfile::tempdir().expect("tempdir");
         let root = Utf8PathBuf::from_path_buf(td.path().to_path_buf()).unwrap();
@@ -2212,9 +2214,10 @@ async fn run_explain(world: &mut BuildfixWorld, fix_key: String) {
         .output()
         .expect("run explain");
 
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    // Store in world for later assertions
-    world.explain_output = Some(stdout);
+    world.last_command_stdout = Some(String::from_utf8_lossy(&output.stdout).to_string());
+    world.last_command_stderr = Some(String::from_utf8_lossy(&output.stderr).to_string());
+    world.last_command_status = output.status.code();
+    world.explain_output = Some(String::from_utf8_lossy(&output.stdout).to_string());
 }
 
 #[then("the output contains the fix description")]
@@ -2223,6 +2226,22 @@ async fn assert_explain_output(world: &mut BuildfixWorld) {
     assert!(
         output.contains("FIX:") && output.contains("DESCRIPTION"),
         "expected explain output to contain FIX: and DESCRIPTION, got:\n{}",
+        output
+    );
+}
+
+#[then(expr = "the output contains {string}")]
+async fn assert_output_contains_string(world: &mut BuildfixWorld, expected: String) {
+    let output = world
+        .explain_output
+        .as_ref()
+        .or(world.last_command_stdout.as_ref())
+        .or(world.last_command_stderr.as_ref())
+        .expect("output");
+    assert!(
+        output.contains(&expected),
+        "expected output to contain '{}', got:\n{}",
+        expected,
         output
     );
 }
@@ -2247,17 +2266,6 @@ async fn run_list_fixes_json(world: &mut BuildfixWorld) {
         .output()
         .unwrap();
     world.explain_output = Some(String::from_utf8_lossy(&output.stdout).to_string());
-}
-
-#[then(expr = "the output contains {string}")]
-async fn assert_output_contains(world: &mut BuildfixWorld, expected: String) {
-    let output = world.explain_output.as_ref().expect("output");
-    assert!(
-        output.contains(&expected),
-        "expected output to contain '{}', got:\n{}",
-        expected,
-        output
-    );
 }
 
 #[then("the output is valid JSON")]
@@ -2920,6 +2928,1416 @@ this is not valid toml
     .unwrap();
 
     // Valid member Cargo.toml
+    fs::write(
+        root.join("crates").join("a").join("Cargo.toml"),
+        r#"
+[package]
+name = "a"
+version = "0.1.0"
+edition = "2021"
+"#,
+    )
+    .unwrap();
+
+    world.temp = Some(td);
+    world.repo_root = Some(root);
+}
+
+#[given("a builddiag receipt with no findings")]
+async fn builddiag_receipt_no_findings(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let artifacts = root.join("artifacts").join("builddiag");
+    fs::create_dir_all(&artifacts).unwrap();
+
+    let receipt = serde_json::json!({
+        "schema": "builddiag.report.v1",
+        "tool": { "name": "builddiag", "version": "0.0.0" },
+        "verdict": { "status": "pass", "counts": { "findings": 0, "errors": 0, "warnings": 0 } },
+        "findings": []
+    });
+
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
+}
+
+#[given("a builddiag receipt with only warnings")]
+async fn builddiag_receipt_only_warnings(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let artifacts = root.join("artifacts").join("builddiag");
+    fs::create_dir_all(&artifacts).unwrap();
+
+    let receipt = serde_json::json!({
+        "schema": "builddiag.report.v1",
+        "tool": { "name": "builddiag", "version": "0.0.0" },
+        "verdict": { "status": "warn", "counts": { "findings": 1, "errors": 0, "warnings": 1 } },
+        "findings": [{
+            "severity": "warn",
+            "check_id": "test.warning",
+            "code": "warning_only",
+            "message": "this is just a warning"
+        }]
+    });
+
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
+}
+
+#[when("I corrupt the plan.json")]
+async fn corrupt_plan_json(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let mut contents = fs::read_to_string(&plan_path).unwrap();
+    contents.push_str("\n{invalid json");
+    fs::write(&plan_path, contents).unwrap();
+}
+
+#[when("I run buildfix validate")]
+async fn run_validate(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let output = Command::cargo_bin("buildfix")
+        .expect("buildfix binary")
+        .current_dir(root.as_str())
+        .arg("validate")
+        .output()
+        .expect("run validate");
+
+    world.last_command_stdout = Some(String::from_utf8_lossy(&output.stdout).to_string());
+    world.last_command_stderr = Some(String::from_utf8_lossy(&output.stderr).to_string());
+    world.last_command_status = output.status.code();
+}
+
+#[when("I run buildfix with --help")]
+async fn run_buildfix_help(world: &mut BuildfixWorld) {
+    let output = Command::cargo_bin("buildfix")
+        .expect("buildfix binary")
+        .arg("--help")
+        .output()
+        .expect("run buildfix --help");
+
+    world.last_command_stdout = Some(String::from_utf8_lossy(&output.stdout).to_string());
+    world.last_command_stderr = Some(String::from_utf8_lossy(&output.stderr).to_string());
+    world.last_command_status = output.status.code();
+}
+
+#[then(expr = "the resolver v2 fix has safety class {string}")]
+async fn assert_resolver_safety_class(world: &mut BuildfixWorld, expected: String) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    let op = plan_ops(&v)
+        .iter()
+        .find(|op| {
+            op["kind"]["type"] == "toml_transform"
+                && op["kind"]["rule_id"] == "ensure_workspace_resolver_v2"
+        })
+        .expect("resolver v2 op");
+
+    assert_eq!(
+        op["safety"].as_str(),
+        Some(expected.as_str()),
+        "expected safety class '{}', got: {}",
+        expected,
+        op["safety"]
+    );
+}
+
+#[then(expr = "the MSRV fix has safety class {string}")]
+async fn assert_msrv_safety_class(world: &mut BuildfixWorld, expected: String) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    let op = plan_ops(&v)
+        .iter()
+        .find(|op| {
+            op["kind"]["type"] == "toml_transform"
+                && op["kind"]["rule_id"] == "set_package_rust_version"
+        })
+        .expect("MSRV op");
+
+    assert_eq!(
+        op["safety"].as_str(),
+        Some(expected.as_str()),
+        "expected safety class '{}', got: {}",
+        expected,
+        op["safety"]
+    );
+}
+
+#[then(expr = "the unused dep removal fix has safety class {string}")]
+async fn assert_unused_dep_safety_class(world: &mut BuildfixWorld, expected: String) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    let op = plan_ops(&v)
+        .iter()
+        .find(|op| op["kind"]["type"] == "toml_remove")
+        .expect("unused dep removal op");
+
+    assert_eq!(
+        op["safety"].as_str(),
+        Some(expected.as_str()),
+        "expected safety class '{}', got: {}",
+        expected,
+        op["safety"]
+    );
+}
+
+#[then(expr = "the path dep version fix has safety class {string}")]
+async fn assert_path_dep_safety_class(world: &mut BuildfixWorld, expected: String) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    let op = plan_ops(&v)
+        .iter()
+        .find(|op| {
+            op["kind"]["type"] == "toml_transform"
+                && op["kind"]["rule_id"] == "ensure_path_dep_has_version"
+        })
+        .expect("path dep version op");
+
+    assert_eq!(
+        op["safety"].as_str(),
+        Some(expected.as_str()),
+        "expected safety class '{}', got: {}",
+        expected,
+        op["safety"]
+    );
+}
+
+#[then(expr = "at least one fix has safety class {string}")]
+async fn assert_at_least_one_fix_has_safety_class(world: &mut BuildfixWorld, expected: String) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    let ops = plan_ops(&v);
+    let found = ops
+        .iter()
+        .any(|op| op["safety"].as_str() == Some(expected.as_str()));
+
+    assert!(
+        found,
+        "expected at least one op with safety class '{}', got: {:?}",
+        expected,
+        ops.iter()
+            .map(|op| op["safety"].as_str())
+            .collect::<Vec<_>>()
+    );
+}
+
+// ============================================================================
+// Exit code contract scenarios (v0.2.1 operational hardening)
+// ============================================================================
+
+#[when("I run buildfix plan and capture exit code")]
+async fn run_plan_capture_exit_code(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let output = Command::cargo_bin("buildfix")
+        .expect("buildfix binary")
+        .current_dir(root.as_str())
+        .arg("plan")
+        .output()
+        .expect("run plan");
+
+    world.last_command_stdout = Some(String::from_utf8_lossy(&output.stdout).to_string());
+    world.last_command_stderr = Some(String::from_utf8_lossy(&output.stderr).to_string());
+    world.last_command_status = output.status.code();
+}
+
+#[when("I run buildfix apply with --apply and capture exit code")]
+async fn run_apply_capture_exit_code(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let output = Command::cargo_bin("buildfix")
+        .expect("buildfix binary")
+        .current_dir(root.as_str())
+        .arg("apply")
+        .arg("--apply")
+        .output()
+        .expect("run apply");
+
+    world.last_command_stdout = Some(String::from_utf8_lossy(&output.stdout).to_string());
+    world.last_command_stderr = Some(String::from_utf8_lossy(&output.stderr).to_string());
+    world.last_command_status = output.status.code();
+}
+
+#[when("I run buildfix apply without --apply and capture exit code")]
+async fn run_apply_dry_run_capture_exit_code(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let output = Command::cargo_bin("buildfix")
+        .expect("buildfix binary")
+        .current_dir(root.as_str())
+        .arg("apply")
+        .output()
+        .expect("run apply dry-run");
+
+    world.last_command_stdout = Some(String::from_utf8_lossy(&output.stdout).to_string());
+    world.last_command_stderr = Some(String::from_utf8_lossy(&output.stderr).to_string());
+    world.last_command_status = output.status.code();
+}
+
+#[then(expr = "the command exits with code {int}")]
+async fn assert_command_exit_code(world: &mut BuildfixWorld, expected: i32) {
+    assert_eq!(
+        world.last_command_status,
+        Some(expected),
+        "expected exit code {}, got {:?}",
+        expected,
+        world.last_command_status
+    );
+}
+
+// ============================================================================
+// Explain drift detection scenarios
+// ============================================================================
+
+#[given("the fixer catalog is enabled")]
+async fn fixer_catalog_enabled(world: &mut BuildfixWorld) {
+    let catalog = buildfix_fixer_catalog::enabled_fix_catalog();
+    let explain = buildfix_cli::explain::enabled_fixes();
+    world.catalog_entries = Some(catalog);
+    world.explain_entries = Some(explain);
+}
+
+#[when("I query all fix explanations")]
+async fn query_all_fix_explanations(_world: &mut BuildfixWorld) {
+    // Data already loaded in the given step
+}
+
+#[then("each explanation should match its corresponding catalog entry")]
+async fn each_explanation_matches_catalog(world: &mut BuildfixWorld) {
+    let catalog = world
+        .catalog_entries
+        .as_ref()
+        .expect("catalog entries loaded");
+    let explain = world
+        .explain_entries
+        .as_ref()
+        .expect("explain entries loaded");
+
+    let catalog_by_id: HashMap<&str, _> = catalog.iter().map(|e| (e.fix_id, e)).collect();
+    let explain_by_id: HashMap<&str, _> = explain.iter().map(|e| (e.fix_id, e)).collect();
+
+    let mut mismatches: Vec<String> = Vec::new();
+
+    for (fix_id, catalog_entry) in &catalog_by_id {
+        if let Some(explain_entry) = explain_by_id.get(fix_id) {
+            // Check safety class match
+            if catalog_entry.safety != explain_entry.safety {
+                mismatches.push(format!(
+                    "  {}: safety mismatch - catalog={:?} explain={:?}",
+                    fix_id, catalog_entry.safety, explain_entry.safety
+                ));
+            }
+            // Check key match
+            if catalog_entry.key != explain_entry.key {
+                mismatches.push(format!(
+                    "  {}: key mismatch - catalog={} explain={}",
+                    fix_id, catalog_entry.key, explain_entry.key
+                ));
+            }
+        }
+    }
+
+    assert!(
+        mismatches.is_empty(),
+        "explanation/catalog mismatches found:\n{}",
+        mismatches.join("\n")
+    );
+}
+
+#[then("each catalog entry should have a matching explanation")]
+async fn each_catalog_has_explanation(world: &mut BuildfixWorld) {
+    let catalog = world
+        .catalog_entries
+        .as_ref()
+        .expect("catalog entries loaded");
+    let explain = world
+        .explain_entries
+        .as_ref()
+        .expect("explain entries loaded");
+
+    let explain_by_id: HashSet<&str> = explain.iter().map(|e| e.fix_id).collect();
+
+    let mut missing: Vec<&str> = Vec::new();
+
+    for entry in catalog {
+        if !explain_by_id.contains(entry.fix_id) {
+            missing.push(entry.fix_id);
+        }
+    }
+
+    assert!(
+        missing.is_empty(),
+        "catalog entries missing from explain registry: {:?}\n\
+         Add corresponding FixExplanation entries to FIX_REGISTRY in explain.rs",
+        missing
+    );
+}
+
+#[when("I query fix explanations by safety class")]
+async fn query_fixes_by_safety_class(_world: &mut BuildfixWorld) {
+    // Data already loaded in the given step
+}
+
+fn safety_class_from_str(s: &str) -> buildfix_types::ops::SafetyClass {
+    match s {
+        "safe" => buildfix_types::ops::SafetyClass::Safe,
+        "guarded" => buildfix_types::ops::SafetyClass::Guarded,
+        "unsafe" => buildfix_types::ops::SafetyClass::Unsafe,
+        _ => panic!("Unknown safety class: {}", s),
+    }
+}
+
+#[then(expr = "safe fixes should have safety {string}")]
+async fn safe_fixes_have_safety(world: &mut BuildfixWorld, expected: String) {
+    let catalog = world
+        .catalog_entries
+        .as_ref()
+        .expect("catalog entries loaded");
+    let explain = world
+        .explain_entries
+        .as_ref()
+        .expect("explain entries loaded");
+    let expected_safety = safety_class_from_str(&expected);
+
+    let catalog_by_id: HashMap<&str, _> = catalog.iter().map(|e| (e.fix_id, e)).collect();
+
+    for explain_entry in explain {
+        let catalog_entry = catalog_by_id.get(explain_entry.fix_id);
+        if let Some(catalog_entry) = catalog_entry
+            && catalog_entry.safety == buildfix_types::ops::SafetyClass::Safe
+        {
+            assert_eq!(
+                explain_entry.safety, expected_safety,
+                "safe fix {} should have safety {:?}",
+                explain_entry.fix_id, expected
+            );
+        }
+    }
+}
+
+#[then(expr = "guarded fixes should have safety {string}")]
+async fn guarded_fixes_have_safety(world: &mut BuildfixWorld, expected: String) {
+    let catalog = world
+        .catalog_entries
+        .as_ref()
+        .expect("catalog entries loaded");
+    let explain = world
+        .explain_entries
+        .as_ref()
+        .expect("explain entries loaded");
+    let expected_safety = safety_class_from_str(&expected);
+
+    let catalog_by_id: HashMap<&str, _> = catalog.iter().map(|e| (e.fix_id, e)).collect();
+
+    for explain_entry in explain {
+        let catalog_entry = catalog_by_id.get(explain_entry.fix_id);
+        if let Some(catalog_entry) = catalog_entry
+            && catalog_entry.safety == buildfix_types::ops::SafetyClass::Guarded
+        {
+            assert_eq!(
+                explain_entry.safety, expected_safety,
+                "guarded fix {} should have safety {:?}",
+                explain_entry.fix_id, expected
+            );
+        }
+    }
+}
+
+#[then(expr = "unsafe fixes should have safety {string}")]
+async fn unsafe_fixes_have_safety(world: &mut BuildfixWorld, expected: String) {
+    let catalog = world
+        .catalog_entries
+        .as_ref()
+        .expect("catalog entries loaded");
+    let explain = world
+        .explain_entries
+        .as_ref()
+        .expect("explain entries loaded");
+    let expected_safety = safety_class_from_str(&expected);
+
+    let catalog_by_id: HashMap<&str, _> = catalog.iter().map(|e| (e.fix_id, e)).collect();
+
+    for explain_entry in explain {
+        let catalog_entry = catalog_by_id.get(explain_entry.fix_id);
+        if let Some(catalog_entry) = catalog_entry
+            && catalog_entry.safety == buildfix_types::ops::SafetyClass::Unsafe
+        {
+            assert_eq!(
+                explain_entry.safety, expected_safety,
+                "unsafe fix {} should have safety {:?}",
+                explain_entry.fix_id, expected
+            );
+        }
+    }
+}
+
+#[when("I query fix explanation triggers")]
+async fn query_fix_explanation_triggers(_world: &mut BuildfixWorld) {
+    // Data already loaded in the given step
+}
+
+#[then("each explanation's triggers should match its catalog entry's triggers")]
+async fn each_explanation_triggers_match_catalog(world: &mut BuildfixWorld) {
+    let catalog = world
+        .catalog_entries
+        .as_ref()
+        .expect("catalog entries loaded");
+    let explain = world
+        .explain_entries
+        .as_ref()
+        .expect("explain entries loaded");
+
+    let catalog_by_id: HashMap<&str, _> = catalog.iter().map(|e| (e.fix_id, e)).collect();
+
+    fn triggers_to_set(triggers: &[buildfix_fixer_catalog::TriggerPattern]) -> HashSet<String> {
+        triggers
+            .iter()
+            .map(|t| format!("{}/{}/{}", t.sensor, t.check_id, t.code.unwrap_or("*")))
+            .collect()
+    }
+
+    let mut errors: Vec<String> = Vec::new();
+
+    for explain_entry in explain {
+        if let Some(catalog_entry) = catalog_by_id.get(explain_entry.fix_id) {
+            let catalog_triggers = triggers_to_set(catalog_entry.triggers);
+            let explain_triggers = triggers_to_set(explain_entry.triggers);
+
+            let missing: Vec<_> = catalog_triggers.difference(&explain_triggers).collect();
+            let extra: Vec<_> = explain_triggers.difference(&catalog_triggers).collect();
+
+            if !missing.is_empty() {
+                errors.push(format!(
+                    "  {}: triggers in catalog but missing from explain: {:?}",
+                    explain_entry.fix_id, missing
+                ));
+            }
+            if !extra.is_empty() {
+                errors.push(format!(
+                    "  {}: triggers in explain but not in catalog: {:?}",
+                    explain_entry.fix_id, extra
+                ));
+            }
+        }
+    }
+
+    assert!(
+        errors.is_empty(),
+        "trigger pattern mismatches:\n{}",
+        errors.join("\n")
+    );
+}
+
+#[then("each explanation should have a unique key")]
+async fn each_explanation_unique_key(world: &mut BuildfixWorld) {
+    let explain = world
+        .explain_entries
+        .as_ref()
+        .expect("explain entries loaded");
+
+    let keys: Vec<&str> = explain.iter().map(|e| e.key).collect();
+    let unique: HashSet<&str> = keys.iter().copied().collect();
+
+    assert_eq!(
+        keys.len(),
+        unique.len(),
+        "duplicate keys found in explain registry"
+    );
+}
+
+#[then("each explanation should have a unique fix_id")]
+async fn each_explanation_unique_fix_id(world: &mut BuildfixWorld) {
+    let explain = world
+        .explain_entries
+        .as_ref()
+        .expect("explain entries loaded");
+
+    let ids: Vec<&str> = explain.iter().map(|e| e.fix_id).collect();
+    let unique: HashSet<&str> = ids.iter().copied().collect();
+
+    assert_eq!(
+        ids.len(),
+        unique.len(),
+        "duplicate fix_ids found in explain registry"
+    );
+}
+
+#[when("I look up fixes by key")]
+async fn lookup_fixes_by_key(_world: &mut BuildfixWorld) {
+    // Data already loaded in the given step
+}
+
+#[then("each catalog entry key should resolve to the correct explanation")]
+async fn each_catalog_key_resolves_correctly(world: &mut BuildfixWorld) {
+    let catalog = world
+        .catalog_entries
+        .as_ref()
+        .expect("catalog entries loaded");
+
+    for entry in catalog {
+        let explain_entry = buildfix_cli::explain::lookup_fix(entry.key);
+        assert!(
+            explain_entry.is_some(),
+            "lookup_fix(\"{}\") should return an entry for catalog fix_id={}",
+            entry.key,
+            entry.fix_id
+        );
+
+        let found = explain_entry.unwrap();
+        assert_eq!(
+            found.fix_id, entry.fix_id,
+            "lookup_fix(\"{}\") returned wrong fix_id: expected {}, got {}",
+            entry.key, entry.fix_id, found.fix_id
+        );
+    }
+}
+
+#[when("I look up fixes by fix_id")]
+async fn lookup_fixes_by_fix_id(_world: &mut BuildfixWorld) {
+    // Data already loaded in the given step
+}
+
+#[then("each catalog entry fix_id should resolve to the correct explanation")]
+async fn each_catalog_fix_id_resolves_correctly(world: &mut BuildfixWorld) {
+    let catalog = world
+        .catalog_entries
+        .as_ref()
+        .expect("catalog entries loaded");
+
+    for entry in catalog {
+        let explain_entry = buildfix_cli::explain::lookup_fix(entry.fix_id);
+        assert!(
+            explain_entry.is_some(),
+            "lookup_fix(\"{}\") should return an entry for key={}",
+            entry.fix_id,
+            entry.key
+        );
+
+        let found = explain_entry.unwrap();
+        assert_eq!(
+            found.fix_id, entry.fix_id,
+            "lookup_fix(\"{}\") returned wrong fix_id: expected {}, got {}",
+            entry.fix_id, entry.fix_id, found.fix_id
+        );
+    }
+}
+
+// ============================================================================
+// Documentation quality and policy key scenarios
+// ============================================================================
+
+#[then(expr = "each explanation should have a description of at least {int} characters")]
+async fn each_explanation_description_min_length(world: &mut BuildfixWorld, min_len: i64) {
+    let explain = world
+        .explain_entries
+        .as_ref()
+        .expect("explain entries loaded");
+
+    let mut violations: Vec<String> = Vec::new();
+
+    for entry in explain {
+        let desc_len = entry.description.len();
+        if desc_len < min_len as usize {
+            violations.push(format!(
+                "  {}: description is {} chars (min {})",
+                entry.fix_id, desc_len, min_len
+            ));
+        }
+    }
+
+    assert!(
+        violations.is_empty(),
+        "explanations with insufficient description length:\n{}",
+        violations.join("\n")
+    );
+}
+
+#[then(expr = "each explanation should have a safety rationale of at least {int} characters")]
+async fn each_explanation_safety_rationale_min_length(world: &mut BuildfixWorld, min_len: i64) {
+    let explain = world
+        .explain_entries
+        .as_ref()
+        .expect("explain entries loaded");
+
+    let mut violations: Vec<String> = Vec::new();
+
+    for entry in explain {
+        let rationale_len = entry.safety_rationale.len();
+        if rationale_len < min_len as usize {
+            violations.push(format!(
+                "  {}: safety_rationale is {} chars (min {})",
+                entry.fix_id, rationale_len, min_len
+            ));
+        }
+    }
+
+    assert!(
+        violations.is_empty(),
+        "explanations with insufficient safety rationale length:\n{}",
+        violations.join("\n")
+    );
+}
+
+#[then("each explanation should have remediation guidance")]
+async fn each_explanation_has_remediation(world: &mut BuildfixWorld) {
+    let explain = world
+        .explain_entries
+        .as_ref()
+        .expect("explain entries loaded");
+
+    let mut violations: Vec<String> = Vec::new();
+
+    for entry in explain {
+        if entry.remediation.trim().is_empty() {
+            violations.push(format!("  {}: missing remediation guidance", entry.fix_id));
+        }
+    }
+
+    assert!(
+        violations.is_empty(),
+        "explanations missing remediation guidance:\n{}",
+        violations.join("\n")
+    );
+}
+
+#[then("each title should use title case")]
+async fn each_title_uses_title_case(world: &mut BuildfixWorld) {
+    let explain = world
+        .explain_entries
+        .as_ref()
+        .expect("explain entries loaded");
+
+    fn is_title_case(s: &str) -> bool {
+        // Title case means each major word is capitalized
+        // We check that words start with uppercase (ignoring articles/prepositions)
+        let words: Vec<&str> = s.split_whitespace().collect();
+        if words.is_empty() {
+            return false;
+        }
+
+        let minor_words = [
+            "a", "an", "the", "and", "but", "or", "for", "nor", "on", "in", "at", "to", "by", "of",
+            "v2", "v1",
+        ];
+
+        for (i, word) in words.iter().enumerate() {
+            // First and last word should always be capitalized
+            // Minor words in the middle can be lowercase
+            let is_minor =
+                i > 0 && i < words.len() - 1 && minor_words.contains(&word.to_lowercase().as_str());
+
+            if !is_minor {
+                let first_char = word.chars().next();
+                if let Some(c) = first_char
+                    && !c.is_uppercase()
+                    && !c.is_ascii_digit()
+                {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
+    let mut violations: Vec<String> = Vec::new();
+
+    for entry in explain {
+        if !is_title_case(entry.title) {
+            violations.push(format!(
+                "  {}: title \"{}\" is not title case",
+                entry.fix_id, entry.title
+            ));
+        }
+    }
+
+    assert!(
+        violations.is_empty(),
+        "titles not using title case:\n{}",
+        violations.join("\n")
+    );
+}
+
+#[then("each key should use hyphens not underscores")]
+async fn each_key_uses_hyphens(world: &mut BuildfixWorld) {
+    let explain = world
+        .explain_entries
+        .as_ref()
+        .expect("explain entries loaded");
+
+    let mut violations: Vec<String> = Vec::new();
+
+    for entry in explain {
+        if entry.key.contains('_') {
+            violations.push(format!(
+                "  {}: key \"{}\" contains underscores (use hyphens)",
+                entry.fix_id, entry.key
+            ));
+        }
+    }
+
+    assert!(
+        violations.is_empty(),
+        "keys using underscores instead of hyphens:\n{}",
+        violations.join("\n")
+    );
+}
+
+#[when("I generate policy keys for each fix")]
+async fn generate_policy_keys_for_fixes(world: &mut BuildfixWorld) {
+    let explain = world
+        .explain_entries
+        .as_ref()
+        .expect("explain entries loaded");
+
+    let mut policy_keys: BTreeSet<String> = BTreeSet::new();
+
+    for entry in explain {
+        for trigger in entry.triggers {
+            let key = if let Some(code) = &trigger.code {
+                format!("{}/{}/{}", trigger.sensor, trigger.check_id, code)
+            } else {
+                format!("{}/{}/*", trigger.sensor, trigger.check_id)
+            };
+            policy_keys.insert(key);
+        }
+    }
+
+    // Store the policy keys in world state for verification
+    world.saved_plan_json = Some(serde_json::to_string(&policy_keys).unwrap());
+}
+
+#[then(expr = "each policy key should follow the format {string}")]
+async fn each_policy_key_follows_format(world: &mut BuildfixWorld, expected_format: String) {
+    let policy_keys_str = world
+        .saved_plan_json
+        .as_ref()
+        .expect("policy keys generated");
+    let policy_keys: BTreeSet<String> = serde_json::from_str(policy_keys_str).unwrap();
+
+    // Expected format: "sensor/check_id/code"
+    let mut violations: Vec<String> = Vec::new();
+
+    for key in &policy_keys {
+        let parts: Vec<&str> = key.as_str().split('/').collect();
+        if parts.len() != 3 {
+            violations.push(format!(
+                "  \"{}\" does not match format {} (expected 3 parts, got {})",
+                key,
+                expected_format,
+                parts.len()
+            ));
+        } else {
+            // Validate each part is non-empty
+            if parts[0].is_empty() || parts[1].is_empty() || parts[2].is_empty() {
+                violations.push(format!("  \"{}\" has empty component(s)", key));
+            }
+        }
+    }
+
+    assert!(
+        violations.is_empty(),
+        "policy keys not following format \"{}\":\n{}",
+        expected_format,
+        violations.join("\n")
+    );
+}
+
+#[then("policy keys should be sorted and deduplicated")]
+async fn policy_keys_sorted_and_deduplicated(world: &mut BuildfixWorld) {
+    let policy_keys_str = world
+        .saved_plan_json
+        .as_ref()
+        .expect("policy keys generated");
+    let policy_keys: BTreeSet<String> = serde_json::from_str(policy_keys_str).unwrap();
+
+    // BTreeSet guarantees both sorting and deduplication
+    // Convert to Vec to verify sorting
+    let as_vec: Vec<&String> = policy_keys.iter().collect();
+    let mut sorted = as_vec.clone();
+    sorted.sort();
+
+    assert_eq!(as_vec, sorted, "policy keys are not sorted");
+
+    // Verify no duplicates (BTreeSet guarantees this, but verify for clarity)
+    let unique_count = policy_keys.len();
+    let total_from_explain: usize = world
+        .explain_entries
+        .as_ref()
+        .expect("explain entries loaded")
+        .iter()
+        .map(|e| e.triggers.len())
+        .sum();
+
+    // Policy keys should be <= total triggers (deduplication may reduce count)
+    assert!(
+        unique_count <= total_from_explain,
+        "policy keys count {} exceeds total triggers {} (deduplication failed?)",
+        unique_count,
+        total_from_explain
+    );
+}
+
+// ============================================================================
+// CI Integration scenarios
+// ============================================================================
+
+#[then("the plan.json contains blocked ops")]
+async fn assert_plan_contains_blocked_ops(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    let ops = plan_ops(&v);
+    let has_blocked = ops
+        .iter()
+        .any(|op| op["blocked"].as_bool().unwrap_or(false));
+
+    assert!(
+        has_blocked,
+        "expected at least one blocked op in plan, got:\n{}",
+        serde_json::to_string_pretty(&v).unwrap()
+    );
+}
+
+#[given("a repo with multiple issues including guarded")]
+async fn repo_with_multiple_issues_including_guarded(world: &mut BuildfixWorld) {
+    let td = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(td.path().to_path_buf()).unwrap();
+
+    fs::create_dir_all(root.join("crates").join("crate-a")).unwrap();
+
+    // Root workspace: missing resolver, has workspace.package.rust-version
+    fs::write(
+        root.join("Cargo.toml"),
+        r#"
+[workspace]
+members = ["crates/crate-a"]
+
+[workspace.package]
+rust-version = "1.70"
+"#,
+    )
+    .unwrap();
+
+    // crate-a has older rust-version (guarded fix needed)
+    fs::write(
+        root.join("crates").join("crate-a").join("Cargo.toml"),
+        r#"
+[package]
+name = "crate-a"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.65"
+"#,
+    )
+    .unwrap();
+
+    world.temp = Some(td);
+    world.repo_root = Some(root);
+}
+
+#[given("receipts for multiple issues including guarded")]
+async fn receipts_for_multiple_issues_including_guarded(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+
+    // builddiag receipt for resolver v2 (safe fix)
+    let builddiag = root.join("artifacts").join("builddiag");
+    fs::create_dir_all(&builddiag).unwrap();
+    let receipt1 = serde_json::json!({
+        "schema": "builddiag.report.v1",
+        "tool": { "name": "builddiag", "version": "0.0.0" },
+        "verdict": { "status": "fail", "counts": { "findings": 1, "errors": 1, "warnings": 0 } },
+        "findings": [{
+            "severity": "error",
+            "check_id": "workspace.resolver_v2",
+            "code": "not_v2",
+            "message": "workspace resolver is not 2",
+            "location": { "path": "Cargo.toml", "line": 1, "column": 1 }
+        }]
+    });
+    fs::write(
+        builddiag.join("report.json"),
+        serde_json::to_string_pretty(&receipt1).unwrap(),
+    )
+    .unwrap();
+
+    // builddiag receipt for MSRV (guarded fix)
+    let builddiag2 = root.join("artifacts").join("builddiag-msrv");
+    fs::create_dir_all(&builddiag2).unwrap();
+    let receipt2 = serde_json::json!({
+        "schema": "builddiag.report.v1",
+        "tool": { "name": "builddiag", "version": "0.0.0" },
+        "verdict": { "status": "fail", "counts": { "findings": 1, "errors": 1, "warnings": 0 } },
+        "findings": [{
+            "severity": "error",
+            "check_id": "rust.msrv_consistent",
+            "code": "inconsistent_msrv",
+            "message": "crate rust-version differs from workspace",
+            "location": { "path": "crates/crate-a/Cargo.toml", "line": 5, "column": 1 },
+            "data": {
+                "workspace_rust_version": "1.70",
+                "crate_rust_version": "1.65"
+            }
+        }]
+    });
+    fs::write(
+        builddiag2.join("report.json"),
+        serde_json::to_string_pretty(&receipt2).unwrap(),
+    )
+    .unwrap();
+}
+
+#[then("the apply results show guarded fix blocked")]
+async fn assert_apply_results_guarded_blocked(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let apply_path = root.join("artifacts").join("buildfix").join("apply.json");
+    let apply_str = fs::read_to_string(&apply_path).expect("read apply.json");
+    let v: serde_json::Value = serde_json::from_str(&apply_str).expect("parse apply.json");
+
+    let blocked = v["summary"]["blocked"].as_i64().unwrap_or(0);
+    assert!(
+        blocked > 0,
+        "expected at least one blocked op in apply results, got:\n{}",
+        serde_json::to_string_pretty(&v).unwrap()
+    );
+}
+
+#[then("the patch.diff contains valid diff headers")]
+async fn assert_patch_diff_valid_headers(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let patch_path = root.join("artifacts").join("buildfix").join("patch.diff");
+    let patch = fs::read_to_string(&patch_path).expect("read patch.diff");
+
+    // A valid unified diff should have --- and +++ headers
+    assert!(
+        patch.contains("--- ") || patch.is_empty(),
+        "expected patch.diff to contain '--- ' diff header or be empty, got:\n{}",
+        patch
+    );
+}
+
+#[then("the plan.md contains summary section")]
+async fn assert_plan_md_summary_section(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let plan_md_path = root.join("artifacts").join("buildfix").join("plan.md");
+    let plan_md = fs::read_to_string(&plan_md_path).expect("read plan.md");
+
+    // plan.md should contain a summary section
+    assert!(
+        plan_md.contains("# ") || plan_md.contains("Summary") || plan_md.contains("summary"),
+        "expected plan.md to contain a heading or summary section, got:\n{}",
+        plan_md
+    );
+}
+
+#[then(expr = "report.json apply data field {string} is at least {int}")]
+async fn assert_report_apply_data_field_at_least(
+    world: &mut BuildfixWorld,
+    field: String,
+    min_value: i64,
+) {
+    let root = repo_root(world).clone();
+    let report_path = root.join("artifacts").join("buildfix").join("report.json");
+    let report_str = fs::read_to_string(&report_path).expect("read report.json");
+    let v: serde_json::Value = serde_json::from_str(&report_str).expect("parse report.json");
+
+    let value = v["data"]["buildfix"]["apply"][&field]
+        .as_i64()
+        .unwrap_or_else(|| panic!("expected data.buildfix.apply.{} to be an integer", field));
+
+    assert!(
+        value >= min_value,
+        "expected apply.{} to be at least {}, got {}",
+        field,
+        min_value,
+        value
+    );
+}
+
+// ============================================================================
+// Evidence-based safety promotion steps (v0.4.0)
+// ============================================================================
+
+#[given(expr = r#"a workspace with an unused dependency {string}"#)]
+async fn workspace_with_unused_dep_named(world: &mut BuildfixWorld, dep_name: String) {
+    let td = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(td.path().to_path_buf()).unwrap();
+
+    fs::create_dir_all(root.join("crates").join("crate-a")).unwrap();
+
+    fs::write(
+        root.join("Cargo.toml"),
+        r#"
+[workspace]
+members = ["crates/crate-a"]
+resolver = "2"
+"#,
+    )
+    .unwrap();
+
+    let crate_toml = format!(
+        r#"
+[package]
+name = "crate-a"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+{} = "1.0"
+"#,
+        dep_name
+    );
+    fs::write(
+        root.join("crates").join("crate-a").join("Cargo.toml"),
+        crate_toml,
+    )
+    .unwrap();
+
+    world.temp = Some(td);
+    world.repo_root = Some(root);
+}
+
+#[given(expr = r#"a receipt from cargo-machete with high confidence evidence:"#)]
+async fn cargo_machete_receipt_high_confidence(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let artifacts = root.join("artifacts").join("cargo-machete");
+    fs::create_dir_all(&artifacts).unwrap();
+
+    // High confidence evidence: confidence=0.95, analysisDepth=full, toolAgreement=true
+    let finding = serde_json::json!({
+        "severity": "warn",
+        "check_id": "deps.unused_dependency",
+        "code": "unused_dep",
+        "message": "dependency appears unused",
+        "location": { "path": "crates/crate-a/Cargo.toml", "line": 8, "column": 1 },
+        "data": {
+            "toml_path": ["dependencies", "old-crate"],
+            "dep": "old-crate"
+        },
+        "confidence": 0.95,
+        "context": {
+            "analysis_depth": "full"
+        },
+        "provenance": {
+            "method": "dead_code_analysis",
+            "tools": ["cargo-machete", "cargo-udeps"],
+            "agreement": true
+        }
+    });
+
+    let receipt = serde_json::json!({
+        "schema": "cargo-machete.report.v1",
+        "tool": { "name": "cargo-machete", "version": "0.0.0" },
+        "verdict": { "status": "fail", "counts": { "findings": 1, "errors": 1, "warnings": 0 } },
+        "findings": [finding]
+    });
+
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
+}
+
+#[given(expr = r#"a receipt from cargo-machete with low confidence evidence:"#)]
+async fn cargo_machete_receipt_low_confidence(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let artifacts = root.join("artifacts").join("cargo-machete");
+    fs::create_dir_all(&artifacts).unwrap();
+
+    // Low confidence evidence: confidence=0.7, analysisDepth=shallow, toolAgreement=false
+    let finding = serde_json::json!({
+        "severity": "warn",
+        "check_id": "deps.unused_dependency",
+        "code": "unused_dep",
+        "message": "dependency appears unused",
+        "location": { "path": "crates/crate-a/Cargo.toml", "line": 8, "column": 1 },
+        "data": {
+            "toml_path": ["dependencies", "old-crate"],
+            "dep": "old-crate"
+        },
+        "confidence": 0.7,
+        "context": {
+            "analysis_depth": "shallow"
+        },
+        "provenance": {
+            "method": "dead_code_analysis",
+            "tools": ["cargo-machete"],
+            "agreement": false
+        }
+    });
+
+    let receipt = serde_json::json!({
+        "schema": "cargo-machete.report.v1",
+        "tool": { "name": "cargo-machete", "version": "0.0.0" },
+        "verdict": { "status": "fail", "counts": { "findings": 1, "errors": 1, "warnings": 0 } },
+        "findings": [finding]
+    });
+
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
+}
+
+#[given("a receipt from cargo-machete without evidence fields")]
+async fn cargo_machete_receipt_no_evidence(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let artifacts = root.join("artifacts").join("cargo-machete");
+    fs::create_dir_all(&artifacts).unwrap();
+
+    let receipt = serde_json::json!({
+        "schema": "cargo-machete.report.v1",
+        "tool": { "name": "cargo-machete", "version": "0.0.0" },
+        "verdict": { "status": "fail", "counts": { "findings": 1, "errors": 1, "warnings": 0 } },
+        "findings": [{
+            "severity": "warn",
+            "check_id": "deps.unused_dependency",
+            "code": "unused_dep",
+            "message": "dependency appears unused",
+            "location": { "path": "crates/crate-a/Cargo.toml", "line": 8, "column": 1 },
+            "data": {
+                "toml_path": ["dependencies", "old-crate"],
+                "dep": "old-crate"
+            }
+        }]
+    });
+
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
+}
+
+#[given(expr = r#"a receipt from cargo-machete with partial evidence:"#)]
+async fn cargo_machete_receipt_partial_evidence(world: &mut BuildfixWorld) {
+    let root = repo_root(world).clone();
+    let artifacts = root.join("artifacts").join("cargo-machete");
+    fs::create_dir_all(&artifacts).unwrap();
+
+    // Partial evidence: confidence=0.95, analysis_depth=full, but toolAgreement=false
+    let finding = serde_json::json!({
+        "severity": "warn",
+        "check_id": "deps.unused_dependency",
+        "code": "unused_dep",
+        "message": "dependency appears unused",
+        "location": { "path": "crates/crate-a/Cargo.toml", "line": 8, "column": 1 },
+        "data": {
+            "toml_path": ["dependencies", "old-crate"],
+            "dep": "old-crate"
+        },
+        "confidence": 0.95,
+        "context": {
+            "analysis_depth": "full"
+        },
+        "provenance": {
+            "method": "dead_code_analysis",
+            "tools": ["cargo-machete"],
+            "agreement": false
+        }
+    });
+
+    let receipt = serde_json::json!({
+        "schema": "cargo-machete.report.v1",
+        "tool": { "name": "cargo-machete", "version": "0.0.0" },
+        "verdict": { "status": "fail", "counts": { "findings": 1, "errors": 1, "warnings": 0 } },
+        "findings": [finding]
+    });
+
+    fs::write(
+        artifacts.join("report.json"),
+        serde_json::to_string_pretty(&receipt).unwrap(),
+    )
+    .unwrap();
+}
+
+#[then(expr = r#"the plan should contain an operation to remove {string}"#)]
+async fn assert_plan_contains_remove_op(world: &mut BuildfixWorld, dep_name: String) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    let removal = plan_ops(&v).iter().find(|op| {
+        op["kind"]["type"] == "toml_remove"
+            && op["kind"]["toml_path"] == serde_json::json!(["dependencies", dep_name.as_str()])
+    });
+    let Some(op) = removal else {
+        panic!(
+            "expected a toml_remove op for dependencies.{}, got:\n{}",
+            dep_name,
+            serde_json::to_string_pretty(&v).unwrap()
+        );
+    };
+
+    // Store the operation for the next step to check safety class
+    world.saved_plan_json = Some(serde_json::to_string(op).unwrap());
+}
+
+#[then(expr = r#"the operation should have safety class {string}"#)]
+async fn assert_operation_safety_class(world: &mut BuildfixWorld, expected_safety: String) {
+    let root = repo_root(world).clone();
+    let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
+    let plan_str = fs::read_to_string(&plan_path).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
+
+    // Find the toml_remove operation
+    let removal = plan_ops(&v)
+        .iter()
+        .find(|op| op["kind"]["type"] == "toml_remove");
+    let Some(op) = removal else {
+        panic!(
+            "expected a toml_remove op, got:\n{}",
+            serde_json::to_string_pretty(&v).unwrap()
+        );
+    };
+
+    let actual_safety = op["safety"].as_str().unwrap_or("unknown");
+    assert_eq!(
+        actual_safety,
+        expected_safety.as_str(),
+        "expected safety class '{}' but got '{}' in operation:\n{}",
+        expected_safety,
+        actual_safety,
+        serde_json::to_string_pretty(op).unwrap()
+    );
+}
+
+// ============================================================================
+// Step definitions for license_normalize.feature background
+// ============================================================================
+
+#[given("a repo with inconsistent license")]
+async fn repo_with_inconsistent_license(world: &mut BuildfixWorld) {
+    let td = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(td.path().to_path_buf()).unwrap();
+
+    fs::create_dir_all(root.join("crates").join("crate-a")).unwrap();
+
+    // Root workspace with workspace.package.license = "MIT OR Apache-2.0"
+    fs::write(
+        root.join("Cargo.toml"),
+        r#"
+[workspace]
+members = ["crates/crate-a"]
+resolver = "2"
+
+[workspace.package]
+license = "MIT OR Apache-2.0"
+"#,
+    )
+    .unwrap();
+
+    // crate-a has a different license (inconsistent with workspace canonical)
+    fs::write(
+        root.join("crates").join("crate-a").join("Cargo.toml"),
+        r#"
+[package]
+name = "crate-a"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+"#,
+    )
+    .unwrap();
+
+    world.temp = Some(td);
+    world.repo_root = Some(root);
+}
+
+// ============================================================================
+// Step definitions for path_dep_version.feature background
+// ============================================================================
+
+#[given("a repo with path dependencies missing versions")]
+async fn repo_with_path_deps_missing_versions(world: &mut BuildfixWorld) {
+    let td = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(td.path().to_path_buf()).unwrap();
+
+    // Create workspace with two crates
+    fs::create_dir_all(root.join("crates").join("crate-a")).unwrap();
+    fs::create_dir_all(root.join("crates").join("crate-b")).unwrap();
+
+    // Root workspace manifest
+    fs::write(
+        root.join("Cargo.toml"),
+        r#"
+[workspace]
+members = ["crates/crate-a", "crates/crate-b"]
+resolver = "2"
+"#,
+    )
+    .unwrap();
+
+    // crate-b with a version
+    fs::write(
+        root.join("crates").join("crate-b").join("Cargo.toml"),
+        r#"
+[package]
+name = "crate-b"
+version = "1.0.0"
+edition = "2021"
+"#,
+    )
+    .unwrap();
+
+    // crate-a depends on crate-b via path WITHOUT version
+    fs::write(
+        root.join("crates").join("crate-a").join("Cargo.toml"),
+        r#"
+[package]
+name = "crate-a"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+crate-b = { path = "../crate-b" }
+"#,
+    )
+    .unwrap();
+
+    world.temp = Some(td);
+    world.repo_root = Some(root);
+}
+
+// ============================================================================
+// Step definitions for resolver_v2.feature background
+// ============================================================================
+
+#[given("a repo with workspace needing resolver v2")]
+async fn repo_with_workspace_needing_resolver_v2(world: &mut BuildfixWorld) {
+    let td = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(td.path().to_path_buf()).unwrap();
+
+    // Minimal workspace with a member, but no resolver field
+    fs::create_dir_all(root.join("crates").join("a")).unwrap();
+    fs::write(
+        root.join("Cargo.toml"),
+        r#"
+[workspace]
+members = ["crates/a"]
+"#,
+    )
+    .unwrap();
     fs::write(
         root.join("crates").join("a").join("Cargo.toml"),
         r#"

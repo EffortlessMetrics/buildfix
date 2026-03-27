@@ -621,4 +621,109 @@ mod tests {
         enforce_caps(&cfg, &mut ops).expect("caps");
         assert!(ops.iter().all(|op| op.blocked));
     }
+
+    #[test]
+    fn glob_match_exact_pattern() {
+        assert!(glob_match("foo", "foo"));
+        assert!(!glob_match("foo", "bar"));
+    }
+
+    #[test]
+    fn glob_match_wildcard_star() {
+        // * matches any number of characters
+        assert!(glob_match("foo/*", "foo/bar"));
+        assert!(glob_match("foo/*", "foo/baz"));
+        assert!(glob_match("foo/*", "foo/bar/baz")); // * matches bar/baz
+        assert!(!glob_match("foo/*", "bar/foo")); // doesn't match prefix
+    }
+
+    #[test]
+    fn glob_match_wildcard_question() {
+        assert!(glob_match("foo?", "foo1"));
+        assert!(glob_match("foo?", "foox"));
+        assert!(!glob_match("foo?", "foo"));
+        assert!(!glob_match("foo?", "foo12"));
+    }
+
+    #[test]
+    fn glob_match_star_at_start() {
+        assert!(glob_match("*/foo", "bar/foo"));
+        assert!(glob_match("*/foo", "baz/foo"));
+        assert!(!glob_match("*/foo", "foo"));
+    }
+
+    #[test]
+    fn glob_match_complex_patterns() {
+        assert!(glob_match("cargo-deny/*", "cargo-deny/licenses.missing"));
+        assert!(glob_match("builddiag/*", "builddiag/workspace.resolver_v2"));
+        assert!(glob_match(
+            "depguard/*",
+            "depguard/deps.workspace_inheritance"
+        ));
+    }
+
+    #[test]
+    fn apply_params_fills_all_required_params() {
+        let mut ops = vec![buildfix_types::plan::PlanOp {
+            id: String::new(),
+            safety: buildfix_types::ops::SafetyClass::Unsafe,
+            blocked: false,
+            blocked_reason: None,
+            blocked_reason_token: None,
+            target: buildfix_types::ops::OpTarget {
+                path: "Cargo.toml".into(),
+            },
+            kind: buildfix_types::ops::OpKind::TomlTransform {
+                rule_id: "test".into(),
+                args: None,
+            },
+            rationale: buildfix_types::plan::Rationale {
+                fix_key: "test.fix".into(),
+                description: None,
+                findings: vec![],
+            },
+            params_required: vec!["version".to_string(), "author".to_string()],
+            preview: None,
+        }];
+
+        let params = HashMap::from([
+            ("version".to_string(), "1.0.0".to_string()),
+            ("author".to_string(), "Test".to_string()),
+        ]);
+
+        apply_params(&params, &mut ops);
+        assert!(!ops[0].blocked);
+        assert!(ops[0].params_required.is_empty());
+    }
+
+    #[test]
+    fn apply_params_partial_params_blocks_op() {
+        let mut ops = vec![buildfix_types::plan::PlanOp {
+            id: String::new(),
+            safety: buildfix_types::ops::SafetyClass::Unsafe,
+            blocked: false,
+            blocked_reason: None,
+            blocked_reason_token: None,
+            target: buildfix_types::ops::OpTarget {
+                path: "Cargo.toml".into(),
+            },
+            kind: buildfix_types::ops::OpKind::TomlTransform {
+                rule_id: "test".into(),
+                args: None,
+            },
+            rationale: buildfix_types::plan::Rationale {
+                fix_key: "test.fix".into(),
+                description: None,
+                findings: vec![],
+            },
+            params_required: vec!["version".to_string(), "author".to_string()],
+            preview: None,
+        }];
+
+        let params = HashMap::from([("version".to_string(), "1.0.0".to_string())]);
+
+        apply_params(&params, &mut ops);
+        assert!(ops[0].blocked);
+        assert!(ops[0].blocked_reason_token.is_some());
+    }
 }

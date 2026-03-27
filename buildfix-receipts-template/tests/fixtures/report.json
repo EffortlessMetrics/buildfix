@@ -1,0 +1,43 @@
+{
+  "version": "1.0.0",
+  "findings": [
+    {
+      "rule": "EXAMPLE001",
+      "severity": "error",
+      "message": "Unused variable 'x' detected",
+      "file": "src/main.rs",
+      "line": 42,
+      "column": 8
+    },
+    {
+      "rule": "EXAMPLE002",
+      "severity": "warning",
+      "message": "Function 'process_data' is too complex (cyclomatic complexity: 15)",
+      "file": "src/processor.rs",
+      "line": 100,
+      "column": 1
+    },
+    {
+      "rule": "EXAMPLE003",
+      "severity": "info",
+      "message": "Consider using 'Iterator::collect' instead of manual loop",
+      "file": "src/utils.rs",
+      "line": 25
+    },
+    {
+      "rule": "EXAMPLE004",
+      "severity": "warning",
+      "message": "Missing documentation for public function 'calculate'",
+      "file": "./src/math.rs",
+      "line": 10
+    },
+    {
+      "rule": "EXAMPLE005",
+      "severity": "error",
+      "message": "Potential panic: index out of bounds in array access",
+      "file": "src\\buffer.rs",
+      "line": 55,
+      "column": 20
+    }
+  ]
+}

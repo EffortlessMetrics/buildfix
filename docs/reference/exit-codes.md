@@ -29,6 +29,20 @@ This includes cases where the plan is empty (no applicable ops).
 - Changes were applied (or would be in dry-run)
 - Artifacts were written
 
+### Validate
+
+- All receipts loaded successfully
+- All artifacts validated against their schemas
+- No validation errors found
+
+### Explain
+
+- Fix key was found and explanation displayed
+
+### ListFixes
+
+- Fix list was displayed
+
 ## Exit Code 1: Error
 
 A tool or runtime error occurred. This indicates a problem with buildfix itself or its inputs.
@@ -42,6 +56,7 @@ A tool or runtime error occurred. This indicates a problem with buildfix itself 
 | Invalid plan | `Failed to parse plan.json: expected field 'ops'` |
 | I/O error | `Failed to write plan.json: permission denied` |
 | Missing plan | `File not found: artifacts/buildfix/plan.json` |
+| Unknown fix key | `Unknown fix key: 'foo'` (for explain command) |
 
 ### Debugging
 
@@ -129,6 +144,33 @@ Plan exceeds max_patch_bytes limit (250000)
 
 **Resolution**: Increase limits in `buildfix.toml` or fix in batches.
 
+#### Validation Failure
+
+Schema validation failed for receipts or artifacts.
+
+```
+artifacts/buildfix/plan.json: property 'ops' is required
+```
+
+**Resolution**: Fix the invalid artifact or regenerate it.
+
+### Blocked Reason Tokens
+
+When an op is blocked, the `blocked_reason_token` field provides a machine-readable token:
+
+| Token | Meaning |
+|-------|---------|
+| `missing_params` | Unsafe op missing required parameters |
+| `denylist` | Op matched a deny pattern |
+| `allowlist_missing` | Op not in allowlist |
+| `max_ops` | Plan exceeds max_ops limit |
+| `max_files` | Plan exceeds max_files limit |
+| `max_patch_bytes` | Plan exceeds max_patch_bytes limit |
+| `dirty_working_tree` | Working tree has uncommitted changes |
+| `safety_guarded_not_allowed` | Guarded op requires --allow-guarded |
+| `safety_unsafe_not_allowed` | Unsafe op requires --allow-unsafe |
+| `precondition_mismatch` | SHA256 hash mismatch on file |
+
 ## CI/CD Integration
 
 ### Treat Policy Blocks as Warnings
@@ -160,6 +202,14 @@ elif [ $code -eq 2 ]; then
   echo "Warning: policy block"
   # Continue or exit based on your policy
 fi
+```
+
+## Cockpit Mode
+
+In cockpit mode (`--mode cockpit`), policy blocks (exit 2) are mapped to exit 0. This is useful for integration with systems that treat any non-zero exit as a failure.
+
+```bash
+buildfix plan --mode cockpit  # Returns 0 even if policy blocked
 ```
 
 ## Artifacts on Exit 2

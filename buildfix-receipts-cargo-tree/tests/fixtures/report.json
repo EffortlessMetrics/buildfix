@@ -1,0 +1,20 @@
+{
+  "duplicates": [
+    {
+      "dep": "serde",
+      "versions": ["1.0.0", "1.0.1"],
+      "info": [
+        {"name": "my-crate", "version": "1.0.0"},
+        {"name": "other-crate", "version": "1.0.1"}
+      ]
+    },
+    {
+      "dep": "tokio",
+      "versions": ["1.35.0", "1.35.1"],
+      "info": [
+        {"name": "my-crate", "version": "1.35.0"},
+        {"name": "async-crate", "version": "1.35.1"}
+      ]
+    }
+  ]
+}

@@ -167,3 +167,114 @@ pub fn write_apply_artifacts<W: ArtifactWriter>(
     let files = render_apply_report(apply, report, patch, out_dir)?;
     write_files(files, writer)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+    use std::rc::Rc;
+
+    /// Mock writer for testing.
+    #[derive(Debug, Clone)]
+    struct MockArtifactWriter {
+        files: Rc<RefCell<HashMap<String, Vec<u8>>>>,
+        dirs: Rc<RefCell<Vec<String>>>,
+        fail_write: bool,
+    }
+
+    impl MockArtifactWriter {
+        fn new() -> Self {
+            Self {
+                files: Rc::new(RefCell::new(HashMap::new())),
+                dirs: Rc::new(RefCell::new(Vec::new())),
+                fail_write: false,
+            }
+        }
+
+        fn with_write_failure(self) -> Self {
+            Self {
+                fail_write: true,
+                ..self
+            }
+        }
+    }
+
+    impl ArtifactWriter for MockArtifactWriter {
+        fn write_file(&self, path: &Utf8Path, contents: &[u8]) -> anyhow::Result<()> {
+            if self.fail_write {
+                anyhow::bail!("simulated write failure");
+            }
+            self.files
+                .borrow_mut()
+                .insert(path.to_string(), contents.to_vec());
+            Ok(())
+        }
+
+        fn create_dir_all(&self, path: &Utf8Path) -> anyhow::Result<()> {
+            self.dirs.borrow_mut().push(path.to_string());
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_fs_artifact_writer_creates_parent_dirs() {
+        let writer = FsArtifactWriter;
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("nested").join("file.txt");
+
+        // This should create parent directories
+        writer
+            .write_file(path.as_path().try_into().unwrap(), b"content")
+            .unwrap();
+
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn test_fs_artifact_writer_write_and_read() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("test.txt");
+        let writer = FsArtifactWriter;
+
+        writer
+            .write_file(path.as_path().try_into().unwrap(), b"hello world")
+            .unwrap();
+
+        let contents = std::fs::read(&path).unwrap();
+        assert_eq!(contents, b"hello world");
+    }
+
+    #[test]
+    fn test_mock_writer_records_files() {
+        let writer = MockArtifactWriter::new();
+
+        writer
+            .write_file("test/path/file.txt".into(), b"content")
+            .unwrap();
+
+        let files = writer.files.borrow();
+        assert!(files.contains_key("test/path/file.txt"));
+        assert_eq!(files.get("test/path/file.txt").unwrap(), b"content");
+    }
+
+    #[test]
+    fn test_mock_writer_records_dirs() {
+        let writer = MockArtifactWriter::new();
+
+        writer.create_dir_all("a/b/c".into()).unwrap();
+
+        let dirs = writer.dirs.borrow();
+        assert!(dirs.contains(&"a/b/c".to_string()));
+    }
+
+    #[test]
+    fn test_mock_writer_propagates_write_errors() {
+        let writer = MockArtifactWriter::new().with_write_failure();
+
+        let result = writer.write_file("test.txt".into(), b"content");
+
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().to_string(), "simulated write failure");
+    }
+}

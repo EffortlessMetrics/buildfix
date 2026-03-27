@@ -1,0 +1,133 @@
+# buildfix Profile: Aggressive (with Human Review)
+#
+# This profile enables all fixers but still requires explicit flags for
+# guarded and unsafe operations. Use this for manual maintenance runs
+# where you carefully review each change before applying.
+#
+# Use this profile when:
+# - Running manual maintenance sessions with careful review
+# - Onboarding a new repository with many hygiene issues
+# - You want full control over which fixer categories to apply
+# - You review the plan.md and patch.diff before each apply
+#
+# Usage:
+#   cp examples/profiles/aggressive-but-reviewed.toml buildfix.toml
+#   cargo run -p buildfix -- plan                    # Generate plan
+#   # Review plan.md and patch.diff carefully
+#   cargo run -p buildfix -- apply --apply           # Safe ops only
+#   cargo run -p buildfix -- apply --apply --allow-guarded  # + guarded ops
+#   cargo run -p buildfix -- apply --apply --allow-guarded --allow-unsafe  # All ops
+#
+# IMPORTANT: Always review the plan before applying!
+#   - Read plan.md for a summary of changes
+#   - Review patch.diff for exact file modifications
+#   - Run tests after applying to verify nothing broke
+
+[policy]
+# Empty allowlist means all fixers are eligible
+# Control is via flags: --allow-guarded and --allow-unsafe
+allow = []
+
+# Explicitly deny specific fixers you never want to run
+# Uncomment to block specific operations:
+deny = [
+  # Example: Never remove unused deps (too risky for your workflow)
+  # "cargo-udeps/deps.unused_dependency/*",
+  # "machete/deps.unused_dependency/*",
+]
+
+# Guarded ops require --allow-guarded flag
+# Review the plan carefully before using this flag
+allow_guarded = false
+
+# Unsafe ops require --allow-unsafe flag AND parameters
+# These can break code - only enable after careful review
+allow_unsafe = false
+
+# Require clean working tree - strongly recommended for this profile
+allow_dirty = false
+
+# Higher limits for comprehensive maintenance sessions
+max_ops = 100         # Maximum 100 operations per plan
+max_files = 50        # Maximum 50 files to modify
+max_patch_bytes = 500000  # Maximum 500KB patch size
+
+[backups]
+# Always create backups - critical for this profile
+enabled = true
+suffix = ".buildfix.bak"
+
+[params]
+# Parameters for unsafe operations
+# Uncomment and set as needed when using --allow-unsafe
+
+# Target Rust version for MSRV normalization
+# Used when a crate has no rust-version and no workspace standard exists
+# rust_version = "1.75"
+
+# =============================================================================
+# FIXER REFERENCE
+# =============================================================================
+#
+# This section documents each fixer and its safety classification.
+# Use this reference to understand what each operation does.
+#
+# ------------------------------------------------------------------------------
+# SAFE OPERATIONS (applied with --apply)
+# ------------------------------------------------------------------------------
+#
+# resolver-v2 (fix_id: cargo.workspace_resolver_v2)
+#   Updates Cargo.toml to use resolver = "2"
+#   Triggers: builddiag/workspace.resolver_v2, cargo/workspace.resolver_v2
+#   Risk: Very low - only changes resolver field
+#
+# path-dep-version (fix_id: cargo.path_dep_add_version)
+#   Adds version to path dependencies in Cargo.toml
+#   Triggers: depguard/deps.path_requires_version/missing_version
+#   Risk: Very low - only adds metadata needed for publishing
+#
+# workspace-inheritance (fix_id: cargo.use_workspace_dependency)
+#   Converts direct deps to use workspace = true
+#   Triggers: depguard/deps.workspace_inheritance
+#   Risk: Low - consolidates existing dependencies
+#
+# duplicate-deps (fix_id: cargo.consolidate_duplicate_deps)
+#   Consolidates multiple versions of same dependency
+#   Triggers: depguard/deps.duplicate_dependency_versions
+#   Risk: Low - picks version already in use
+#
+# ------------------------------------------------------------------------------
+# GUARDED OPERATIONS (require --allow-guarded)
+# ------------------------------------------------------------------------------
+#
+# msrv (fix_id: cargo.normalize_rust_version)
+#   Normalizes rust-version across workspace members
+#   Triggers: builddiag/rust.msrv_consistent, cargo/msrv_consistent
+#   Risk: Medium - may raise MSRV, affecting compatibility
+#   Review: Check that new MSRV is acceptable for your users
+#
+# edition (fix_id: cargo.normalize_edition)
+#   Normalizes edition across workspace members
+#   Triggers: builddiag/rust.edition_consistent, cargo/edition_consistent
+#   Risk: Medium - may enable new language features
+#   Review: Test compilation after applying
+#
+# license (fix_id: cargo.normalize_license)
+#   Normalizes license field across workspace members
+#   Triggers: cargo-deny/licenses/*, deny/licenses/*
+#   Risk: Medium - changes legal metadata
+#   Review: Verify license choice is correct for your project
+#
+# ------------------------------------------------------------------------------
+# UNSAFE OPERATIONS (require --allow-unsafe AND parameters)
+# ------------------------------------------------------------------------------
+#
+# remove-unused-deps (fix_id: cargo.remove_unused_deps)
+#   Removes dependencies detected as unused
+#   Triggers: cargo-udeps/*, machete/*, udeps/*
+#   Risk: HIGH - can break code that uses implicit feature flags
+#   Review: CAREFULLY verify each removal doesn't break functionality
+#   Note: Some deps provide macros or conditional compilation that
+#         static analysis cannot detect
+#
+# =============================================================================

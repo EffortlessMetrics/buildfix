@@ -1,0 +1,47 @@
+{
+  "files": [
+    {
+      "path": "src/lib.rs",
+      "line_covered": 50,
+      "line_uncovered": 10,
+      "line_total": 60,
+      "branch_covered": 20,
+      "branch_uncovered": 5,
+      "branch_total": 25,
+      "functions_covered": 8,
+      "functions_uncovered": 2,
+      "functions_total": 10
+    },
+    {
+      "path": "src/main.rs",
+      "line_covered": 45,
+      "line_uncovered": 5,
+      "line_total": 50,
+      "branch_covered": 15,
+      "branch_uncovered": 5,
+      "branch_total": 20,
+      "functions_covered": 5,
+      "functions_uncovered": 0,
+      "functions_total": 5
+    },
+    {
+      "path": "src/utils.rs",
+      "line_covered": 100,
+      "line_uncovered": 0,
+      "line_total": 100,
+      "branch_covered": 30,
+      "branch_uncovered": 0,
+      "branch_total": 30,
+      "functions_covered": 12,
+      "functions_uncovered": 0,
+      "functions_total": 12
+    }
+  ],
+  "line_covered": 500,
+  "line_total": 1000,
+  "branch_covered": 200,
+  "branch_total": 250,
+  "functions_covered": 80,
+  "functions_total": 100,
+  "uncovered_lines": [10, 20, 30, 40, 50]
+}

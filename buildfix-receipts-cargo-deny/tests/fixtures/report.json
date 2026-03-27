@@ -1,0 +1,86 @@
+{
+  "advisories": {
+    "deny": [],
+    "warn": [],
+    "skip": []
+  },
+  "bans": {
+    "deny": [
+      {
+        "id": "multi-usage",
+        "message": "package chrono 0.4.31 is used multiple times in the dependency graph",
+        "package": {
+          "name": "chrono",
+          "version": "0.4.31"
+        },
+        "features": []
+      },
+      {
+        "id": "circular",
+        "message": "circular dependency: package-a -> package-b -> package-a",
+        "package": {
+          "name": "package-a",
+          "version": "1.0.0"
+        },
+        "features": []
+      }
+    ],
+    "warn": [
+      {
+        "id": "multiple-versions",
+        "message": "multiple versions of serde detected: 1.0.0 and 1.0.1",
+        "package": {
+          "name": "serde",
+          "version": "1.0.0"
+        },
+        "features": []
+      }
+    ],
+    "skip": []
+  },
+  "licenses": {
+    "deny": [
+      {
+        "id": "missing-license",
+        "message": "failed to detect a valid SPDX license expression",
+        "license": "crate-a",
+        "package": {
+          "name": "crate-a",
+          "version": "0.1.0"
+        }
+      },
+      {
+        "id": "unlicensed",
+        "message": "no license field was found in the Cargo.toml manifest",
+        "license": "crate-b",
+        "package": {
+          "name": "crate-b",
+          "version": "0.2.0"
+        }
+      }
+    ],
+    "warn": [
+      {
+        "id": "missing-license",
+        "message": "license file AUTHORS.md referenced in license field was not found in the crate root",
+        "license": "crate-c",
+        "package": {
+          "name": "crate-c",
+          "version": "0.3.0"
+        }
+      }
+    ],
+    "skip": []
+  },
+  "sources": {
+    "deny": [],
+    "warn": [
+      {
+        "id": "untrusted-source",
+        "message": "source registry https://example.com is not trusted",
+        "source": "https://example.com"
+      }
+    ],
+    "skip": []
+  }
+}

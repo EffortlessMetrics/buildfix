@@ -1,0 +1,37 @@
+{
+  "crates": [
+    {
+      "name": "serde",
+      "version": "1.0.0",
+      "description": "Serialization framework",
+      "downloads": 1000000,
+      "recent_downloads": 10000,
+      "repository": "https://github.com/serde-rs/serde",
+      "license": "MIT OR Apache-2.0",
+      "categories": ["encoding", "serialization"],
+      "keywords": ["serde", "serialization"]
+    },
+    {
+      "name": "tokio",
+      "version": "1.35.0",
+      "description": "A runtime for writing reliable asynchronous applications",
+      "downloads": 500000,
+      "recent_downloads": 5000,
+      "repository": "https://github.com/tokio-rs/tokio",
+      "license": "MIT",
+      "categories": ["async", "runtime"],
+      "keywords": ["async", "runtime", "io"]
+    },
+    {
+      "name": "thiserror",
+      "version": "1.0.50",
+      "description": "This crate provides a convenient derive macro for libraries",
+      "downloads": 300000,
+      "recent_downloads": 3000,
+      "repository": "https://github.com/dtolnay/thiserror",
+      "license": "MIT OR Apache-2.0",
+      "categories": ["error-handling"],
+      "keywords": ["error", "derive"]
+    }
+  ]
+}

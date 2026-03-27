@@ -24,12 +24,46 @@ cargo run -p buildfix -- apply --apply --allow-guarded  # Include guarded ops
 
 ### Crate Responsibilities
 
+**Intake Layer** (receipt adapters):
+- **buildfix-adapter-sdk**: Adapter SDK with traits and test harness
+- **buildfix-receipts-sarif**: Generic SARIF intake
+- **buildfix-receipts-cargo-***: Cargo tool adapters (deny, machete, udeps, outdated, lock, update, tree, bloat, llvm-lines, cyclonedds, geiger, semver-checks, warn, msrv, krate, audit, sec-audit, audit-freeze, crev, miri, spellcheck, unused-function)
+- **buildfix-receipts-clippy**: Clippy lint intake
+- **buildfix-receipts-rustc-json**: rustc JSON message intake
+- **buildfix-receipts-rustfmt**: rustfmt output intake
+- **buildfix-receipts-depguard**: depguard intake
+- **buildfix-receipts-tarpaulin**: tarpaulin coverage intake
+
+**Core Types**:
 - **buildfix-types**: Shared DTOs and schemas (`BuildfixPlan`, `PlanOp`, `OpKind`, `SafetyClass`)
-- **buildfix-receipts**: Tolerant receipt loader from `artifacts/*/report.json`
+- **buildfix-hash**: SHA256 utilities
+- **buildfix-artifacts**: Artifact path management
+
+**Fixer Layer** (each fixer is a microcrate):
+- **buildfix-fixer-api**: Fixer trait + common types
+- **buildfix-fixer-resolver-v2**: Workspace resolver = "2"
+- **buildfix-fixer-path-dep-version**: Add version to path deps
+- **buildfix-fixer-workspace-inheritance**: Use workspace = true
+- **buildfix-fixer-duplicate-deps**: Consolidate duplicate dep versions
+- **buildfix-fixer-remove-unused-deps**: Remove unused dependencies
+- **buildfix-fixer-msrv**: Normalize MSRV
+- **buildfix-fixer-edition**: Normalize edition
+- **buildfix-fixer-license**: Normalize license
+- **buildfix-fixer-catalog**: Registry of all built-in fixers
+
+**Domain Layer**:
 - **buildfix-domain**: Core planning logic with `Fixer` trait; decides *what* should change
+- **buildfix-domain-policy**: Policy evaluation (allow/deny/caps)
+- **buildfix-core**: Pipeline orchestration
+- **buildfix-core-runtime**: Runtime adapters (filesystem, git)
+
+**Output Layer**:
 - **buildfix-edit**: TOML editing engine using `toml_edit`; decides *how* to modify files
 - **buildfix-render**: Markdown rendering for plan/apply artifacts
+- **buildfix-report**: Report generation
 - **buildfix-cli**: CLI entry point wiring clap + IO
+
+**Testing**:
 - **buildfix-bdd**: Cucumber behavior tests
 - **xtask**: Build helpers
 

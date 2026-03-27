@@ -1,0 +1,35 @@
+{
+  "audit_version": "0.1.0",
+  "vulnerabilities": [
+    {
+      "id": "RUSTSEC-0001-0001",
+      "package": "vulnerable-crate",
+      "version": "1.0.0",
+      "title": "Vulnerability in vulnerable-crate",
+      "description": "Description of the vulnerability",
+      "date": "2023-01-01",
+      "severity": "HIGH",
+      "url": "https://rustsec.org/advisories/RUSTSEC-0001-0001"
+    },
+    {
+      "id": "RUSTSEC-0002-0002",
+      "package": "another-crate",
+      "version": "2.1.0",
+      "title": "Medium severity advisory",
+      "description": "A medium severity issue was found",
+      "date": "2023-02-15",
+      "severity": "MEDIUM",
+      "url": "https://rustsec.org/advisories/RUSTSEC-0002-0002"
+    },
+    {
+      "id": "RUSTSEC-0003-0003",
+      "package": "low-severity-crate",
+      "version": "0.5.0",
+      "title": "Low severity informational advisory",
+      "description": "This is an informational advisory",
+      "date": "2023-03-20",
+      "severity": "LOW",
+      "url": "https://rustsec.org/advisories/RUSTSEC-0003-0003"
+    }
+  ]
+}

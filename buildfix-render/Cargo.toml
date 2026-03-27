@@ -19,7 +19,7 @@ serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 
-buildfix-types = { version = "0.2.0", path = "../buildfix-types" }
+buildfix-types = { version = "0.3.0", path = "../buildfix-types" }
 
 [dev-dependencies]
 pretty_assertions.workspace = true
