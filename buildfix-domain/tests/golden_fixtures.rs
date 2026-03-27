@@ -66,8 +66,11 @@ fn load_fixture_config(fixture_path: &Path) -> LoadedFixtureConfig {
 }
 
 /// Normalizes line endings to LF for cross-platform comparison.
+///
+/// Handles both Windows-style `\r\n` and legacy Mac-style lone `\r`.
 fn normalize_line_endings(s: &str) -> String {
-    s.replace("\r\n", "\n")
+    // First replace \r\n so we don't double-convert, then replace any remaining lone \r.
+    s.replace("\r\n", "\n").replace('\r', "\n")
 }
 
 /// Strips dynamic fields from a plan JSON for comparison.
@@ -366,6 +369,8 @@ fn run_fixture_test(fixture_name: &str) {
 /// Recursively copy a directory, normalizing line endings to LF for text files.
 ///
 /// This ensures deterministic patch output across platforms (Windows CRLF vs Unix LF).
+/// Instead of relying on a hardcoded extension list, we attempt to read each file as
+/// UTF-8. If it succeeds and contains `\r`, we normalize; otherwise we binary-copy.
 fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
     fs::create_dir_all(dst)?;
     for entry in std::fs::read_dir(src)? {
@@ -375,16 +380,16 @@ fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
         if ty.is_dir() {
             copy_dir_all(&entry.path(), &dst_path)?;
         } else {
-            let is_text = entry
-                .path()
-                .extension()
-                .and_then(|e| e.to_str())
-                .is_some_and(|ext| matches!(ext, "toml" | "json" | "md" | "txt" | "rs"));
-            if is_text {
-                let content = fs::read_to_string(entry.path())?;
-                fs::write(dst_path, content.replace("\r\n", "\n"))?;
-            } else {
-                fs::copy(entry.path(), dst_path)?;
+            let raw = std::fs::read(entry.path())?;
+            match String::from_utf8(raw) {
+                Ok(text) if text.contains('\r') => {
+                    let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
+                    fs::write(dst_path, normalized)?;
+                }
+                _ => {
+                    // Already LF-only text, or binary -- copy as-is.
+                    fs::copy(entry.path(), dst_path)?;
+                }
             }
         }
     }
