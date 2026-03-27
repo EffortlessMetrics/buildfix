@@ -73,27 +73,27 @@ jobs:
           # Query crates.io directly so the skip check cannot resolve to the local workspace package.
           crate_version_published() {
             python3 - "$1" "$2" <<'PY'
-import json
-import sys
-import urllib.error
-import urllib.request
+            import json
+            import sys
+            import urllib.error
+            import urllib.request
 
-crate, version = sys.argv[1], sys.argv[2]
-url = f"https://crates.io/api/v1/crates/{crate}"
+            crate, version = sys.argv[1], sys.argv[2]
+            url = f"https://crates.io/api/v1/crates/{crate}"
 
-try:
-    with urllib.request.urlopen(url, timeout=30) as response:
-        payload = json.load(response)
-except (urllib.error.URLError, ValueError) as exc:
-    print(f"error: failed to query {url}: {exc}", file=sys.stderr)
-    sys.exit(2)
+            try:
+                with urllib.request.urlopen(url, timeout=30) as response:
+                    payload = json.load(response)
+            except (urllib.error.URLError, ValueError) as exc:
+                print(f"error: failed to query {url}: {exc}", file=sys.stderr)
+                sys.exit(2)
 
-for item in payload.get("versions", []):
-    if item.get("num") == version:
-        sys.exit(0)
+            for item in payload.get("versions", []):
+                if item.get("num") == version:
+                    sys.exit(0)
 
-sys.exit(1)
-PY
+            sys.exit(1)
+            PY
           }
 
           crates=(
