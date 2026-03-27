@@ -1,0 +1,78 @@
+diff --git a/Cargo.toml b/Cargo.toml
+--- a/Cargo.toml
++++ b/Cargo.toml
+--- original
++++ modified
+@@ -1,2 +1,4 @@
+-[workspace]
+-members = ["crates/api", "crates/core", "crates/cli"]
++[workspace]
++members = ["crates/api", "crates/core", "crates/cli"]
++resolver = "2"
++dependencies = { serde = "1.0.200" }
+diff --git a/crates/api/Cargo.toml b/crates/api/Cargo.toml
+--- a/crates/api/Cargo.toml
++++ b/crates/api/Cargo.toml
+--- original
++++ modified
+@@ -1,8 +1,8 @@
+-[package]
+-name = "acme-api"
+-version = "0.3.0"
+-edition = "2021"
+-
+-[dependencies]
+-acme-core = { path = "../core" }
+-serde = { version = "1.0.180", features = ["derive"] }
++[package]
++name = "acme-api"
++version = "0.3.0"
++edition = "2021"
++
++[dependencies]
++acme-core = { path = "../core" , version = "0.3.0" }
++serde = { workspace = true, features = ["derive"] }
+diff --git a/crates/cli/Cargo.toml b/crates/cli/Cargo.toml
+--- a/crates/cli/Cargo.toml
++++ b/crates/cli/Cargo.toml
+--- original
++++ modified
+@@ -1,9 +1,9 @@
+-[package]
+-name = "acme-cli"
+-version = "0.3.0"
+-edition = "2021"
+-
+-[dependencies]
+-acme-core = { path = "../core" }
+-acme-api = { path = "../api" }
+-serde = "1.0.190"
++[package]
++name = "acme-cli"
++version = "0.3.0"
++edition = "2021"
++
++[dependencies]
++acme-core = { path = "../core" , version = "0.3.0" }
++acme-api = { path = "../api" , version = "0.3.0" }
++serde = { workspace = true }
+diff --git a/crates/core/Cargo.toml b/crates/core/Cargo.toml
+--- a/crates/core/Cargo.toml
++++ b/crates/core/Cargo.toml
+--- original
++++ modified
+@@ -1,7 +1,7 @@
+-[package]
+-name = "acme-core"
+-version = "0.3.0"
+-edition = "2021"
+-
+-[dependencies]
+-serde = "1.0.200"
++[package]
++name = "acme-core"
++version = "0.3.0"
++edition = "2021"
++
++[dependencies]
++serde = { workspace = true }

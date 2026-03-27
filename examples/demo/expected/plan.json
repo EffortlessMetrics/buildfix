@@ -1,0 +1,335 @@
+{
+  "schema": "buildfix.plan.v1",
+  "tool": {
+    "name": "buildfix",
+    "version": "0.2.0"
+  },
+  "repo": {
+    "root": "examples/demo/repo",
+    "head_sha": "<git-head-sha>",
+    "dirty": false
+  },
+  "inputs": [
+    {
+      "path": "examples/demo/artifacts/builddiag/report.json",
+      "schema": "builddiag.report.v1",
+      "tool": "builddiag"
+    },
+    {
+      "path": "examples/demo/artifacts/depguard/report.json",
+      "schema": "depguard.report.v1",
+      "tool": "depguard"
+    }
+  ],
+  "policy": {
+    "allow": [],
+    "deny": [],
+    "allow_guarded": false,
+    "allow_unsafe": false,
+    "allow_dirty": false
+  },
+  "preconditions": {
+    "files": [],
+    "dirty": false
+  },
+  "ops": [
+    {
+      "id": "ab9ced5a-84ab-52fb-9080-73eece088fd5",
+      "safety": "safe",
+      "blocked": false,
+      "target": {
+        "path": "Cargo.toml"
+      },
+      "kind": {
+        "type": "toml_transform",
+        "rule_id": "ensure_workspace_resolver_v2"
+      },
+      "rationale": {
+        "fix_key": "builddiag/workspace.resolver_v2/not_v2",
+        "description": "Sets [workspace].resolver = \"2\" for correct feature unification",
+        "findings": [
+          {
+            "source": "builddiag",
+            "check_id": "workspace.resolver_v2",
+            "code": "not_v2",
+            "path": "Cargo.toml",
+            "line": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "5bc5e0d5-96a1-53ac-86d3-b960dfb7747e",
+      "safety": "safe",
+      "blocked": false,
+      "target": {
+        "path": "Cargo.toml"
+      },
+      "kind": {
+        "type": "toml_transform",
+        "rule_id": "ensure_workspace_dependency_version",
+        "args": {
+          "dep": "serde",
+          "version": "1.0.200"
+        }
+      },
+      "rationale": {
+        "fix_key": "depguard/deps.duplicate_dependency_versions/duplicate_version",
+        "description": "Consolidates duplicate dependency versions into workspace.dependencies",
+        "findings": [
+          {
+            "source": "depguard",
+            "check_id": "deps.duplicate_dependency_versions",
+            "code": "duplicate_version",
+            "path": "crates/api/Cargo.toml",
+            "line": 8
+          },
+          {
+            "source": "depguard",
+            "check_id": "deps.duplicate_dependency_versions",
+            "code": "duplicate_version",
+            "path": "crates/cli/Cargo.toml",
+            "line": 9
+          },
+          {
+            "source": "depguard",
+            "check_id": "deps.duplicate_dependency_versions",
+            "code": "duplicate_version",
+            "path": "crates/core/Cargo.toml",
+            "line": 7
+          }
+        ]
+      }
+    },
+    {
+      "id": "b2ed5697-1764-5087-92f5-80ab0f3dc514",
+      "safety": "safe",
+      "blocked": false,
+      "target": {
+        "path": "crates/api/Cargo.toml"
+      },
+      "kind": {
+        "type": "toml_transform",
+        "rule_id": "use_workspace_dependency",
+        "args": {
+          "dep": "serde",
+          "preserved": {
+            "features": [
+              "derive"
+            ]
+          },
+          "toml_path": [
+            "dependencies",
+            "serde"
+          ]
+        }
+      },
+      "rationale": {
+        "fix_key": "depguard/deps.duplicate_dependency_versions/duplicate_version",
+        "description": "Consolidates duplicate dependency versions into workspace.dependencies",
+        "findings": [
+          {
+            "source": "depguard",
+            "check_id": "deps.duplicate_dependency_versions",
+            "code": "duplicate_version",
+            "path": "crates/api/Cargo.toml",
+            "line": 8
+          }
+        ]
+      }
+    },
+    {
+      "id": "a1db9461-7870-5e9a-9185-6368abc90128",
+      "safety": "safe",
+      "blocked": false,
+      "target": {
+        "path": "crates/cli/Cargo.toml"
+      },
+      "kind": {
+        "type": "toml_transform",
+        "rule_id": "use_workspace_dependency",
+        "args": {
+          "dep": "serde",
+          "preserved": {},
+          "toml_path": [
+            "dependencies",
+            "serde"
+          ]
+        }
+      },
+      "rationale": {
+        "fix_key": "depguard/deps.duplicate_dependency_versions/duplicate_version",
+        "description": "Consolidates duplicate dependency versions into workspace.dependencies",
+        "findings": [
+          {
+            "source": "depguard",
+            "check_id": "deps.duplicate_dependency_versions",
+            "code": "duplicate_version",
+            "path": "crates/cli/Cargo.toml",
+            "line": 9
+          }
+        ]
+      }
+    },
+    {
+      "id": "99bc5f7e-860f-510a-a560-7a4dfa2406c3",
+      "safety": "safe",
+      "blocked": false,
+      "target": {
+        "path": "crates/core/Cargo.toml"
+      },
+      "kind": {
+        "type": "toml_transform",
+        "rule_id": "use_workspace_dependency",
+        "args": {
+          "dep": "serde",
+          "preserved": {},
+          "toml_path": [
+            "dependencies",
+            "serde"
+          ]
+        }
+      },
+      "rationale": {
+        "fix_key": "depguard/deps.duplicate_dependency_versions/duplicate_version",
+        "description": "Consolidates duplicate dependency versions into workspace.dependencies",
+        "findings": [
+          {
+            "source": "depguard",
+            "check_id": "deps.duplicate_dependency_versions",
+            "code": "duplicate_version",
+            "path": "crates/core/Cargo.toml",
+            "line": 7
+          }
+        ]
+      }
+    },
+    {
+      "id": "988799d6-ecd7-5ffc-9ee5-9452b50deb91",
+      "safety": "safe",
+      "blocked": false,
+      "target": {
+        "path": "crates/api/Cargo.toml"
+      },
+      "kind": {
+        "type": "toml_transform",
+        "rule_id": "ensure_path_dep_has_version",
+        "args": {
+          "dep": "acme-core",
+          "dep_path": "../core",
+          "toml_path": [
+            "dependencies",
+            "acme-core"
+          ],
+          "version": "0.3.0"
+        }
+      },
+      "rationale": {
+        "fix_key": "depguard/deps.path_requires_version/missing_version",
+        "description": "Adds version field to path dependencies for publishability",
+        "findings": [
+          {
+            "source": "depguard",
+            "check_id": "deps.path_requires_version",
+            "code": "missing_version",
+            "path": "crates/api/Cargo.toml",
+            "line": 7
+          }
+        ]
+      }
+    },
+    {
+      "id": "1badf50b-4d2c-5914-932d-98822b487211",
+      "safety": "safe",
+      "blocked": false,
+      "target": {
+        "path": "crates/cli/Cargo.toml"
+      },
+      "kind": {
+        "type": "toml_transform",
+        "rule_id": "ensure_path_dep_has_version",
+        "args": {
+          "dep": "acme-api",
+          "dep_path": "../api",
+          "toml_path": [
+            "dependencies",
+            "acme-api"
+          ],
+          "version": "0.3.0"
+        }
+      },
+      "rationale": {
+        "fix_key": "depguard/deps.path_requires_version/missing_version",
+        "description": "Adds version field to path dependencies for publishability",
+        "findings": [
+          {
+            "source": "depguard",
+            "check_id": "deps.path_requires_version",
+            "code": "missing_version",
+            "path": "crates/cli/Cargo.toml",
+            "line": 7
+          },
+          {
+            "source": "depguard",
+            "check_id": "deps.path_requires_version",
+            "code": "missing_version",
+            "path": "crates/cli/Cargo.toml",
+            "line": 8
+          }
+        ]
+      }
+    },
+    {
+      "id": "d28145dd-e099-521b-8914-67611b32d5cc",
+      "safety": "safe",
+      "blocked": false,
+      "target": {
+        "path": "crates/cli/Cargo.toml"
+      },
+      "kind": {
+        "type": "toml_transform",
+        "rule_id": "ensure_path_dep_has_version",
+        "args": {
+          "dep": "acme-core",
+          "dep_path": "../core",
+          "toml_path": [
+            "dependencies",
+            "acme-core"
+          ],
+          "version": "0.3.0"
+        }
+      },
+      "rationale": {
+        "fix_key": "depguard/deps.path_requires_version/missing_version",
+        "description": "Adds version field to path dependencies for publishability",
+        "findings": [
+          {
+            "source": "depguard",
+            "check_id": "deps.path_requires_version",
+            "code": "missing_version",
+            "path": "crates/cli/Cargo.toml",
+            "line": 7
+          },
+          {
+            "source": "depguard",
+            "check_id": "deps.path_requires_version",
+            "code": "missing_version",
+            "path": "crates/cli/Cargo.toml",
+            "line": 8
+          }
+        ]
+      }
+    }
+  ],
+  "summary": {
+    "ops_total": 8,
+    "ops_blocked": 0,
+    "files_touched": 4,
+    "patch_bytes": 1783,
+    "safety_counts": {
+      "safe": 8,
+      "guarded": 0,
+      "unsafe": 0
+    }
+  }
+}

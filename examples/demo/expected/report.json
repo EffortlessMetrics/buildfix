@@ -1,0 +1,57 @@
+{
+  "schema": "sensor.report.v1",
+  "tool": {
+    "name": "buildfix",
+    "version": "0.2.0"
+  },
+  "run": {
+    "started_at": "<timestamp>",
+    "ended_at": "<timestamp>",
+    "duration_ms": 0,
+    "git_head_sha": "<git-head-sha>"
+  },
+  "verdict": {
+    "status": "warn",
+    "counts": {
+      "info": 0,
+      "warn": 8,
+      "error": 0
+    }
+  },
+  "findings": [],
+  "capabilities": {
+    "check_ids": [
+      "deps.duplicate_dependency_versions",
+      "deps.path_requires_version",
+      "workspace.resolver_v2"
+    ],
+    "partial": false,
+    "inputs_available": [
+      "examples/demo/artifacts/builddiag/report.json",
+      "examples/demo/artifacts/depguard/report.json"
+    ]
+  },
+  "artifacts": {
+    "plan": "plan.json",
+    "patch": "patch.diff",
+    "comment": "comment.md"
+  },
+  "data": {
+    "buildfix": {
+      "plan": {
+        "files_touched": 4,
+        "fix_available": true,
+        "ops_applicable": 8,
+        "ops_blocked": 0,
+        "ops_total": 8,
+        "patch_bytes": 1783,
+        "plan_available": true,
+        "safety_counts": {
+          "guarded": 0,
+          "safe": 8,
+          "unsafe": 0
+        }
+      }
+    }
+  }
+}

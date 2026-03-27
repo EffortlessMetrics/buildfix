@@ -1,0 +1,7 @@
+# Enforce LF line endings for all fixture and expected files so diffs
+# are reproducible across platforms.
+*.toml text eol=lf
+*.json text eol=lf
+*.diff text eol=lf
+*.md   text eol=lf
+*.rs   text eol=lf
