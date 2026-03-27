@@ -32,33 +32,33 @@ Make releases boring and documentation trustworthy. Establish the operational fo
 
 #### Release Automation
 
-- [ ] Re-enable post-bootstrap release automation
-  - [ ] Enable tag-triggered `publish.yml` workflow
-  - [ ] Verify `cargo publish` dry-run passes
+- [x] Re-enable post-bootstrap release automation
+  - [x] Enable tag-triggered `publish.yml` workflow
+  - [x] Verify `cargo publish` dry-run passes
   - [ ] Test workflow on a release branch before merging
-- [ ] Create release runbook (`docs/release-runbook.md`)
-  - [ ] Document version bump procedure
-  - [ ] Document changelog update process
-  - [ ] Document tag and publish steps
-  - [ ] Include rollback procedure
+- [x] Create release runbook (`docs/release-runbook.md`)
+  - [x] Document version bump procedure
+  - [x] Document changelog update process
+  - [x] Document tag and publish steps
+  - [x] Include rollback procedure
 
 #### Documentation Cleanup
 
-- [ ] Rewrite stale docs to reflect current architecture
-  - [ ] Audit `docs/architecture.md` for accuracy
-  - [ ] Update `docs/design.md` with current patterns
+- [x] Rewrite stale docs to reflect current architecture
+  - [x] Audit `docs/architecture.md` for accuracy
+  - [x] Update `docs/design.md` with current patterns
   - [ ] Verify all code examples compile and run
-  - [ ] Remove or archive bootstrap-era notes
-- [ ] Ensure exit codes are documented
-  - [ ] Verify `docs/reference/exit-codes.md` is complete
+  - [x] Remove or archive bootstrap-era notes
+- [x] Ensure exit codes are documented
+  - [x] Verify `docs/reference/exit-codes.md` is complete
   - [ ] Cross-reference exit codes in CLI help text
 
 #### Quality Gates
 
-- [ ] Add tests to prevent `explain` / metadata drift
-  - [ ] Create test that validates `buildfix explain <fix>` output matches fixer implementation
-  - [ ] Add metadata consistency test for fix registry
-  - [ ] Ensure fix keys are documented and discoverable
+- [x] Add tests to prevent `explain` / metadata drift
+  - [x] Create test that validates `buildfix explain <fix>` output matches fixer implementation
+  - [x] Add metadata consistency test for fix registry
+  - [x] Ensure fix keys are documented and discoverable
 - [ ] Restore and sort parked stash
   - [ ] Review git stash for parked changes
   - [ ] File relevant items into docs cleanup or non-release notes
@@ -72,10 +72,10 @@ Make releases boring and documentation trustworthy. Establish the operational fo
 
 ### Success Criteria
 
-- [ ] Releasing v0.2.1 requires zero institutional knowledge (follow runbook)
-- [ ] `buildfix explain <fix>` output is verified by automated tests
-- [ ] All exit codes documented in `docs/reference/exit-codes.md`
-- [ ] No stale bootstrap-era content in docs
+- [x] Releasing v0.2.1 requires zero institutional knowledge (follow runbook)
+- [x] `buildfix explain <fix>` output is verified by automated tests
+- [x] All exit codes documented in `docs/reference/exit-codes.md`
+- [x] No stale bootstrap-era content in docs
 
 ### Effort Guidance
 

@@ -1,0 +1,205 @@
+# Adapter CI Workflow Template
+# 
+# This workflow provides comprehensive CI for buildfix adapter development.
+# Copy this file to your adapter repository and customize as needed.
+#
+# Features:
+# - Cross-platform testing (Ubuntu, Windows, macOS)
+# - Rust caching for faster builds
+# - Format checking, clippy linting
+# - Documentation building
+# - Publish dry-run validation
+# - Optional MSRV checking
+
+name: Adapter CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ============================================================================
+  # Test Job - Run tests on multiple platforms
+  # ============================================================================
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.os }}
+
+      - name: Run tests
+        run: cargo test --all-features
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  # ============================================================================
+  # Validate Job - Check code quality and documentation
+  # ============================================================================
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Check documentation builds
+        run: cargo doc --no-deps --document-private-items
+
+      - name: Check for documentation warnings
+        run: cargo doc --no-deps 2>&1 | grep -E "(warning|error)" || true
+
+  # ============================================================================
+  # MSRV Job - Verify Minimum Supported Rust Version (optional)
+  # ============================================================================
+  msrv:
+    name: MSRV Check
+    runs-on: ubuntu-latest
+    # Uncomment to enable MSRV checking
+    # continue-on-error: true
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read MSRV from Cargo.toml
+        id: msrv
+        run: |
+          MSRV=$(grep -oP 'rust-version\s*=\s*"\K[^"]+' Cargo.toml || echo "1.70.0")
+          echo "msrv=${MSRV}" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Install Rust toolchain (${{ steps.msrv.outputs.msrv }})
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.msrv }}
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check compilation with MSRV
+        run: cargo check --all-features
+
+  # ============================================================================
+  # Publish Dry-Run - Test that the crate can be published
+  # ============================================================================
+  publish-dry-run:
+    name: Publish Dry-Run
+    needs: [test, validate]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Dry-run publish
+        run: cargo publish --dry-run
+
+  # ============================================================================
+  # Adapter Harness Validation - Run buildfix adapter test harness
+  # ============================================================================
+  adapter-harness:
+    name: Adapter Harness
+    needs: [test, validate]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install buildfix-adapter-sdk
+        run: |
+          # If your adapter uses the buildfix-adapter-sdk test harness,
+          # ensure it's available for validation
+          cargo check --all-features
+
+      - name: Validate adapter fixtures
+        run: |
+          # Check that test fixtures exist and are valid JSON
+          if [ -d "tests/fixtures" ]; then
+            for file in tests/fixtures/*.json tests/fixtures/*.jsonl tests/fixtures/*.sarif; do
+              if [ -f "$file" ]; then
+                echo "Validating $file"
+                if [[ "$file" == *.jsonl ]]; then
+                  # Validate each line as JSON
+                  while IFS= read -r line; do
+                    echo "$line" | python3 -m json.tool > /dev/null || exit 1
+                  done < "$file"
+                else
+                  python3 -m json.tool "$file" > /dev/null || exit 1
+                fi
+              fi
+            done
+          fi
+        shell: bash
+
+  # ============================================================================
+  # Security Audit - Check for known vulnerabilities
+  # ============================================================================
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-audit
+        uses: rustsec/audit-action@v2
+        with:
+          ignore: RUSTSEC-2024-0384  # Add any ignored advisories here

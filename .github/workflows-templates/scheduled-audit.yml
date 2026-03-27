@@ -1,0 +1,440 @@
+# buildfix Scheduled Audit Workflow Template
+#
+# This workflow runs periodic security and hygiene audits using cargo-audit,
+# cargo-deny, and other tools. It generates receipts and creates repair plans.
+#
+# Usage:
+# 1. Copy this file to .github/workflows/scheduled-audit.yml
+# 2. Customize the schedule (cron expression) below
+# 3. Enable GitHub Issues or Slack notifications as needed
+#
+# Schedule Examples:
+# - '0 0 * * 0'  - Weekly on Sunday at midnight UTC
+# - '0 6 * * 1'  - Weekly on Monday at 6 AM UTC
+# - '0 0 1 * *'  - Monthly on the 1st at midnight UTC
+
+name: buildfix Scheduled Audit
+
+on:
+  schedule:
+    # Run weekly on Sunday at midnight UTC
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+    inputs:
+      full_scan:
+        description: 'Run full scan including all tools'
+        required: false
+        default: 'true'
+        type: boolean
+
+permissions:
+  contents: read
+  issues: write
+  actions: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ============================================================================
+  # Security Audit - Run cargo-audit for vulnerability scanning
+  # ============================================================================
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    outputs:
+      vulnerabilities: ${{ steps.audit.outputs.vulnerabilities }}
+      has_issues: ${{ steps.audit.outputs.has_issues }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Run cargo-audit
+        id: audit
+        run: |
+          mkdir -p artifacts/cargo-audit
+          
+          # Run audit and capture output
+          cargo audit --format json > artifacts/cargo-audit/report.json 2>&1 || true
+          
+          # Count vulnerabilities
+          VULN_COUNT=$(cat artifacts/cargo-audit/report.json | jq '.vulnerabilities.count // 0' 2>/dev/null || echo "0")
+          
+          echo "vulnerabilities=$VULN_COUNT" >> $GITHUB_OUTPUT
+          
+          if [ "$VULN_COUNT" -gt 0 ]; then
+            echo "has_issues=true" >> $GITHUB_OUTPUT
+            echo "::warning::Found $VULN_COUNT vulnerabilities"
+          else
+            echo "has_issues=false" >> $GITHUB_OUTPUT
+            echo "✅ No vulnerabilities found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload audit results
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-audit
+          path: artifacts/cargo-audit/
+          retention-days: 90
+
+  # ============================================================================
+  # Dependency Audit - Run cargo-deny for license and security checks
+  # ============================================================================
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    outputs:
+      has_issues: ${{ steps.deny.outputs.has_issues }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+
+      - name: Run cargo-deny
+        id: deny
+        run: |
+          mkdir -p artifacts/cargo-deny
+          
+          # Run all deny checks
+          cargo deny check --format json > artifacts/cargo-deny/report.json 2>&1 || true
+          
+          # Check for issues
+          if grep -q '"level":"error"' artifacts/cargo-deny/report.json 2>/dev/null; then
+            echo "has_issues=true" >> $GITHUB_OUTPUT
+            echo "::warning::cargo-deny found issues"
+          else
+            echo "has_issues=false" >> $GITHUB_OUTPUT
+            echo "✅ No dependency issues found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload deny results
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-audit
+          path: artifacts/cargo-deny/
+          retention-days: 90
+
+  # ============================================================================
+  # Unused Dependencies - Run cargo-machete and cargo-udeps
+  # ============================================================================
+  unused-deps:
+    name: Unused Dependencies
+    runs-on: ubuntu-latest
+    outputs:
+      has_issues: ${{ steps.machete.outputs.has_issues }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-machete
+        run: cargo install cargo-machete --locked
+
+      - name: Run cargo-machete
+        id: machete
+        run: |
+          mkdir -p artifacts/cargo-machete
+          
+          cargo machete --with-metadata 2>&1 | tee artifacts/cargo-machete/report.json || true
+          
+          # Check if any unused deps were found
+          if grep -q 'unused' artifacts/cargo-machete/report.json 2>/dev/null; then
+            echo "has_issues=true" >> $GITHUB_OUTPUT
+            echo "::warning::Found unused dependencies"
+          else
+            echo "has_issues=false" >> $GITHUB_OUTPUT
+            echo "✅ No unused dependencies found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload machete results
+        uses: actions/upload-artifact@v4
+        with:
+          name: unused-deps
+          path: artifacts/cargo-machete/
+          retention-days: 90
+
+  # ============================================================================
+  # Outdated Dependencies - Check for outdated packages
+  # ============================================================================
+  outdated-deps:
+    name: Outdated Dependencies
+    runs-on: ubuntu-latest
+    outputs:
+      has_issues: ${{ steps.outdated.outputs.has_issues }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-outdated
+        run: cargo install cargo-outdated --locked
+
+      - name: Run cargo-outdated
+        id: outdated
+        run: |
+          mkdir -p artifacts/cargo-outdated
+          
+          cargo outdated --format json 2>&1 | tee artifacts/cargo-outdated/report.json || true
+          
+          # Check if any outdated deps were found
+          OUTDATED_COUNT=$(cat artifacts/cargo-outdated/report.json | jq 'length' 2>/dev/null || echo "0")
+          
+          if [ "$OUTDATED_COUNT" -gt 0 ]; then
+            echo "has_issues=true" >> $GITHUB_OUTPUT
+            echo "::warning::Found $OUTDATED_COUNT outdated dependencies"
+          else
+            echo "has_issues=false" >> $GITHUB_OUTPUT
+            echo "✅ All dependencies are up to date" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload outdated results
+        uses: actions/upload-artifact@v4
+        with:
+          name: outdated-deps
+          path: artifacts/cargo-outdated/
+          retention-days: 90
+
+  # ============================================================================
+  # Generate Plan - Create repair plan from all receipts
+  # ============================================================================
+  generate-plan:
+    name: Generate Repair Plan
+    runs-on: ubuntu-latest
+    needs: [security-audit, dependency-audit, unused-deps, outdated-deps]
+    if: always()
+    outputs:
+      has_plan: ${{ steps.plan.outputs.has_plan }}
+      plan_exit_code: ${{ steps.plan.outputs.exit_code }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Reorganize artifacts
+        run: |
+          # Move artifacts to expected structure
+          mkdir -p artifacts/combined
+          
+          if [ -d artifacts/security-audit ]; then
+            cp -r artifacts/security-audit/* artifacts/combined/cargo-audit/ 2>/dev/null || true
+          fi
+          
+          if [ -d artifacts/dependency-audit ]; then
+            cp -r artifacts/dependency-audit/* artifacts/combined/cargo-deny/ 2>/dev/null || true
+          fi
+          
+          if [ -d artifacts/unused-deps ]; then
+            cp -r artifacts/unused-deps/* artifacts/combined/cargo-machete/ 2>/dev/null || true
+          fi
+          
+          if [ -d artifacts/outdated-deps ]; then
+            cp -r artifacts/outdated-deps/* artifacts/combined/cargo-outdated/ 2>/dev/null || true
+          fi
+
+      - name: Install buildfix
+        run: cargo install buildfix --locked || cargo build --release -p buildfix
+
+      - name: Generate repair plan
+        id: plan
+        run: |
+          mkdir -p buildfix-output
+          
+          cargo run -p buildfix -- plan \
+            --artifacts-dir artifacts/combined \
+            --out-dir buildfix-output \
+            --format json markdown
+          
+          EXIT_CODE=$?
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+          
+          if [ -f buildfix-output/plan.json ] && [ -s buildfix-output/plan.json ]; then
+            echo "has_plan=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_plan=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: buildfix-audit-plan-${{ github.run_id }}
+          path: |
+            buildfix-output/plan.json
+            buildfix-output/plan.md
+            buildfix-output/patch.diff
+          retention-days: 90
+
+  # ============================================================================
+  # Create Issue - Create GitHub issue if issues found
+  # ============================================================================
+  create-issue:
+    name: Create Audit Issue
+    runs-on: ubuntu-latest
+    needs: [security-audit, dependency-audit, unused-deps, outdated-deps, generate-plan]
+    if: |
+      always() && 
+      (needs.security-audit.outputs.has_issues == 'true' ||
+       needs.dependency-audit.outputs.has_issues == 'true' ||
+       needs.unused-deps.outputs.has_issues == 'true' ||
+       needs.outdated-deps.outputs.has_issues == 'true')
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download plan
+        uses: actions/download-artifact@v4
+        with:
+          name: buildfix-audit-plan-${{ github.run_id }}
+          path: buildfix-output/
+
+      - name: Create audit issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Read plan if available
+            let planSummary = 'No plan generated';
+            if (fs.existsSync('buildfix-output/plan.md')) {
+              planSummary = fs.readFileSync('buildfix-output/plan.md', 'utf8');
+            }
+            
+            // Build issue body
+            const body = `## buildfix Scheduled Audit Report
+            
+            **Run Date:** ${new Date().toISOString().split('T')[0]}
+            **Run ID:** ${{ github.run_id }}
+            
+            ### Summary
+            
+            | Check | Status |
+            |-------|--------|
+            | Security Audit | ${{ needs.security-audit.outputs.has_issues == 'true' && '⚠️ Issues Found' || '✅ Passed' }} |
+            | Dependency Audit | ${{ needs.dependency-audit.outputs.has_issues == 'true' && '⚠️ Issues Found' || '✅ Passed' }} |
+            | Unused Dependencies | ${{ needs.unused-deps.outputs.has_issues == 'true' && '⚠️ Issues Found' || '✅ Passed' }} |
+            | Outdated Dependencies | ${{ needs.outdated-deps.outputs.has_issues == 'true' && '⚠️ Issues Found' || '✅ Passed' }} |
+            
+            ### Plan Summary
+            
+            <details>
+            <summary>📋 View Plan</summary>
+            
+            \`\`\`markdown
+            ${planSummary.substring(0, 60000)}
+            \`\`\`
+            </details>
+            
+            ### Actions Required
+            
+            1. Review the plan above
+            2. Download the full plan artifact from the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            3. Apply fixes manually or trigger the main-lane workflow
+            
+            ---
+            *This issue was automatically created by the buildfix scheduled audit workflow.*
+            `;
+            
+            // Check for existing open audit issue
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'buildfix-audit',
+              per_page: 1
+            });
+            
+            if (issues.length > 0) {
+              // Update existing issue
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issues[0].number,
+                body: `## Audit Update - ${new Date().toISOString().split('T')[0]}\n\n${body}`
+              });
+            } else {
+              // Create new issue
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `🔧 buildfix Audit Report - ${new Date().toISOString().split('T')[0]}`,
+                body: body,
+                labels: ['buildfix-audit', 'automated'],
+                assignees: ['${{ github.repository_owner }}']
+              });
+            }
+
+  # ============================================================================
+  # Summary - Generate workflow summary
+  # ============================================================================
+  summary:
+    name: Audit Summary
+    runs-on: ubuntu-latest
+    needs: [security-audit, dependency-audit, unused-deps, outdated-deps, generate-plan]
+    if: always()
+    
+    steps:
+      - name: Generate summary
+        run: |
+          echo "# buildfix Scheduled Audit Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** $(date -u +'%Y-%m-%d')" >> $GITHUB_STEP_SUMMARY
+          echo "**Run ID:** ${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status | Issues |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Audit | ${{ needs.security-audit.result }} | ${{ needs.security-audit.outputs.vulnerabilities || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dependency Audit | ${{ needs.dependency-audit.result }} | ${{ needs.dependency-audit.outputs.has_issues == 'true' && '⚠️' || '✅' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Unused Deps | ${{ needs.unused-deps.result }} | ${{ needs.unused-deps.outputs.has_issues == 'true' && '⚠️' || '✅' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Outdated Deps | ${{ needs.outdated-deps.result }} | ${{ needs.outdated-deps.outputs.has_issues == 'true' && '⚠️' || '✅' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Plan" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Plan Generated:** ${{ needs.generate-plan.outputs.has_plan }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Exit Code:** ${{ needs.generate-plan.outputs.plan_exit_code }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "[📥 Download Artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY

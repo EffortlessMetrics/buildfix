@@ -1,26 +1,115 @@
 # Architecture
 
-buildfix is split into small crates with clear responsibilities:
+buildfix uses a microcrate architecture with clear separation of concerns. Each crate has a single responsibility and minimal dependencies.
 
 ## Crate Overview
 
 ```
-buildfix-types      Shared DTOs and schemas (wire format)
-       ↓
-buildfix-receipts   Tolerant receipt loader
-       ↓
-buildfix-domain     Core planning logic (what to fix)
-       ↓
-buildfix-edit       Deterministic edit engine (how to fix)
-       ↓
-buildfix-render     Markdown artifact rendering
-       ↓
-buildfix-cli        CLI entry point
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              INTAKE LAYER                                    │
+│  Receipt adapters translate sensor outputs → normalized findings             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ buildfix-adapter-sdk           Adapter SDK (traits + test harness)           │
+│ buildfix-receipts-sarif        Generic SARIF intake                          │
+│ buildfix-receipts-cargo-*      Cargo tool adapters (deny, machete, etc.)     │
+│ buildfix-receipts-clippy       Clippy lint intake                            │
+│ buildfix-receipts-rustc-json   rustc JSON message intake                     │
+│ buildfix-receipts-rustfmt      rustfmt output intake                         │
+│ buildfix-receipts-depguard     depguard intake                               │
+│ buildfix-receipts-tarpaulin    tarpaulin coverage intake                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    ↓
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              CORE TYPES                                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ buildfix-types                 Shared DTOs and schemas (wire format)         │
+│ buildfix-hash                  SHA256 utilities                              │
+│ buildfix-artifacts             Artifact path management                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    ↓
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              FIXER LAYER                                     │
+│  Each fixer is an independent microcrate                                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ buildfix-fixer-api             Fixer trait + common types                    │
+│ buildfix-fixer-resolver-v2     Workspace resolver = "2"                      │
+│ buildfix-fixer-path-dep-version  Add version to path deps                   │
+│ buildfix-fixer-workspace-inheritance  Use workspace = true                  │
+│ buildfix-fixer-duplicate-deps  Consolidate duplicate dep versions            │
+│ buildfix-fixer-remove-unused-deps  Remove sensor-reported unused deps       │
+│ buildfix-fixer-msrv            Normalize MSRV                                │
+│ buildfix-fixer-edition         Normalize edition                             │
+│ buildfix-fixer-license         Normalize package.license from workspace      │
+│ buildfix-fixer-catalog         Registry of all built-in fixers               │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    ↓
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              DOMAIN LAYER                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ buildfix-domain                Core planning logic (what to fix)             │
+│ buildfix-domain-policy         Policy evaluation (allow/deny/caps)           │
+│ buildfix-core                  Pipeline orchestration                        │
+│ buildfix-core-runtime          Runtime adapters (filesystem, git)            │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    ↓
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              OUTPUT LAYER                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ buildfix-edit                  Deterministic edit engine (how to fix)        │
+│ buildfix-render                Markdown artifact rendering                   │
+│ buildfix-report                Report generation                             │
+│ buildfix-cli                   CLI entry point                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    ↓
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              TESTING                                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ buildfix-bdd                   Cucumber BDD tests                            │
+│ xtask                          Build helpers (print-schemas, init-artifacts) │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Crate Responsibilities
 
-### buildfix-types
+### Intake Layer
+
+#### buildfix-adapter-sdk
+SDK for writing intake adapters. Provides traits, test harness, and receipt builder utilities.
+
+**Key types:**
+- `IntakeAdapter` trait - Transform sensor output → normalized findings
+- `ReceiptBuilder` - Build valid receipt structures
+- Test harness for adapter validation
+
+#### buildfix-receipts-cargo-*
+Microcrates for each Cargo tool (deny, machete, udeps, outdated, lock, update, tree, bloat, llvm-lines, cyclonedds, geiger, semver-checks, warn, msrv, krate, audit, sec-audit, audit-freeze, crev, miri, spellcheck, unused-function).
+
+Each adapter:
+- Parses tool-specific output format
+- Normalizes to standard `Finding` structure
+- Provides test fixtures for validation
+
+#### buildfix-receipts-sarif
+Generic SARIF (Static Analysis Results Interchange Format) intake for tools emitting standard SARIF output.
+
+#### buildfix-receipts-clippy
+Clippy lint intake from JSON messages.
+
+#### buildfix-receipts-rustc-json
+rustc JSON message intake for edition, MSRV, and compilation findings.
+
+#### buildfix-receipts-rustfmt
+rustfmt diff/output intake.
+
+#### buildfix-receipts-depguard
+depguard dependency guard intake.
+
+#### buildfix-receipts-tarpaulin
+tarpaulin coverage report intake.
+
+### Core Types
+
+#### buildfix-types
 Wire format definitions for all buildfix artifacts. Intentionally conservative with schema changes.
 
 **Key types:**
@@ -30,28 +119,70 @@ Wire format definitions for all buildfix artifacts. Intentionally conservative w
 - `ReceiptEnvelope`, `Finding` - Receipt format
 - `BuildfixApply`, `ApplyResult` - Apply results
 
-### buildfix-receipts
-Tolerant loader that reads `artifacts/*/report.json`. Collects errors without failing, sorts results deterministically.
+#### buildfix-hash
+SHA256 hashing utilities for precondition computation.
 
-### buildfix-domain
+#### buildfix-artifacts
+Artifact path management and discovery.
+
+### Fixer Layer
+
+#### buildfix-fixer-api
+Core fixer trait and common types shared by all fixers.
+
+**Key types:**
+- `Fixer` trait - Individual fix implementation
+- `FixerMeta` - Metadata (fix key, safety, sensors, check IDs)
+
+#### buildfix-fixer-resolver-v2
+Workspace resolver = "2" fixer.
+
+#### buildfix-fixer-path-dep-version
+Add version to path dependencies.
+
+#### buildfix-fixer-workspace-inheritance
+Use workspace = true for dependencies.
+
+#### buildfix-fixer-duplicate-deps
+Consolidate duplicate dependency versions.
+
+#### buildfix-fixer-remove-unused-deps
+Remove sensor-reported unused dependencies.
+
+#### buildfix-fixer-msrv
+Normalize MSRV across workspace.
+
+#### buildfix-fixer-edition
+Normalize Rust edition across workspace.
+
+#### buildfix-fixer-license
+Normalize package.license from workspace.
+
+#### buildfix-fixer-catalog
+Registry aggregating all built-in fixers.
+
+### Domain Layer
+
+#### buildfix-domain
 Core planning logic. Decides *what* should change based on receipts.
 
 **Key abstractions:**
 - `RepoView` trait - Read-only repo access (enables testing)
-- `Fixer` trait - Individual fix implementation
 - `Planner` - Orchestrates fixers to produce plans
+- `ReceiptSet` - Normalized collection of findings
 
-**Built-in fixers:**
-- `ResolverV2Fixer` - Workspace resolver = "2"
-- `PathDepVersionFixer` - Add version to path deps
-- `WorkspaceInheritanceFixer` - Use workspace = true
-- `DuplicateDepsConsolidationFixer` - Consolidate duplicate dep versions
-- `RemoveUnusedDepsFixer` - Remove sensor-reported unused deps
-- `MsrvNormalizeFixer` - Normalize MSRV
-- `EditionUpgradeFixer` - Normalize edition
-- `LicenseNormalizeFixer` - Normalize package.license from workspace
+#### buildfix-domain-policy
+Policy evaluation for allow/deny lists and capability caps.
 
-### buildfix-edit
+#### buildfix-core
+Pipeline orchestration connecting all layers.
+
+#### buildfix-core-runtime
+Runtime adapters implementing domain ports (filesystem, git operations).
+
+### Output Layer
+
+#### buildfix-edit
 Deterministic edit engine for TOML, anchored text replacements, and mechanical
 JSON/YAML path edits. Decides *how* to modify files.
 
@@ -60,16 +191,21 @@ JSON/YAML path edits. Decides *how* to modify files.
 - `preview_patch()` - Generate diff without writing
 - `apply_plan()` - Execute plan with optional backups
 
-### buildfix-render
+#### buildfix-render
 Markdown rendering for `plan.md` and `apply.md` artifacts.
 
-### buildfix-cli
+#### buildfix-report
+Report generation and aggregation.
+
+#### buildfix-cli
 CLI entry point wiring clap + all modules. Subcommands: `plan`, `apply`, `explain`, `list-fixes`, `validate`.
 
-### buildfix-bdd
+### Testing
+
+#### buildfix-bdd
 Cucumber BDD tests for end-to-end workflow contracts.
 
-### xtask
+#### xtask
 Build helpers: `print-schemas`, `init-artifacts`.
 
 ## Data Flow

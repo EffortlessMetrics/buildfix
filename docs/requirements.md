@@ -117,22 +117,25 @@ Defaults:
 - Apply verifies preconditions and refuses if the repo changed.
 - Apply always produces an audit trail (patch + apply.json).
 
-## v0.1 fix set (allowlisted)
+## Current fix set
 
-Only ops that are provably deterministic from repo-local truth:
+All ops are provably deterministic from repo-local truth:
 
 1. Workspace resolver v2 (`[workspace].resolver = "2"`)
 2. Path dependency requires version (read target crate version)
 3. Workspace dependency inheritance normalization (preserve flags)
-4. MSRV normalization when a single declared source-of-truth exists
+4. Duplicate dependency consolidation (same version)
+5. Remove unused dependencies (sensor-reported)
+6. MSRV normalization when a single declared source-of-truth exists
+7. Edition normalization across workspace
+8. License normalization from workspace
 
-Everything else is deferred.
+## Definition of done
 
-## Definition of done (v0.1)
-
-- Plan/apply artifacts + schema validation in CI
-- At least 4 fixers (above) with golden fixtures
-- BDD feature coverage for plan/apply + safety gates
-- Proptest on TOML editing invariants (semantic preservation)
-- Fuzz targets for receipt parsing and TOML transforms
-- Mutation testing on domain policy/planner logic
+- [x] Plan/apply artifacts + schema validation in CI
+- [x] 8 fixers with golden fixtures
+- [x] BDD feature coverage for plan/apply + safety gates
+- [x] Proptest on TOML editing invariants (semantic preservation)
+- [x] Fuzz targets for receipt parsing and TOML transforms
+- [x] Microcrate architecture for fixers and intake adapters
+- [x] Adapter SDK for extending intake sources

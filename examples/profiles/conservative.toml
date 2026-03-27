@@ -1,0 +1,65 @@
+# buildfix Profile: Conservative
+#
+# This profile is designed for CI pipelines that should never break builds.
+# Only "safe" operations are allowed - these are changes that are fully
+# determined from repository truth and have no risk of breaking functionality.
+#
+# Use this profile when:
+# - Running in automated CI pipelines
+# - You want zero risk of build failures from buildfix changes
+# - You prefer to review all non-trivial changes manually
+#
+# Usage:
+#   cp examples/profiles/conservative.toml buildfix.toml
+#   cargo run -p buildfix -- apply --apply
+
+[policy]
+# Only allow safe operations - guarded and unsafe ops are blocked
+# Safe ops are fully determined from repo truth with no side effects
+allow = [
+  # Resolver v2 - updates workspace resolver to version 2
+  # This is the modern, recommended resolver for Cargo workspaces
+  "builddiag/workspace.resolver_v2/*",
+
+  # Path dependency version - adds version to path dependencies
+  # Required for publishing crates that depend on workspace members
+  "depguard/deps.path_requires_version/*",
+
+  # Workspace inheritance - consolidates deps to use workspace = true
+  # Reduces duplication and ensures consistency across workspace members
+  "depguard/deps.workspace_inheritance/*",
+
+  # Duplicate dependencies - consolidates duplicate dep versions
+  # Ensures only one version of each dependency is used
+  "depguard/deps.duplicate_dependency_versions/*",
+]
+
+# Explicitly deny nothing - rely on allowlist for control
+deny = []
+
+# Guarded ops require explicit opt-in via --allow-guarded flag
+# These are kept disabled for maximum safety
+allow_guarded = false
+
+# Unsafe ops require explicit opt-in and parameters
+# These are kept disabled for maximum safety
+allow_unsafe = false
+
+# Require clean working tree before applying changes
+# This prevents accidental overwrites of uncommitted work
+allow_dirty = false
+
+# Conservative limits to prevent runaway operations
+max_ops = 20          # Maximum 20 operations per plan
+max_files = 10        # Maximum 10 files to modify
+max_patch_bytes = 50000  # Maximum 50KB patch size
+
+[backups]
+# Always create backups before modifying files
+enabled = true
+suffix = ".buildfix.bak"
+
+[params]
+# No parameters needed - unsafe ops are disabled
+# If you need to enable unsafe ops later, add parameters here:
+# rust_version = "1.75"

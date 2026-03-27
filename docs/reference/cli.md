@@ -218,8 +218,22 @@ buildfix reads `buildfix.toml` from the repository root. See [Configuration Sche
 
 CLI options override config file values where applicable.
 
+## Exit Codes
+
+buildfix uses semantic exit codes to indicate the result of operations:
+
+| Code | Name | Meaning |
+|------|------|---------|
+| 0 | Success | Operation completed successfully (plan generated, changes applied, etc.) |
+| 1 | Error | Tool or runtime error (invalid input, I/O failure, missing files, etc.) |
+| 2 | Policy Block | Policy-based refusal (precondition mismatch, guarded/unsafe ops blocked, dirty tree) |
+
+Exit code 2 is intentional behavior, not an error—it indicates buildfix refused to proceed due to safety constraints. For example, `buildfix apply --apply` without `--allow-guarded` will exit 2 if the plan contains guarded operations.
+
+For detailed information on each exit code and troubleshooting guidance, see [Exit Codes](exit-codes.md).
+
 ## See Also
 
-- [Exit Codes](exit-codes.md)
-- [Configuration Schema](config.md)
-- [Output Schemas](schemas.md)
+- [Exit Codes](exit-codes.md) — Detailed exit code documentation and troubleshooting
+- [Configuration Schema](config.md) — buildfix.toml options
+- [Output Schemas](schemas.md) — JSON schema reference

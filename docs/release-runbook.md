@@ -2,7 +2,7 @@
 
 > **Version**: 1.0  
 > **Last Updated**: 2026-03-16  
-> **Applies to**: v0.2.x releases and beyond
+> **Applies to**: v0.3.x releases and beyond
 
 This runbook captures the lessons learned from the v0.2.0 release to make future releases repeatable and require zero institutional knowledge.
 
@@ -78,9 +78,9 @@ The publish order is determined by the dependency graph. **Do not deviate from t
 
 ```
 Layer 0: buildfix-types, buildfix-hash (no internal deps)
-Layer 1: buildfix-receipts, buildfix-render, buildfix-edit
+Layer 1: buildfix-adapter-sdk, buildfix-receipts-sarif, buildfix-render, buildfix-edit
 Layer 2: buildfix-fixer-api, buildfix-report, buildfix-artifacts, buildfix-fixer-catalog
-Layer 3: buildfix-domain-policy, individual fixer crates, buildfix-core-runtime
+Layer 3: buildfix-domain-policy, individual fixer crates, buildfix-core-runtime, intake adapters
 Layer 4: buildfix-domain
 Layer 5: buildfix-core
 Layer 6: buildfix-cli
@@ -98,7 +98,8 @@ cargo publish -p buildfix-hash
 # === LAYER 1 ===
 # Wait for Layer 0 to be indexed by crates.io (30-60 seconds each)
 
-cargo publish -p buildfix-receipts
+cargo publish -p buildfix-adapter-sdk
+cargo publish -p buildfix-receipts-sarif
 cargo publish -p buildfix-render
 cargo publish -p buildfix-edit
 
@@ -124,6 +125,35 @@ cargo publish -p buildfix-fixer-remove-unused-deps
 cargo publish -p buildfix-fixer-msrv
 cargo publish -p buildfix-fixer-edition
 cargo publish -p buildfix-fixer-license
+
+# Intake adapter crates (depend on adapter-sdk)
+cargo publish -p buildfix-receipts-cargo-crev
+cargo publish -p buildfix-receipts-cargo-deny
+cargo publish -p buildfix-receipts-cargo-udeps
+cargo publish -p buildfix-receipts-cargo-machete
+cargo publish -p buildfix-receipts-cargo-outdated
+cargo publish -p buildfix-receipts-cargo-lock
+cargo publish -p buildfix-receipts-cargo-update
+cargo publish -p buildfix-receipts-depguard
+cargo publish -p buildfix-receipts-rustc-json
+cargo publish -p buildfix-receipts-clippy
+cargo publish -p buildfix-receipts-rustfmt
+cargo publish -p buildfix-receipts-cargo-miri
+cargo publish -p buildfix-receipts-cargo-spellcheck
+cargo publish -p buildfix-receipts-cargo-audit
+cargo publish -p buildfix-receipts-cargo-sec-audit
+cargo publish -p buildfix-receipts-cargo-tree
+cargo publish -p buildfix-receipts-cargo-bloat
+cargo publish -p buildfix-receipts-cargo-llvm-lines
+cargo publish -p buildfix-receipts-cargo-cyclonedds
+cargo publish -p buildfix-receipts-cargo-geiger
+cargo publish -p buildfix-receipts-cargo-semver-checks
+cargo publish -p buildfix-receipts-cargo-warn
+cargo publish -p buildfix-receipts-cargo-msrv
+cargo publish -p buildfix-receipts-cargo-krate
+cargo publish -p buildfix-receipts-tarpaulin
+cargo publish -p buildfix-receipts-cargo-audit-freeze
+cargo publish -p buildfix-receipts-cargo-unused-function
 
 # Core runtime (needs edit + receipts)
 cargo publish -p buildfix-core-runtime
@@ -497,4 +527,5 @@ buildfix --version
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-03-20 | 1.1 | Updated dependency graph to include all intake adapters; added missing adapter crates to publish sequence |
 | 2026-03-16 | 1.0 | Initial runbook created from v0.2.0 release lessons |

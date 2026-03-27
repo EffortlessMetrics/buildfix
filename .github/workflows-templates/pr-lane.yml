@@ -1,0 +1,234 @@
+# buildfix PR Lane Workflow Template
+#
+# This workflow runs buildfix in plan-only mode on pull requests.
+# It generates a repair plan and uploads it as an artifact.
+# Optionally, it can post a plan summary as a PR comment.
+#
+# Usage:
+# 1. Copy this file to .github/workflows/pr-lane.yml
+# 2. Customize the configuration below
+# 3. Enable PR comments by adding a GITHUB_TOKEN secret (or use the default token)
+#
+# Exit Codes:
+# - 0: Success (no issues or plan generated successfully)
+# - 2: Policy block (precondition mismatch, denied fix)
+# - 1: Tool error
+
+name: buildfix PR Lane
+
+on:
+  pull_request:
+    branches: [main, master]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+# Required permissions for PR comments
+permissions:
+  pull-requests: write
+  contents: read
+  actions: read
+
+# Prevent concurrent runs on the same PR
+concurrency:
+  group: buildfix-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ============================================================================
+  # Plan Job - Generate repair plan without applying changes
+  # ============================================================================
+  plan:
+    name: Generate Repair Plan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Fetch full history for accurate drift detection
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install buildfix
+        run: cargo install buildfix --locked || cargo build --release -p buildfix
+
+      # =========================================================================
+      # Sensor Phase - Run tools that generate receipts
+      # Customize this section based on your project's needs
+      # =========================================================================
+      - name: Run cargo-machete (unused dependencies)
+        continue-on-error: true
+        run: |
+          cargo install cargo-machete --locked
+          mkdir -p artifacts/cargo-machete
+          cargo machete --with-metadata 2>&1 | tee artifacts/cargo-machete/report.json || true
+
+      - name: Run cargo-deny (security and license checks)
+        continue-on-error: true
+        run: |
+          cargo install cargo-deny --locked
+          mkdir -p artifacts/cargo-deny
+          cargo deny check --format json 2>&1 | tee artifacts/cargo-deny/report.json || true
+
+      - name: Run cargo-outdated (dependency freshness)
+        continue-on-error: true
+        run: |
+          cargo install cargo-outdated --locked
+          mkdir -p artifacts/cargo-outdated
+          cargo outdated --format json 2>&1 | tee artifacts/cargo-outdated/report.json || true
+
+      - name: Run Clippy (linting)
+        continue-on-error: true
+        run: |
+          cargo clippy --message-format=json 2>&1 | tee artifacts/clippy/report.json || true
+        env:
+          RUSTFLAGS: "-D warnings"
+
+      # =========================================================================
+      # Plan Phase - Generate repair plan from receipts
+      # =========================================================================
+      - name: Generate repair plan
+        id: plan
+        run: |
+          mkdir -p buildfix-output
+          
+          # Run buildfix plan (plan-only mode, no changes applied)
+          cargo run -p buildfix -- plan \
+            --artifacts-dir artifacts \
+            --out-dir buildfix-output \
+            --format json markdown
+          
+          # Capture exit code
+          EXIT_CODE=$?
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+          
+          # Handle exit codes
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "✅ Plan generated successfully" >> $GITHUB_STEP_SUMMARY
+          elif [ $EXIT_CODE -eq 2 ]; then
+            echo "status=policy_block" >> $GITHUB_OUTPUT
+            echo "⚠️ Policy block - review plan manually" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "status=error" >> $GITHUB_OUTPUT
+            echo "❌ Error generating plan (exit code: $EXIT_CODE)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload plan artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: buildfix-plan-${{ github.event.pull_request.number }}
+          path: |
+            buildfix-output/plan.json
+            buildfix-output/plan.md
+            buildfix-output/patch.diff
+          retention-days: 30
+
+      # =========================================================================
+      # PR Comment - Post plan summary (optional)
+      # =========================================================================
+      - name: Generate plan summary
+        id: summary
+        if: always()
+        run: |
+          if [ -f buildfix-output/plan.md ]; then
+            # Extract summary from plan.md
+            echo "plan_summary<<EOF" >> $GITHUB_OUTPUT
+            head -100 buildfix-output/plan.md >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "plan_summary=No plan generated" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Post PR comment
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const planSummary = `${{ steps.summary.outputs.plan_summary }}`;
+            const exitCode = `${{ steps.plan.outputs.exit_code }}`;
+            const status = `${{ steps.plan.outputs.status }}`;
+            
+            let statusEmoji = '✅';
+            let statusText = 'Success';
+            
+            if (exitCode === '2') {
+              statusEmoji = '⚠️';
+              statusText = 'Policy Block - Manual Review Required';
+            } else if (exitCode !== '0') {
+              statusEmoji = '❌';
+              statusText = 'Error';
+            }
+            
+            const body = `## buildfix Plan Report ${statusEmoji}
+            
+            **Status:** ${statusText}
+            **Commit:** \`${{ github.sha }}\`
+            
+            <details>
+            <summary>📋 Plan Summary</summary>
+            
+            \`\`\`markdown
+            ${planSummary}
+            \`\`\`
+            </details>
+            
+            📥 [Download full plan artifact](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            
+            ---
+            *This plan was generated in plan-only mode. No changes were applied.*
+            `;
+            
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(c => 
+              c.user.type === 'Bot' && 
+              c.body.includes('buildfix Plan Report')
+            );
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
+
+      # =========================================================================
+      # Status Check - Fail workflow on policy block or error
+      # =========================================================================
+      - name: Check plan status
+        if: always()
+        run: |
+          EXIT_CODE=${{ steps.plan.outputs.exit_code }}
+          
+          if [ "$EXIT_CODE" -eq 2 ]; then
+            echo "::warning::Policy block detected - review plan manually"
+            # Uncomment the next line to fail on policy blocks
+            # exit 2
+          elif [ "$EXIT_CODE" -ne 0 ]; then
+            echo "::error::buildfix failed with exit code $EXIT_CODE"
+            exit 1
+          fi

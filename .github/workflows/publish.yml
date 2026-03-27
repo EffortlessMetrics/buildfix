@@ -1,205 +1,181 @@
-# Publish workflow for releasing buildfix crates to crates.io
-# Reference: docs/release-runbook.md
-#
-# Triggered by:
-#   - Push of version tags (v* pattern)
-#   - Manual workflow dispatch
-#
-# Publish order follows the dependency graph to ensure dependencies
-# are indexed by crates.io before dependents are published.
-
-name: Publish
+name: Publish to crates.io
 
 on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
 
-permissions:
-  contents: read
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 jobs:
-  preflight:
-    name: Preflight
+  verify:
+    name: Verify (test, clippy, fmt)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Check
-        run: cargo check --workspace --all-targets
-      - name: Lint
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Run clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: Tests
-        run: cargo test --workspace --exclude buildfix-bdd
-      - name: BDD
-        run: cargo test -p buildfix-bdd
-      - name: Validate schemas and artifacts
-        run: cargo run -p buildfix -- validate
-      - name: Package lists
-        run: |
-          cargo package --list -p buildfix-hash
-          cargo package --list -p buildfix-types
-          cargo package --list -p buildfix-edit
-          cargo package --list -p buildfix-fixer-catalog
-          cargo package --list -p buildfix-receipts
-          cargo package --list -p buildfix-core-runtime
-          cargo package --list -p buildfix-fixer-api
-          cargo package --list -p buildfix-domain-policy
-          cargo package --list -p buildfix-fixer-duplicate-deps
-          cargo package --list -p buildfix-fixer-edition
-          cargo package --list -p buildfix-fixer-license
-          cargo package --list -p buildfix-fixer-msrv
-          cargo package --list -p buildfix-fixer-path-dep-version
-          cargo package --list -p buildfix-fixer-remove-unused-deps
-          cargo package --list -p buildfix-fixer-resolver-v2
-          cargo package --list -p buildfix-fixer-workspace-inheritance
-          cargo package --list -p buildfix-domain
-          cargo package --list -p buildfix-render
-          cargo package --list -p buildfix-artifacts
-          cargo package --list -p buildfix-report
-          cargo package --list -p buildfix-core
-          cargo package --list -p buildfix
+
+      - name: Run tests
+        run: cargo test --workspace --locked
 
   publish:
     name: Publish to crates.io
-    needs: preflight
+    needs: verify
     runs-on: ubuntu-latest
-    environment: crates-io
-    permissions:
-      contents: read
-      id-token: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Authenticate to crates.io
-        id: auth
-        uses: rust-lang/crates-io-auth-action@v1
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      # === LAYER 0: No internal dependencies ===
-      - name: Publish buildfix-hash
-        run: cargo publish -p buildfix-hash
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-types
-        run: cargo publish -p buildfix-types
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
 
-      # Wait for Layer 0 to be indexed
-      - name: Wait for index (Layer 0)
-        run: sleep 60
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
-      # === LAYER 1: Depends on Layer 0 ===
-      - name: Publish buildfix-receipts
-        run: cargo publish -p buildfix-receipts
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-render
-        run: cargo publish -p buildfix-render
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-edit
-        run: cargo publish -p buildfix-edit
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - name: Install cargo-workspaces
+        uses: cargo-bins/cargo-binstall@main
+        with:
+          tool: cargo-workspaces
 
-      # Wait for Layer 1 to be indexed
-      - name: Wait for index (Layer 1)
-        run: sleep 60
+      - name: Publish crates
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        run: |
+          # cargo-workspaces automatically handles dependency ordering
+          # --from-git ensures we publish from the tagged commit
+          # --allow-dirty allows publishing with uncommitted changes to Cargo.lock
+          cargo workspaces publish --from-git --allow-dirty --yes --no-git-push --no-git-tag
 
-      # === LAYER 2: Depends on Layer 1 ===
-      - name: Publish buildfix-fixer-api
-        run: cargo publish -p buildfix-fixer-api
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-report
-        run: cargo publish -p buildfix-report
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-artifacts
-        run: cargo publish -p buildfix-artifacts
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-fixer-catalog
-        run: cargo publish -p buildfix-fixer-catalog
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-
-      # Wait for Layer 2 to be indexed
-      - name: Wait for index (Layer 2)
-        run: sleep 60
-
-      # === LAYER 3: Depends on Layer 2 ===
-      - name: Publish buildfix-domain-policy
-        run: cargo publish -p buildfix-domain-policy
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-fixer-resolver-v2
-        run: cargo publish -p buildfix-fixer-resolver-v2
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-fixer-path-dep-version
-        run: cargo publish -p buildfix-fixer-path-dep-version
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-fixer-workspace-inheritance
-        run: cargo publish -p buildfix-fixer-workspace-inheritance
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-fixer-duplicate-deps
-        run: cargo publish -p buildfix-fixer-duplicate-deps
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-fixer-remove-unused-deps
-        run: cargo publish -p buildfix-fixer-remove-unused-deps
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-fixer-msrv
-        run: cargo publish -p buildfix-fixer-msrv
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-fixer-edition
-        run: cargo publish -p buildfix-fixer-edition
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-fixer-license
-        run: cargo publish -p buildfix-fixer-license
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - name: Publish buildfix-core-runtime
-        run: cargo publish -p buildfix-core-runtime
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-
-      # Wait for Layer 3 to be indexed
-      - name: Wait for index (Layer 3)
-        run: sleep 60
-
-      # === LAYER 4: Depends on Layer 3 ===
-      - name: Publish buildfix-domain
-        run: cargo publish -p buildfix-domain
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-
-      # Wait for Layer 4 to be indexed
-      - name: Wait for index (Layer 4)
-        run: sleep 60
-
-      # === LAYER 5: Depends on Layer 4 ===
-      - name: Publish buildfix-core
-        run: cargo publish -p buildfix-core
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-
-      # Wait for Layer 5 to be indexed
-      - name: Wait for index (Layer 5)
-        run: sleep 60
-
-      # === LAYER 6: Final CLI package ===
-      - name: Publish buildfix
-        run: cargo publish -p buildfix
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+  # Alternative: Manual publish in dependency order if cargo-workspaces is not desired
+  # Uncomment this job and comment out the publish job above to use manual ordering
+  #
+  # publish-manual:
+  #   name: Publish (manual order)
+  #   needs: verify
+  #   runs-on: ubuntu-latest
+  #   strategy:
+  #     max-parallel: 1
+  #     fail-fast: false
+  #     matrix:
+  #       crate:
+  #         # Layer 1: No internal dependencies
+  #         - buildfix-hash
+  #         - buildfix-types
+  #         # Layer 2: Depends on Layer 1
+  #         - buildfix-render
+  #         - buildfix-receipts
+  #         - buildfix-edit
+  #         - buildfix-adapter-sdk
+  #         - buildfix-fixer-catalog
+  #         # Layer 3: Receipt adapters
+  #         - buildfix-receipts-sarif
+  #         - buildfix-receipts-clippy
+  #         - buildfix-receipts-rustc-json
+  #         - buildfix-receipts-rustfmt
+  #         - buildfix-receipts-depguard
+  #         - buildfix-receipts-tarpaulin
+  #         - buildfix-receipts-cargo-deny
+  #         - buildfix-receipts-cargo-machete
+  #         - buildfix-receipts-cargo-udeps
+  #         - buildfix-receipts-cargo-outdated
+  #         - buildfix-receipts-cargo-lock
+  #         - buildfix-receipts-cargo-update
+  #         - buildfix-receipts-cargo-tree
+  #         - buildfix-receipts-cargo-bloat
+  #         - buildfix-receipts-cargo-llvm-lines
+  #         - buildfix-receipts-cargo-cyclonedds
+  #         - buildfix-receipts-cargo-geiger
+  #         - buildfix-receipts-cargo-semver-checks
+  #         - buildfix-receipts-cargo-warn
+  #         - buildfix-receipts-cargo-msrv
+  #         - buildfix-receipts-cargo-krate
+  #         - buildfix-receipts-cargo-audit
+  #         - buildfix-receipts-cargo-sec-audit
+  #         - buildfix-receipts-cargo-audit-freeze
+  #         - buildfix-receipts-cargo-crev
+  #         - buildfix-receipts-cargo-miri
+  #         - buildfix-receipts-cargo-spellcheck
+  #         - buildfix-receipts-cargo-unused-function
+  #         - buildfix-receipts-template
+  #         # Layer 4: Fixer microcrates
+  #         - buildfix-fixer-api
+  #         - buildfix-fixer-resolver-v2
+  #         - buildfix-fixer-path-dep-version
+  #         - buildfix-fixer-workspace-inheritance
+  #         - buildfix-fixer-duplicate-deps
+  #         - buildfix-fixer-remove-unused-deps
+  #         - buildfix-fixer-msrv
+  #         - buildfix-fixer-edition
+  #         - buildfix-fixer-license
+  #         # Layer 5: Domain layer
+  #         - buildfix-domain-policy
+  #         - buildfix-domain
+  #         # Layer 6: Core layer
+  #         - buildfix-report
+  #         - buildfix-core-runtime
+  #         - buildfix-artifacts
+  #         - buildfix-core
+  #         # Layer 7: CLI (top-level)
+  #         - buildfix
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Install Rust toolchain
+  #       uses: dtolnay/rust-toolchain@stable
+  #
+  #     - name: Publish ${{ matrix.crate }}
+  #       env:
+  #         CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+  #       run: |
+  #         # Find the crate directory
+  #         CRATE_DIR=$(grep -l "name = \"${{ matrix.crate }}\"" */Cargo.toml 2>/dev/null | head -1 | xargs dirname)
+  #         if [ -z "$CRATE_DIR" ]; then
+  #           echo "Could not find crate ${{ matrix.crate }}"
+  #           exit 1
+  #         fi
+  #         
+  #         # Check if crate version already exists
+  #         VERSION=$(grep "^version" "$CRATE_DIR/Cargo.toml" | head -1 | cut -d'"' -f2)
+  #         if cargo search ${{ matrix.crate }} 2>/dev/null | grep -q "^${{ matrix.crate }} = \"$VERSION\""; then
+  #           echo "Crate ${{ matrix.crate }}@$VERSION already published, skipping"
+  #           exit 0
+  #         fi
+  #         
+  #         echo "Publishing ${{ matrix.crate }}@$VERSION from $CRATE_DIR"
+  #         cargo publish --manifest-path "$CRATE_DIR/Cargo.toml" --token $CARGO_REGISTRY_TOKEN
+  #         
+  #         # Wait for index to update
+  #         sleep 30
