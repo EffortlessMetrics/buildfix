@@ -72,28 +72,35 @@ jobs:
 
           # Query crates.io directly so the skip check cannot resolve to the local workspace package.
           crate_version_published() {
-            python3 - "$1" "$2" <<'PY'
-            import json
-            import sys
-            import urllib.error
-            import urllib.request
+            local crate="$1"
+            local version="$2"
+            local url="https://crates.io/api/v1/crates/${crate}/${version}"
+            local response_body
+            local http_code
 
-            crate, version = sys.argv[1], sys.argv[2]
-            url = f"https://crates.io/api/v1/crates/{crate}"
+            response_body="$(mktemp)"
+            http_code="$(curl --silent --show-error --location --output "${response_body}" --write-out "%{http_code}" "${url}")" || {
+              rm -f "${response_body}"
+              echo "error: failed to query ${url}" >&2
+              return 2
+            }
 
-            try:
-                with urllib.request.urlopen(url, timeout=30) as response:
-                    payload = json.load(response)
-            except (urllib.error.URLError, ValueError) as exc:
-                print(f"error: failed to query {url}: {exc}", file=sys.stderr)
-                sys.exit(2)
-
-            for item in payload.get("versions", []):
-                if item.get("num") == version:
-                    sys.exit(0)
-
-            sys.exit(1)
-            PY
+            case "${http_code}" in
+              200)
+                rm -f "${response_body}"
+                return 0
+                ;;
+              404)
+                rm -f "${response_body}"
+                return 1
+                ;;
+              *)
+                echo "error: crates.io lookup for ${crate}@${version} returned HTTP ${http_code}" >&2
+                cat "${response_body}" >&2 || true
+                rm -f "${response_body}"
+                return 2
+                ;;
+            esac
           }
 
           crates=(
