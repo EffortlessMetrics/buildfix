@@ -290,12 +290,11 @@ fn cmd_plan(args: PlanArgs) -> anyhow::Result<ExitCode> {
     let writer = FsWritePort;
     let tool = tool_info();
 
-    let outcome = run_plan(&settings, &receipts_port, &git, tool).map_err(|e| match e {
-        buildfix_core::pipeline::ToolError::Internal(e) => e,
-        buildfix_core::pipeline::ToolError::PolicyBlock => {
-            anyhow::anyhow!("policy block")
-        }
-    })?;
+    let outcome = match run_plan(&settings, &receipts_port, &git, tool) {
+        Ok(outcome) => outcome,
+        Err(buildfix_core::pipeline::ToolError::PolicyBlock) => return Ok(ExitCode::from(2)),
+        Err(buildfix_core::pipeline::ToolError::Internal(e)) => return Err(e),
+    };
 
     write_plan_artifacts(&outcome, &out_dir, &writer)?;
 
@@ -365,12 +364,11 @@ fn cmd_apply(args: ApplyArgs) -> anyhow::Result<ExitCode> {
     let writer = FsWritePort;
     let tool = tool_info();
 
-    let outcome = run_apply(&settings, &git, tool).map_err(|e| match e {
-        buildfix_core::pipeline::ToolError::Internal(e) => e,
-        buildfix_core::pipeline::ToolError::PolicyBlock => {
-            anyhow::anyhow!("policy block")
-        }
-    })?;
+    let outcome = match run_apply(&settings, &git, tool) {
+        Ok(outcome) => outcome,
+        Err(buildfix_core::pipeline::ToolError::PolicyBlock) => return Ok(ExitCode::from(2)),
+        Err(buildfix_core::pipeline::ToolError::Internal(e)) => return Err(e),
+    };
 
     write_apply_artifacts(&outcome, &out_dir, &writer)?;
 

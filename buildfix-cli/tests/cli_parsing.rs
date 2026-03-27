@@ -525,3 +525,106 @@ fn test_plan_mode_invalid_rejected() {
         .assert()
         .failure();
 }
+
+// ────────────────────────────────────────────────────────────────────────
+// Exit code contract tests
+//
+// These tests verify the documented exit code semantics:
+//   Exit 0 = success
+//   Exit 1 = tool / runtime error
+//   Exit 2 = policy block (precondition mismatch, safety gate, validation)
+//
+// Tests here cover exit code paths NOT already exercised by the tests
+// above. For example, test_plan_no_args_uses_current_dir already covers
+// the exit-0-from-plan path, so we don't duplicate it.
+// ────────────────────────────────────────────────────────────────────────
+
+/// Helper: create a temp repo with a receipt that triggers the resolver-v2 fix.
+/// The workspace Cargo.toml deliberately omits `resolver = "2"` so the fix fires.
+fn create_temp_repo_with_receipt() -> TempDir {
+    let td = tempfile::tempdir().expect("tempdir");
+    let root = td.path();
+
+    // Workspace without resolver = "2" -> triggers resolver-v2 finding.
+    fs::create_dir_all(root.join("crates").join("a")).unwrap();
+    fs::write(
+        root.join("Cargo.toml"),
+        "[workspace]\nmembers = [\"crates/a\"]\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("crates").join("a").join("Cargo.toml"),
+        "[package]\nname = \"a\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .unwrap();
+
+    // Receipt from "builddiag" sensor reporting a resolver_v2 finding.
+    let receipt_dir = root.join("artifacts").join("builddiag");
+    fs::create_dir_all(&receipt_dir).unwrap();
+    fs::write(
+        receipt_dir.join("report.json"),
+        r#"{
+  "schema": "builddiag.report.v1",
+  "tool": { "name": "builddiag", "version": "0.0.0" },
+  "verdict": { "status": "fail", "counts": { "findings": 1, "errors": 1, "warnings": 0 } },
+  "findings": [{
+    "severity": "error",
+    "check_id": "workspace.resolver_v2",
+    "code": "not_v2",
+    "message": "workspace resolver is not 2",
+    "location": { "path": "Cargo.toml", "line": 1, "column": 1 }
+  }]
+}"#,
+    )
+    .unwrap();
+
+    td
+}
+
+#[test]
+fn exit_code_1_apply_missing_plan() {
+    let temp = create_temp_repo();
+
+    // No plan.json exists, so apply --apply should fail with exit 1 (tool error).
+    buildfix()
+        .current_dir(temp.path())
+        .args(["apply", "--apply"])
+        .assert()
+        .code(1);
+}
+
+#[test]
+fn exit_code_2_plan_with_deny_policy() {
+    let temp = create_temp_repo_with_receipt();
+
+    // The receipt triggers an op, but --deny "*" blocks it -> exit 2.
+    buildfix()
+        .current_dir(temp.path())
+        .args(["plan", "--deny", "*"])
+        .assert()
+        .code(2);
+}
+
+#[test]
+fn exit_code_2_plan_with_max_ops_zero() {
+    let temp = create_temp_repo_with_receipt();
+
+    // The receipt triggers an op, but --max-ops 0 blocks it -> exit 2.
+    buildfix()
+        .current_dir(temp.path())
+        .args(["plan", "--max-ops", "0"])
+        .assert()
+        .code(2);
+}
+
+#[test]
+fn exit_code_0_plan_with_deny_policy_cockpit_mode() {
+    let temp = create_temp_repo_with_receipt();
+
+    // In cockpit mode, policy blocks (exit 2) are remapped to exit 0.
+    buildfix()
+        .current_dir(temp.path())
+        .args(["plan", "--deny", "*", "--mode", "cockpit"])
+        .assert()
+        .code(0);
+}
