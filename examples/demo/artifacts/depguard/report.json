@@ -1,0 +1,113 @@
+{
+  "schema": "depguard.report.v1",
+  "tool": {
+    "name": "depguard",
+    "version": "0.1.0"
+  },
+  "verdict": {
+    "status": "fail",
+    "counts": {
+      "findings": 5,
+      "errors": 5,
+      "warnings": 0
+    }
+  },
+  "findings": [
+    {
+      "severity": "error",
+      "check_id": "deps.path_requires_version",
+      "code": "missing_version",
+      "message": "path dependency missing version",
+      "location": {
+        "path": "crates/api/Cargo.toml",
+        "line": 7,
+        "column": 1
+      },
+      "data": {
+        "dep": "acme-core",
+        "dep_path": "../core",
+        "toml_path": ["dependencies", "acme-core"]
+      }
+    },
+    {
+      "severity": "error",
+      "check_id": "deps.path_requires_version",
+      "code": "missing_version",
+      "message": "path dependency missing version",
+      "location": {
+        "path": "crates/cli/Cargo.toml",
+        "line": 7,
+        "column": 1
+      },
+      "data": {
+        "dep": "acme-core",
+        "dep_path": "../core",
+        "toml_path": ["dependencies", "acme-core"]
+      }
+    },
+    {
+      "severity": "error",
+      "check_id": "deps.path_requires_version",
+      "code": "missing_version",
+      "message": "path dependency missing version",
+      "location": {
+        "path": "crates/cli/Cargo.toml",
+        "line": 8,
+        "column": 1
+      },
+      "data": {
+        "dep": "acme-api",
+        "dep_path": "../api",
+        "toml_path": ["dependencies", "acme-api"]
+      }
+    },
+    {
+      "severity": "error",
+      "check_id": "deps.duplicate_dependency_versions",
+      "code": "duplicate_version",
+      "message": "dependency has duplicate versions across workspace",
+      "location": {
+        "path": "crates/core/Cargo.toml",
+        "line": 7,
+        "column": 1
+      },
+      "data": {
+        "dep": "serde",
+        "selected_version": "1.0.200",
+        "toml_path": ["dependencies", "serde"]
+      }
+    },
+    {
+      "severity": "error",
+      "check_id": "deps.duplicate_dependency_versions",
+      "code": "duplicate_version",
+      "message": "dependency has duplicate versions across workspace",
+      "location": {
+        "path": "crates/api/Cargo.toml",
+        "line": 8,
+        "column": 1
+      },
+      "data": {
+        "dep": "serde",
+        "selected_version": "1.0.200",
+        "toml_path": ["dependencies", "serde"]
+      }
+    },
+    {
+      "severity": "error",
+      "check_id": "deps.duplicate_dependency_versions",
+      "code": "duplicate_version",
+      "message": "dependency has duplicate versions across workspace",
+      "location": {
+        "path": "crates/cli/Cargo.toml",
+        "line": 9,
+        "column": 1
+      },
+      "data": {
+        "dep": "serde",
+        "selected_version": "1.0.200",
+        "toml_path": ["dependencies", "serde"]
+      }
+    }
+  ]
+}

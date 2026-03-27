@@ -1,0 +1,9 @@
+[package]
+name = "acme-cli"
+version = "0.3.0"
+edition = "2021"
+
+[dependencies]
+acme-core = { path = "../core" }
+acme-api = { path = "../api" }
+serde = "1.0.190"

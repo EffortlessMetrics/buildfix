@@ -1,0 +1,8 @@
+[package]
+name = "acme-api"
+version = "0.3.0"
+edition = "2021"
+
+[dependencies]
+acme-core = { path = "../core" }
+serde = { version = "1.0.180", features = ["derive"] }
