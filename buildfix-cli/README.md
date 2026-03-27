@@ -7,8 +7,16 @@ This crate owns command-line UX: argument parsing, config merge, exit-code handl
 ## Install
 
 ```bash
-cargo install buildfix --locked
+cargo install buildfix
 ```
+
+The install path above is the one we have verified locally. A clean install
+from crates.io can run `buildfix --help` and `buildfix list-fixes` before you
+move on to `plan` and `apply`.
+
+For the current published `0.2.0` release, prefer the unlocked install path.
+We keep `cargo install buildfix --locked` as a release-check item until the
+published lock is refreshed.
 
 ## Commands
 
@@ -17,6 +25,10 @@ cargo install buildfix --locked
 - `buildfix explain <fix-key>`: show fix rationale, safety, and policy keys
 - `buildfix list-fixes [--format text|json]`: enumerate built-in fixes
 - `buildfix validate`: validate receipts and buildfix artifacts against schemas
+
+The supported operator lane is the safe `builddiag` and `depguard` path:
+`resolver-v2`, `path-dep-version`, `workspace-inheritance`, and
+`duplicate-deps`.
 
 ## Key options
 
