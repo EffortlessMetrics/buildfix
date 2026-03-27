@@ -216,7 +216,7 @@ jobs:
 
       - name: Publish to crates.io
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
         run: |
           # Extract package name from tag
           PACKAGE=${GITHUB_REF#refs/tags/}

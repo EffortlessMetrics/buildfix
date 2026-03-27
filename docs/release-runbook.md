@@ -25,13 +25,26 @@ Cross-reference: [implementation-plan.md](implementation-plan.md) — v0.2.1 Ope
 # Verify you're logged into crates.io
 cargo login
 
-# Or set the token directly (recommended for CI/scripts)
+# Or set the token directly for local/manual publishing
 export CARGO_REGISTRY_TOKEN="your-token-here"
 
 # Verify toolchain matches workspace rust-version
 rustup show
 rustc --version  # Should be >= 1.92
 ```
+
+For the tag-triggered GitHub Actions publish path, the repository must also have
+an Actions secret named `CRATES_IO_TOKEN`. Verify it is present before pushing a
+release tag:
+
+```bash
+gh secret list --repo EffortlessMetrics/buildfix
+```
+
+Expected result:
+
+- `CRATES_IO_TOKEN` appears in the secret list
+- the token belongs to a crates.io owner account for the published `buildfix-*` crates
 
 ### 1.3 Pre-Release Checks
 
@@ -147,10 +160,11 @@ before tagging.
 
 ## 2. Publish Order
 
-> **Note:** The primary CI workflow (`.github/workflows/publish.yml`) uses
-> `cargo-workspaces publish`, which resolves the dependency graph and publishes
-> crates in the correct order automatically. The manual layer ordering below is
-> a **fallback for debugging** or when publishing individual crates by hand.
+> **Note:** The primary CI workflow (`.github/workflows/publish.yml`) now
+> publishes crates with an explicit dependency-ordered `cargo publish` loop and
+> checks crates.io from outside the workspace before deciding whether to skip a
+> crate. The manual layer ordering below matches that workflow and also serves
+> as the fallback path for debugging or hand-publishing.
 
 The publish order is determined by the dependency graph. **Do not deviate from this order** or publishes will fail due to missing dependencies.
 
@@ -366,11 +380,10 @@ cargo search buildfix-receipts
 ### 5.2 Verify Crate Availability
 
 ```bash
-# Check if a specific version exists
-curl -s https://crates.io/api/v1/crates/buildfix-types/0.3.1 | head -20
-
-# Or use cargo's internal check
-cargo search buildfix-types --limit 1
+# Check if a specific version exists from outside the workspace
+probe_dir="$(mktemp -d)"
+(cd "$probe_dir" && cargo info buildfix-types@0.3.1 --registry crates-io)
+rm -rf "$probe_dir"
 ```
 
 ### 5.3 Resume Command Pattern
@@ -484,9 +497,20 @@ chmod +x resume-publish.sh
 
 ---
 
-## 6. Post-Release Verification
+## 6. Release Trigger and Post-Release Verification
 
-### 6.1 Verify All Crates Are Published
+### 6.1 Create and Push the Release Tag
+
+The GitHub Actions publish workflow is tag-driven. Do this only after the
+pre-release checks, smoke tests, and secret verification above are complete.
+
+```bash
+# Tag the release
+git tag -a v0.3.1 -m "Release v0.3.1"
+git push origin v0.3.1
+```
+
+### 6.2 Verify All Crates Are Published
 
 ```bash
 # Check all published crates (must match CRATES array in resume-publish.sh)
@@ -520,7 +544,7 @@ for crate in buildfix-types buildfix-hash \
 done
 ```
 
-### 6.2 Test Installation
+### 6.3 Test Installation
 
 ```bash
 # In a fresh directory (not the workspace)
@@ -541,14 +565,6 @@ cargo install buildfix --version 0.3.1
 # Verify the CLI works
 buildfix --version
 buildfix --help
-```
-
-### 6.3 Create Git Tag
-
-```bash
-# Tag the release
-git tag -a v0.3.1 -m "Release v0.3.1"
-git push origin v0.3.1
 ```
 
 ### 6.4 Create GitHub Release
@@ -647,6 +663,7 @@ buildfix --version
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-03-27 | 1.6 | Documented the `CRATES_IO_TOKEN` GitHub secret requirement, updated the runbook to match the dependency-ordered publish workflow, and moved tag creation into the release trigger flow |
 | 2026-03-27 | 1.5 | Split locked-install verification into pre-tag source and post-publish crates.io gates; updated release examples to 0.3.1 |
 | 2026-03-26 | 1.4 | Added note that cargo-workspaces handles ordering automatically; manual layers are fallback/debugging only |
 | 2026-03-26 | 1.3 | Recomputed layer assignments from real dependency graph; moved fixer-catalog to L1, core-runtime and adapters to L2, fixers to L3; added buildfix-receipts-template to NOT Published list; fixed xtask description |
