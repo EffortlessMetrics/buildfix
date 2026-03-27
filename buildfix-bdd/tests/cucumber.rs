@@ -1765,8 +1765,14 @@ async fn assert_git_head_changed(world: &mut BuildfixWorld) {
 }
 
 #[then("the plan command fails")]
-async fn assert_plan_fails(_world: &mut BuildfixWorld) {
-    // The failure is asserted in the when step
+async fn assert_plan_fails(world: &mut BuildfixWorld) {
+    // The when step may assert exit code via assert_cmd, but we also verify
+    // via captured status when available.
+    if let Some(code) = world.last_command_status {
+        assert_ne!(code, 0, "expected plan to fail (non-zero exit), got 0");
+    }
+    // If last_command_status is None, the failure was asserted inline in the
+    // when step via .assert().code(N).
 }
 
 // ============================================================================
@@ -5400,7 +5406,7 @@ async fn assert_root_has_multiple_workspace_deps(world: &mut BuildfixWorld) {
     // The fixer may produce either `[workspace.dependencies]` table section
     // or an inline `dependencies = { ... }` form. Both are valid.
     let has_table = contents.contains("[workspace.dependencies]");
-    let has_inline = contents.contains("dependencies = {") || contents.contains("dependencies = {");
+    let has_inline = contents.contains("dependencies = {");
     assert!(
         has_table || has_inline,
         "expected workspace dependencies in root Cargo.toml, got:\n{}",
@@ -5508,12 +5514,12 @@ async fn assert_plan_no_root_workspace_dep_op(world: &mut BuildfixWorld) {
     let plan_str = fs::read_to_string(&plan_path).expect("read plan.json");
     let v: serde_json::Value = serde_json::from_str(&plan_str).expect("parse plan.json");
 
-    // TODO: When the fixer gains pre-existing workspace dep detection, this
-    // assertion should become strict:
+    // TODO(pending): When the fixer gains pre-existing workspace dep detection,
+    // strengthen this to:
     //   assert!(!plan_has_rule(&v, "ensure_workspace_dependency_version"))
-    // For now, we just verify the plan is parseable. The fixer may still produce
-    // a root op when it doesn't check for pre-existing entries.
-    let _has_rule = plan_has_rule(&v, "ensure_workspace_dependency_version");
+    // Currently the fixer may still produce a root op when it doesn't check for
+    // pre-existing entries. We verify the plan is at least parseable and well-formed.
+    let _ = plan_ops(&v); // validates ops array exists
 }
 
 #[given("a repo with duplicate target-specific dependencies")]
@@ -5588,11 +5594,15 @@ async fn assert_preserved_target_cfg(world: &mut BuildfixWorld) {
     let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
     let plan_str = fs::read_to_string(&plan_path).expect("read plan.json");
     let v: serde_json::Value = serde_json::from_str(&plan_str).expect("parse plan.json");
-    // TODO: Target-specific dependency consolidation (e.g. [target.'cfg(unix)'.dependencies])
-    // is not yet supported by the fixer. When implemented, assert that the plan
-    // includes ops and that target cfg is preserved in the consolidated entry.
-    // For now, just verify the plan is valid (may be empty).
-    let _ops = plan_ops(&v);
+    // TODO(pending): Target-specific dependency consolidation
+    // (e.g. [target.'cfg(unix)'.dependencies]) is not yet supported by the fixer.
+    // When implemented, assert that the plan includes ops and that target cfg is
+    // preserved in the consolidated entry.
+    let ops = plan_ops(&v);
+    assert!(
+        ops.is_empty() || ops.iter().all(|op| !op["kind"]["type"].is_null()),
+        "expected valid (possibly empty) plan ops"
+    );
 }
 
 #[given("a repo with duplicate build-dependency versions")]
@@ -6686,11 +6696,15 @@ async fn assert_plan_no_msrv_fix_for_inherited(world: &mut BuildfixWorld) {
     let plan_str = fs::read_to_string(&plan_path).expect("read plan.json");
     let v: serde_json::Value = serde_json::from_str(&plan_str).expect("parse plan.json");
 
-    // TODO: When the fixer gains workspace inheritance detection, this should be:
-    //   assert!(!plan_has_rule(&v, "set_package_rust_version"))
-    // Currently the fixer may not detect `rust-version.workspace = true` and
-    // still produce an op. We verify the plan is at least valid.
-    let _has_rule = plan_has_rule(&v, "set_package_rust_version");
+    // TODO(pending): When the fixer gains workspace inheritance detection,
+    // strengthen to: assert!(!plan_has_rule(&v, "set_package_rust_version"))
+    // Currently the fixer may not detect `rust-version.workspace = true`.
+    if plan_has_rule(&v, "set_package_rust_version") {
+        eprintln!(
+            "NOTE: fixer produced MSRV fix for crate using workspace inheritance \
+             (known limitation, workspace inheritance detection not yet implemented)"
+        );
+    }
 }
 
 #[given("crate-a with rust-version workspace = true")]
@@ -6821,9 +6835,15 @@ async fn assert_plan_no_msrv_fix_invalid(world: &mut BuildfixWorld) {
     let v: serde_json::Value = serde_json::from_str(&plan_str).expect("parse plan.json");
 
     // Graceful handling: fixer should not crash on invalid manifest.
-    // TODO: When the fixer handles edge cases (empty rust-version, missing
-    // [package] section), assert strictly that no op is produced.
-    let _has_rule = plan_has_rule(&v, "set_package_rust_version");
+    // TODO(pending): When the fixer handles edge cases (empty rust-version,
+    // missing [package] section), strengthen to:
+    //   assert!(!plan_has_rule(&v, "set_package_rust_version"))
+    if plan_has_rule(&v, "set_package_rust_version") {
+        eprintln!(
+            "NOTE: fixer produced MSRV fix for invalid manifest \
+             (known limitation, edge case handling not yet implemented)"
+        );
+    }
 }
 
 #[then("the plan contains no MSRV normalization fix")]
@@ -7538,9 +7558,14 @@ async fn assert_plan_no_license_fix_invalid(world: &mut BuildfixWorld) {
     let v: serde_json::Value = serde_json::from_str(&plan_str).expect("parse plan.json");
 
     // Graceful handling: fixer should not crash on invalid manifest.
-    // TODO: When the fixer handles edge cases (empty license string), assert
-    // strictly that no op is produced.
-    let _has_rule = plan_has_rule(&v, "set_package_license");
+    // TODO(pending): When the fixer handles edge cases (empty license string),
+    // strengthen to: assert!(!plan_has_rule(&v, "set_package_license"))
+    if plan_has_rule(&v, "set_package_license") {
+        eprintln!(
+            "NOTE: fixer produced license fix for invalid manifest \
+             (known limitation, edge case handling not yet implemented)"
+        );
+    }
 }
 
 #[then("the plan contains no license normalization fix")]
@@ -8062,12 +8087,13 @@ async fn assert_crate_a_no_target_dep(world: &mut BuildfixWorld) {
     let root = repo_root(world).clone();
     let contents = fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml"))
         .expect("read crate-a Cargo.toml");
-    // TODO: Target-specific dependency removal is not yet fully supported.
-    // When implemented, assert: !contents.contains("nix =")
-    // For now, verify the file is at least valid (non-empty, parseable as TOML).
+    // TODO(pending): Target-specific dependency removal is not yet fully supported.
+    // When implemented, strengthen to: assert!(!contents.contains("nix ="))
+    // For now, verify the file is still valid and contains the package section.
     assert!(
-        !contents.trim().is_empty(),
-        "expected non-empty Cargo.toml after apply"
+        !contents.trim().is_empty() && contents.contains("[package]"),
+        "expected valid Cargo.toml after apply, got:\n{}",
+        contents
     );
 }
 
@@ -8664,9 +8690,8 @@ async fn crate_a_using_workspace_true_for_dep(world: &mut BuildfixWorld) {
 }
 
 #[given("crate-b with explicit path dependency missing version")]
-async fn crate_b_with_explicit_path_dep(world: &mut BuildfixWorld) {
+async fn crate_b_with_explicit_path_dep(_world: &mut BuildfixWorld) {
     // crate-b doesn't have deps in the default setup. This refers to crate-b as a dep target
-    let _ = world;
 }
 
 #[given("a depguard receipt for crate-b only")]
@@ -8718,35 +8743,51 @@ async fn cargo_toml_with_specific_formatting(_world: &mut BuildfixWorld) {
 
 #[then("the dependency preserves features [\"async\"]")]
 async fn assert_dep_preserves_features(world: &mut BuildfixWorld) {
-    // TODO: Implement proper assertion when feature preservation tracking is
-    // added to the plan ops. Currently verified through TOML round-trip in
+    // TODO(pending): Implement proper assertion when feature preservation tracking
+    // is added to the plan ops. Currently verified through TOML round-trip in
     // the toml_edit engine unit tests.
     let root = repo_root(world).clone();
     let plan_path = root.join("artifacts").join("buildfix").join("plan.json");
     let plan_str = fs::read_to_string(&plan_path).expect("read plan.json");
-    let _: serde_json::Value = serde_json::from_str(&plan_str).expect("plan.json is valid JSON");
+    let v: serde_json::Value = serde_json::from_str(&plan_str).expect("plan.json is valid JSON");
+    // At minimum, verify the plan has ops (it should have a path dep fix)
+    let ops = plan_ops(&v);
+    assert!(
+        !ops.is_empty(),
+        "expected plan ops for dependency with features"
+    );
 }
 
 #[then("the Cargo.toml preserves comments")]
 async fn assert_cargo_toml_preserves_comments(world: &mut BuildfixWorld) {
-    // TODO: Implement proper assertion when comment preservation tracking is
-    // surfaced in plan metadata. Currently verified by toml_edit engine unit
+    // TODO(pending): Implement proper assertion when comment preservation tracking
+    // is surfaced in plan metadata. Currently verified by toml_edit engine unit
     // tests which use the comment-preserving API.
     let root = repo_root(world).clone();
     let contents = fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml"))
         .expect("read crate-a Cargo.toml");
+    // Verify the file is valid TOML (not corrupted by the edit)
     assert!(!contents.trim().is_empty(), "expected non-empty Cargo.toml");
+    assert!(
+        contents.contains("[package]") || contents.contains("[dependencies]"),
+        "expected Cargo.toml to retain structural TOML sections"
+    );
 }
 
 #[then("the Cargo.toml formatting is preserved")]
 async fn assert_cargo_toml_formatting_preserved(world: &mut BuildfixWorld) {
-    // TODO: Implement proper assertion when formatting preservation tracking is
-    // surfaced in plan metadata. Currently verified by toml_edit engine unit
-    // tests which use the formatting-preserving API.
+    // TODO(pending): Implement proper assertion when formatting preservation
+    // tracking is surfaced in plan metadata. Currently verified by toml_edit
+    // engine unit tests which use the formatting-preserving API.
     let root = repo_root(world).clone();
     let contents = fs::read_to_string(root.join("crates").join("crate-a").join("Cargo.toml"))
         .expect("read crate-a Cargo.toml");
+    // Verify the file is valid TOML (not corrupted by the edit)
     assert!(!contents.trim().is_empty(), "expected non-empty Cargo.toml");
+    assert!(
+        contents.contains("[package]") || contents.contains("[dependencies]"),
+        "expected Cargo.toml to retain structural TOML sections"
+    );
 }
 
 #[tokio::main]
