@@ -7,6 +7,10 @@ use tempfile::TempDir;
 
 /// Helper to get the xtask binary path
 fn xtask_bin() -> std::path::PathBuf {
+    if let Some(path) = std::env::var_os("CARGO_BIN_EXE_xtask") {
+        return path.into();
+    }
+
     // Use CARGO_MANIFEST_DIR to find the workspace root, then look for the binary
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
         .expect("CARGO_MANIFEST_DIR should be set during test execution");
@@ -16,8 +20,14 @@ fn xtask_bin() -> std::path::PathBuf {
         .to_path_buf();
 
     // Try debug build first, then release
-    let debug_path = workspace_root.join("target/debug/xtask.exe");
-    let release_path = workspace_root.join("target/release/xtask.exe");
+    let debug_path = workspace_root.join(format!(
+        "target/debug/xtask{}",
+        std::env::consts::EXE_SUFFIX
+    ));
+    let release_path = workspace_root.join(format!(
+        "target/release/xtask{}",
+        std::env::consts::EXE_SUFFIX
+    ));
 
     if debug_path.exists() {
         debug_path

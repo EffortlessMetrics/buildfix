@@ -20,7 +20,7 @@ fn test_adapter_new() {
 
 #[test]
 fn test_adapter_default() {
-    let adapter = CargoMacheteAdapter::default();
+    let adapter = CargoMacheteAdapter;
     assert_eq!(adapter.sensor_id(), "cargo-machete");
 }
 

@@ -359,7 +359,7 @@ fn test_path_parent_of_top_level() {
     let parent = path.parent();
 
     // Parent of single component is empty
-    assert!(parent.map_or(true, |p| p.as_str().is_empty()));
+    assert!(parent.is_none_or(|p| p.as_str().is_empty()));
 }
 
 #[test]

@@ -314,6 +314,32 @@ mod tests {
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
+    struct EnvVarRestore {
+        key: &'static str,
+        previous: Option<std::ffi::OsString>,
+    }
+
+    impl Drop for EnvVarRestore {
+        fn drop(&mut self) {
+            match self.previous.take() {
+                Some(value) => unsafe {
+                    std::env::set_var(self.key, value);
+                },
+                None => unsafe {
+                    std::env::remove_var(self.key);
+                },
+            }
+        }
+    }
+
+    fn cargo_stub_path(dir: &TempDir) -> std::path::PathBuf {
+        if cfg!(windows) {
+            dir.path().join("cargo.cmd")
+        } else {
+            dir.path().join("cargo")
+        }
+    }
+
     #[test]
     fn normalize_for_determinism_strips_run_fields() {
         let input = serde_json::json!({
@@ -392,9 +418,30 @@ mod tests {
     }
 
     fn write_fake_cargo(dir: &TempDir, exit_code: i32) {
-        let script = dir.path().join("cargo.cmd");
+        let script = cargo_stub_path(dir);
+        #[cfg(windows)]
         let contents = format!("@echo off\r\nexit /b {}\r\n", exit_code);
+        #[cfg(not(windows))]
+        let contents = format!("#!/usr/bin/env sh\nexit {}\n", exit_code);
         fs::write(&script, contents).expect("write cargo stub");
+
+        #[cfg(not(windows))]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            let mut permissions = fs::metadata(&script)
+                .expect("cargo stub metadata")
+                .permissions();
+            permissions.set_mode(0o755);
+            fs::set_permissions(&script, permissions).expect("make cargo stub executable");
+        }
+    }
+
+    fn restore_env_var(key: &'static str) -> EnvVarRestore {
+        EnvVarRestore {
+            key,
+            previous: std::env::var_os(key),
+        }
     }
 
     fn with_fake_cargo(exit_code: i32, f: impl FnOnce()) {
@@ -402,21 +449,12 @@ mod tests {
         let temp = TempDir::new().expect("temp dir");
         write_fake_cargo(&temp, exit_code);
 
-        let old = std::env::var_os("XTASK_CARGO");
+        let _restore = restore_env_var("XTASK_CARGO");
         unsafe {
-            std::env::set_var("XTASK_CARGO", temp.path().join("cargo.cmd"));
+            std::env::set_var("XTASK_CARGO", cargo_stub_path(&temp));
         }
 
         f();
-
-        match old {
-            Some(value) => unsafe {
-                std::env::set_var("XTASK_CARGO", value);
-            },
-            None => unsafe {
-                std::env::remove_var("XTASK_CARGO");
-            },
-        }
     }
 
     fn with_fake_cargo_existing(exit_code: i32, existing: &str, f: impl FnOnce()) {
@@ -427,21 +465,12 @@ mod tests {
         let temp = TempDir::new().expect("temp dir");
         write_fake_cargo(&temp, exit_code);
 
-        let old = std::env::var_os("XTASK_CARGO");
+        let _restore = restore_env_var("XTASK_CARGO");
         unsafe {
-            std::env::set_var("XTASK_CARGO", temp.path().join("cargo.cmd"));
+            std::env::set_var("XTASK_CARGO", cargo_stub_path(&temp));
         }
 
         f();
-
-        match old {
-            Some(value) => unsafe {
-                std::env::set_var("XTASK_CARGO", value);
-            },
-            None => unsafe {
-                std::env::remove_var("XTASK_CARGO");
-            },
-        }
     }
 
     #[test]
