@@ -29,3 +29,4 @@ tokio.workspace = true
 buildfix-fixer-catalog = { path = "../buildfix-fixer-catalog" }
 buildfix-types = { path = "../buildfix-types" }
 buildfix-core = { path = "../buildfix-core" }
+buildfix = { path = "../buildfix-cli" }

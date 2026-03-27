@@ -3,9 +3,14 @@ diff --git a/crates/a/Cargo.toml b/crates/a/Cargo.toml
 +++ b/crates/a/Cargo.toml
 --- original
 +++ modified
-@@ -2,4 +2,4 @@
- name = "a"
- version = "0.1.0"
- edition = "2021"
+@@ -1,5 +1,5 @@
+-[package]
+-name = "a"
+-version = "0.1.0"
+-edition = "2021"
 -license = "MIT"
++[package]
++name = "a"
++version = "0.1.0"
++edition = "2021"
 +license = "MIT OR Apache-2.0"

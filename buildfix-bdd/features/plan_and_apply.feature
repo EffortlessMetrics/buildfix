@@ -68,11 +68,11 @@ Feature: Plan and apply
     Then the plan contains no fixes
     And the report mentions receipt load error
 
-  Scenario: Invalid Cargo.toml is handled gracefully
+  Scenario: Invalid Cargo.toml causes tool error
     Given a repo with malformed Cargo.toml
     And a builddiag receipt for resolver v2
-    When I run buildfix plan
-    Then the plan contains no fixes
+    When I run buildfix plan and capture exit code
+    Then the command exits with code 1
 
   Scenario: Guarded fix skipped without --allow-guarded flag
     Given a repo with inconsistent MSRV
@@ -569,3 +569,47 @@ Feature: Plan and apply
     When I run buildfix apply with --apply and capture exit code
     Then the command exits with code 1
     And the command output mentions "plan.json"
+
+  # ============================================================================
+  # Evidence-based safety promotion (v0.4.0)
+  # ============================================================================
+
+  Scenario: Remove unused deps promoted to Guarded with full evidence
+    Given a workspace with an unused dependency "old-crate"
+    And a receipt from cargo-machete with high confidence evidence:
+      | field         | value |
+      | confidence    | 0.95  |
+      | analysisDepth | full  |
+      | toolAgreement | true  |
+    When I run buildfix plan
+    Then the plan should contain an operation to remove "old-crate"
+    And the operation should have safety class "guarded"
+
+  Scenario: Remove unused deps remains Unsafe with low confidence
+    Given a workspace with an unused dependency "old-crate"
+    And a receipt from cargo-machete with low confidence evidence:
+      | field         | value   |
+      | confidence    | 0.7     |
+      | analysisDepth | shallow |
+      | toolAgreement | false   |
+    When I run buildfix plan
+    Then the plan should contain an operation to remove "old-crate"
+    And the operation should have safety class "unsafe"
+
+  Scenario: Remove unused deps remains Unsafe with missing evidence
+    Given a workspace with an unused dependency "old-crate"
+    And a receipt from cargo-machete without evidence fields
+    When I run buildfix plan
+    Then the plan should contain an operation to remove "old-crate"
+    And the operation should have safety class "unsafe"
+
+  Scenario: Remove unused deps remains Unsafe with partial evidence
+    Given a workspace with an unused dependency "old-crate"
+    And a receipt from cargo-machete with partial evidence:
+      | field         | value |
+      | confidence    | 0.95  |
+      | analysisDepth | full  |
+      | toolAgreement | false |
+    When I run buildfix plan
+    Then the plan should contain an operation to remove "old-crate"
+    And the operation should have safety class "unsafe"

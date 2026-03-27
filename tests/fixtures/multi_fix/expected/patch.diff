@@ -4,22 +4,36 @@ diff --git a/Cargo.toml b/Cargo.toml
 --- original
 +++ modified
 @@ -1,5 +1,6 @@
- [workspace]
- members = ["crates/a", "crates/b"]
+-[workspace]
+-members = ["crates/a", "crates/b"]
+-
+-[workspace.dependencies]
+-serde = "1.0"
++[workspace]
++members = ["crates/a", "crates/b"]
 +resolver = "2"
-
- [workspace.dependencies]
- serde = "1.0"
++
++[workspace.dependencies]
++serde = "1.0"
 diff --git a/crates/a/Cargo.toml b/crates/a/Cargo.toml
 --- a/crates/a/Cargo.toml
 +++ b/crates/a/Cargo.toml
 --- original
 +++ modified
-@@ -4,5 +4,5 @@
- edition = "2021"
-
- [dependencies]
+@@ -1,8 +1,8 @@
+-[package]
+-name = "crate-a"
+-version = "0.1.0"
+-edition = "2021"
+-
+-[dependencies]
 -crate-b = { path = "../b" }
 -serde = "1.0"
++[package]
++name = "crate-a"
++version = "0.1.0"
++edition = "2021"
++
++[dependencies]
 +crate-b = { path = "../b" , version = "0.2.0" }
 +serde = { workspace = true }
