@@ -428,7 +428,7 @@ mod fs_write_tests {
             .unwrap()
             .join("test.txt");
 
-        let port = FsWritePort::default();
+        let port = FsWritePort;
         port.write_file(&file_path, b"test content").unwrap();
 
         let content = fs::read(&file_path).unwrap();
@@ -442,7 +442,7 @@ mod fs_write_tests {
             .unwrap()
             .join("nested/dir/test.txt");
 
-        let port = FsWritePort::default();
+        let port = FsWritePort;
         port.write_file(&file_path, b"test content").unwrap();
 
         let content = fs::read(&file_path).unwrap();
@@ -456,7 +456,7 @@ mod fs_write_tests {
             .unwrap()
             .join("nested/dirs");
 
-        let port = FsWritePort::default();
+        let port = FsWritePort;
         port.create_dir_all(&dir_path).unwrap();
 
         assert!(dir_path.exists());
@@ -562,7 +562,7 @@ mod git_shell_tests {
 
     #[test]
     fn test_shell_git_port_default() {
-        let port = ShellGitPort::default();
+        let port = ShellGitPort;
         // Just ensure it can be created
         let _ = port;
     }

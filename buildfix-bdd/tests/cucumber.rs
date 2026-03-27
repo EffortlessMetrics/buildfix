@@ -8388,10 +8388,10 @@ async fn assert_plan_unused_dep_fix_for(world: &mut BuildfixWorld, dep: String) 
     let plan_str = fs::read_to_string(&plan_path).unwrap();
     let v: serde_json::Value = serde_json::from_str(&plan_str).unwrap();
     let found = plan_ops(&v).iter().any(|op| {
-        op["kind"]["type"] == "toml_remove"
+            op["kind"]["type"] == "toml_remove"
             && op["kind"]["toml_path"]
                 .as_array()
-                .map_or(false, |arr| arr.iter().any(|v| v.as_str() == Some(&dep)))
+                .is_some_and(|arr| arr.iter().any(|v| v.as_str() == Some(&dep)))
     });
     assert!(found, "expected unused dep removal for '{}'", dep);
 }

@@ -464,7 +464,7 @@ fn test_plan_report_many_blocked_reason_tokens() {
     let mut plan = BuildfixPlan::new(fixture_tool(), default_repo(), PlanPolicy::default());
 
     // Create ops with many different blocked reason tokens
-    let tokens = vec![
+    let tokens = [
         "missing_param_a",
         "missing_param_b",
         "policy_denied",
