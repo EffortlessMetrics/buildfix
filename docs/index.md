@@ -1,43 +1,52 @@
-# buildfix Documentation
+# buildfix documentation
 
-**buildfix** is a receipt-driven repair tool for Cargo workspace hygiene. It consumes sensor receipts and emits deterministic repair plans.
+This site follows [Diataxis](https://diataxis.fr/), but the first stop is the supported operator lane:
 
-This documentation follows the [Diataxis](https://diataxis.fr/) framework, organized into four categories:
+- `builddiag` and `depguard` receipts
+- safe fixes: `resolver-v2`, `path-dep-version`, `workspace-inheritance`, `duplicate-deps`
+- examples: [`examples/demo`](../examples/demo/README.md) and [`examples/profiles`](../examples/profiles/README.md)
+
+Start here if you are using buildfix on a real workspace:
+
+- [Getting Started](tutorials/getting-started.md) - install buildfix and generate your first plan
+- [Your First Fix](tutorials/first-fix.md) - walk through one safe plan/apply cycle
+
+Use the rest of the docs by intent:
 
 ## Tutorials
 
-Step-by-step guides for learning buildfix.
+Learn the happy path from a receipt to a repaired workspace.
 
-- [Getting Started](tutorials/getting-started.md) — Install and run your first plan
-- [Your First Fix](tutorials/first-fix.md) — Walk through the plan/apply workflow
+- [Getting Started](tutorials/getting-started.md)
+- [Your First Fix](tutorials/first-fix.md)
 
 ## How-To Guides
 
-Task-oriented recipes for common problems.
+Solve a specific operator problem.
 
-- [Configure buildfix](how-to/configure.md) — Set up buildfix.toml policy
-- [Integrate with CI/CD](how-to/ci-integration.md) — Run buildfix in automated pipelines
-- [Troubleshoot Blocked Fixes](how-to/troubleshoot.md) — Debug why fixes aren't applying
-- [Add a New Fixer](how-to/extend-fixers.md) — Extend buildfix with custom fixes
+- [Configure buildfix](how-to/configure.md)
+- [Integrate with CI/CD](how-to/ci-integration.md)
+- [Troubleshoot Blocked Fixes](how-to/troubleshoot.md)
+- [Add a New Fixer](how-to/extend-fixers.md)
 
 ## Reference
 
-Precise technical specifications.
+Look up exact commands, schemas, and supported fix behavior.
 
-- [CLI Commands](reference/cli.md) — Complete command and option reference
-- [Fix Catalog](reference/fixes.md) — All available fixes with triggers and safety classes
-- [Configuration Schema](reference/config.md) — buildfix.toml specification
-- [Output Schemas](reference/schemas.md) — plan.json, apply.json, report.json formats
-- [Exit Codes](reference/exit-codes.md) — Exit code semantics
+- [CLI Commands](reference/cli.md)
+- [Fix Catalog](reference/fixes.md)
+- [Configuration Schema](reference/config.md)
+- [Output Schemas](reference/schemas.md)
+- [Exit Codes](reference/exit-codes.md)
 
 ## Explanation
 
-Background and design rationale.
+Read these when you want the rationale, not the procedure.
 
-- [Architecture](architecture.md) — Crate responsibilities and data flow
-- [Safety Model](safety-model.md) — Safe/guarded/unsafe classification
-- [Design Goals](design.md) — Design principles and key objects
-- [Requirements](requirements.md) — Scope, inputs, outputs, invariants
-- [Preconditions](explanation/preconditions.md) — How drift detection works
-- [Determinism](explanation/determinism.md) — Why byte-stable outputs matter
-- [Testing Strategy](testing.md) — BDD, golden fixtures, property tests, fuzzing
+- [Architecture](architecture.md)
+- [Safety Model](safety-model.md)
+- [Design Goals](design.md)
+- [Requirements](requirements.md)
+- [Preconditions](explanation/preconditions.md)
+- [Determinism](explanation/determinism.md)
+- [Testing Strategy](testing.md)

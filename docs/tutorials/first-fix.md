@@ -1,10 +1,10 @@
 # Your First Fix
 
-This tutorial walks through the complete plan → apply workflow, applying an op to your workspace.
+This tutorial walks through a single safe repair in the supported lane: a receipt-driven change to a Cargo workspace.
 
 ## Scenario
 
-You have a Cargo workspace missing `resolver = "2"` in the root `Cargo.toml`. The builddiag sensor flagged this, and buildfix can fix it automatically.
+You have a Cargo workspace with a `builddiag` receipt that reports `workspace.resolver_v2`, or a `depguard` receipt that reports a safe workspace hygiene issue like a missing path dependency version.
 
 ## Step 1: Generate the Plan
 
@@ -18,15 +18,7 @@ Check what buildfix found:
 cat artifacts/buildfix/plan.md
 ```
 
-You should see the resolver-v2 op:
-
-```
-## Planned Ops
-
-### 1. builddiag/workspace.resolver_v2/not_v2 (Safe)
-File: Cargo.toml
-Operation: toml_transform (ensure_workspace_resolver_v2)
-```
+You should see one of the safe fixes from the supported lane, such as `resolver-v2`, `path-dep-version`, `workspace-inheritance`, or `duplicate-deps`.
 
 ## Step 2: Review the Patch
 
@@ -53,7 +45,7 @@ Test the apply without writing changes:
 buildfix apply
 ```
 
-This validates preconditions and generates apply artifacts but doesn't modify files. Check `artifacts/buildfix/apply.md` for the result.
+This validates preconditions and generates apply artifacts but does not modify files. Check `artifacts/buildfix/apply.md` for the result.
 
 ## Step 4: Apply for Real
 
@@ -85,7 +77,7 @@ resolver = "2"
 
 ## Applying Guarded Fixes
 
-Some ops require explicit approval. For example, MSRV normalization is guarded because changing rust-version affects compatibility.
+Some ops require explicit approval. For example, MSRV normalization is guarded because changing `rust-version` affects compatibility.
 
 To include guarded ops:
 
@@ -103,6 +95,7 @@ If apply fails (exit code 2), check `artifacts/buildfix/apply.md` for details:
 
 ## What's Next?
 
-- [Troubleshoot Blocked Fixes](../how-to/troubleshoot.md) — Debug why ops aren't applying
-- [CLI Reference](../reference/cli.md) — All commands and options
-- [Safety Model](../safety-model.md) — Understand safe/guarded/unsafe
+- [Troubleshoot Blocked Fixes](../how-to/troubleshoot.md)
+- [CLI Reference](../reference/cli.md)
+- [Safety Model](../safety-model.md)
+- [buildfix demo](../../examples/demo/README.md)
