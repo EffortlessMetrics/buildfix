@@ -2,6 +2,10 @@
 
 Complete reference of all buildfix fixes, their triggers, safety classes, and behavior.
 
+For the support boundary and release stance, see [Support Matrix](support-matrix.md).
+The safe fixes below are the supported lane; guarded fixes are operator-reviewed,
+and unsafe fixes remain experimental.
+
 ## Overview
 
 | Fix | Key | Safety | Description |
@@ -14,6 +18,16 @@ Complete reference of all buildfix fixes, their triggers, safety classes, and be
 | [MSRV Normalization](#msrv-normalization) | `msrv` | Guarded | Normalize rust-version |
 | [Edition Normalization](#edition-normalization) | `edition` | Guarded | Normalize edition |
 | [License Normalization](#license-normalization) | `license` | Guarded | Normalize package.license |
+
+## Support Boundary
+
+| Status | Fixes | Expected Use |
+|--------|-------|--------------|
+| Supported | `resolver-v2`, `path-dep-version`, `workspace-inheritance`, `duplicate-deps` | Default automation for workspace hygiene. These are the safe fixes that should be used unattended. |
+| Operator-reviewed | `msrv`, `edition`, `license` | Deterministic changes with release impact. Use with `--allow-guarded` and explicit review. |
+| Experimental | `remove-unused-deps` | Unsafe removal of dependencies reported by sensors. Use only with manual confirmation. |
+
+The remainder of this page is the per-fix technical reference for those lanes.
 
 ## Workspace Resolver V2
 
