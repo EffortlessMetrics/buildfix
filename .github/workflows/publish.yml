@@ -64,17 +64,83 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Install cargo-workspaces
-        run: cargo install cargo-workspaces --locked
-
       - name: Publish crates
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
         run: |
-          # cargo-workspaces automatically handles dependency ordering
-          # --from-git ensures we publish from the tagged commit
-          # --allow-dirty allows publishing with uncommitted changes to Cargo.lock
-          cargo workspaces publish --from-git --allow-dirty --yes --no-git-push --no-git-tag
+          set -euo pipefail
+
+          crates=(
+            buildfix-hash
+            buildfix-types
+            buildfix-adapter-sdk
+            buildfix-edit
+            buildfix-fixer-catalog
+            buildfix-receipts
+            buildfix-render
+            buildfix-artifacts
+            buildfix-core-runtime
+            buildfix-fixer-api
+            buildfix-report
+            buildfix-receipts-cargo-audit
+            buildfix-receipts-cargo-audit-freeze
+            buildfix-receipts-cargo-bloat
+            buildfix-receipts-cargo-crev
+            buildfix-receipts-cargo-cyclonedds
+            buildfix-receipts-cargo-deny
+            buildfix-receipts-cargo-geiger
+            buildfix-receipts-cargo-krate
+            buildfix-receipts-cargo-llvm-lines
+            buildfix-receipts-cargo-lock
+            buildfix-receipts-cargo-machete
+            buildfix-receipts-cargo-miri
+            buildfix-receipts-cargo-msrv
+            buildfix-receipts-cargo-outdated
+            buildfix-receipts-cargo-sec-audit
+            buildfix-receipts-cargo-semver-checks
+            buildfix-receipts-cargo-spellcheck
+            buildfix-receipts-cargo-tree
+            buildfix-receipts-cargo-udeps
+            buildfix-receipts-cargo-unused-function
+            buildfix-receipts-cargo-update
+            buildfix-receipts-cargo-warn
+            buildfix-receipts-clippy
+            buildfix-receipts-depguard
+            buildfix-receipts-rustc-json
+            buildfix-receipts-rustfmt
+            buildfix-receipts-sarif
+            buildfix-receipts-tarpaulin
+            buildfix-domain-policy
+            buildfix-fixer-duplicate-deps
+            buildfix-fixer-edition
+            buildfix-fixer-license
+            buildfix-fixer-msrv
+            buildfix-fixer-path-dep-version
+            buildfix-fixer-remove-unused-deps
+            buildfix-fixer-resolver-v2
+            buildfix-fixer-workspace-inheritance
+            buildfix-domain
+            buildfix-core
+            buildfix
+          )
+
+          for crate in "${crates[@]}"; do
+            manifest_path="$(grep -l "name = \"${crate}\"" */Cargo.toml 2>/dev/null | head -1)"
+            if [[ -z "${manifest_path}" ]]; then
+              echo "Could not find manifest for ${crate}"
+              exit 1
+            fi
+
+            version="$(grep '^version = ' "${manifest_path}" | head -1 | cut -d'"' -f2)"
+            if cargo info "${crate}@${version}" >/dev/null 2>&1; then
+              echo "Skipping already published ${crate}@${version}"
+              continue
+            fi
+
+            echo "Publishing ${crate}@${version} from ${manifest_path}"
+            cargo publish --manifest-path "${manifest_path}" --token "${CARGO_REGISTRY_TOKEN}"
+            sleep 30
+          done
 
   # Alternative: Manual publish in dependency order if cargo-workspaces is not desired
   # Uncomment this job and comment out the publish job above to use manual ordering
