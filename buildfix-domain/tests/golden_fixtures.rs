@@ -65,6 +65,14 @@ fn load_fixture_config(fixture_path: &Path) -> LoadedFixtureConfig {
     }
 }
 
+/// Normalizes line endings to LF for cross-platform comparison.
+///
+/// Handles both Windows-style `\r\n` and legacy Mac-style lone `\r`.
+fn normalize_line_endings(s: &str) -> String {
+    // First replace \r\n so we don't double-convert, then replace any remaining lone \r.
+    s.replace("\r\n", "\n").replace('\r', "\n")
+}
+
 /// Strips dynamic fields from a plan JSON for comparison.
 fn normalize_plan_json(json: &str) -> serde_json::Value {
     let mut v: serde_json::Value = serde_json::from_str(json).expect("valid JSON");
@@ -267,11 +275,12 @@ fn run_fixture_test(fixture_name: &str) {
     let plan_md = render_plan_md(&plan);
     if bless {
         fs::create_dir_all(&expected_dir).expect("create expected dir");
-        fs::write(&expected_md_path, plan_md).expect("write expected plan.md");
+        fs::write(&expected_md_path, &plan_md).expect("write expected plan.md");
     } else if expected_md_path.exists() {
         let expected_md = fs::read_to_string(&expected_md_path).expect("read expected plan.md");
         assert_eq!(
-            plan_md, expected_md,
+            normalize_line_endings(&plan_md),
+            normalize_line_endings(&expected_md),
             "plan.md mismatch for fixture '{}'",
             fixture_name
         );
@@ -281,12 +290,13 @@ fn run_fixture_test(fixture_name: &str) {
 
     if bless {
         fs::create_dir_all(&expected_dir).expect("create expected dir");
-        fs::write(&expected_patch_path, patch).expect("write expected patch.diff");
+        fs::write(&expected_patch_path, &patch).expect("write expected patch.diff");
     } else if expected_patch_path.exists() {
         let expected_patch =
             fs::read_to_string(&expected_patch_path).expect("read expected patch.diff");
         assert_eq!(
-            patch, expected_patch,
+            normalize_line_endings(&patch),
+            normalize_line_endings(&expected_patch),
             "patch.diff mismatch for fixture '{}'",
             fixture_name
         );
@@ -342,12 +352,13 @@ fn run_fixture_test(fixture_name: &str) {
         let apply_md = render_apply_md(&apply);
         if bless {
             fs::create_dir_all(&expected_dir).expect("create expected dir");
-            fs::write(&expected_apply_md_path, apply_md).expect("write expected apply.md");
+            fs::write(&expected_apply_md_path, &apply_md).expect("write expected apply.md");
         } else if expected_apply_md_path.exists() {
             let expected_md =
                 fs::read_to_string(&expected_apply_md_path).expect("read expected apply.md");
             assert_eq!(
-                apply_md, expected_md,
+                normalize_line_endings(&apply_md),
+                normalize_line_endings(&expected_md),
                 "apply.md mismatch for fixture '{}'",
                 fixture_name
             );
@@ -355,7 +366,11 @@ fn run_fixture_test(fixture_name: &str) {
     }
 }
 
-/// Recursively copy a directory.
+/// Recursively copy a directory, normalizing line endings to LF for text files.
+///
+/// This ensures deterministic patch output across platforms (Windows CRLF vs Unix LF).
+/// Instead of relying on a hardcoded extension list, we attempt to read each file as
+/// UTF-8. If it succeeds and contains `\r`, we normalize; otherwise we binary-copy.
 fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
     fs::create_dir_all(dst)?;
     for entry in std::fs::read_dir(src)? {
@@ -365,7 +380,17 @@ fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
         if ty.is_dir() {
             copy_dir_all(&entry.path(), &dst_path)?;
         } else {
-            fs::copy(entry.path(), dst_path)?;
+            let raw = std::fs::read(entry.path())?;
+            match String::from_utf8(raw) {
+                Ok(text) if text.contains('\r') => {
+                    let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
+                    fs::write(dst_path, normalized)?;
+                }
+                _ => {
+                    // Already LF-only text, or binary -- copy as-is.
+                    fs::copy(entry.path(), dst_path)?;
+                }
+            }
         }
     }
     Ok(())
