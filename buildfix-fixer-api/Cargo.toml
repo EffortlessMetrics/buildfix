@@ -8,6 +8,7 @@ license.workspace = true
 description = "Shared contracts for buildfix fixer microcrates."
 repository.workspace = true
 homepage.workspace = true
+readme = false
 categories = ["development-tools"]
 keywords = ["cargo", "fixer", "buildfix", "plugin"]
 

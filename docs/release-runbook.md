@@ -1,7 +1,7 @@
 # buildfix Release Runbook
 
-> **Version**: 1.0  
-> **Last Updated**: 2026-03-16  
+> **Version**: 1.3
+> **Last Updated**: 2026-03-26
 > **Applies to**: v0.3.x releases and beyond
 
 This runbook captures the lessons learned from the v0.2.0 release to make future releases repeatable and require zero institutional knowledge.
@@ -78,12 +78,13 @@ The publish order is determined by the dependency graph. **Do not deviate from t
 
 ```
 Layer 0: buildfix-types, buildfix-hash (no internal deps)
-Layer 1: buildfix-adapter-sdk, buildfix-receipts, buildfix-render, buildfix-edit
-Layer 2: buildfix-receipts-sarif, buildfix-fixer-api, buildfix-report, buildfix-artifacts, buildfix-fixer-catalog
-Layer 3: buildfix-domain-policy, individual fixer crates, buildfix-core-runtime, intake adapters
+Layer 1: buildfix-adapter-sdk, buildfix-edit, buildfix-fixer-catalog, buildfix-receipts, buildfix-render
+Layer 2: buildfix-artifacts, buildfix-core-runtime, buildfix-fixer-api, buildfix-report,
+         all intake adapter crates (buildfix-receipts-*)
+Layer 3: buildfix-domain-policy, all fixer crates (buildfix-fixer-*)
 Layer 4: buildfix-domain
 Layer 5: buildfix-core
-Layer 6: buildfix-cli
+Layer 6: buildfix (CLI)
 ```
 
 ### Exact Publish Sequence
@@ -95,69 +96,65 @@ Layer 6: buildfix-cli
 cargo publish -p buildfix-types
 cargo publish -p buildfix-hash
 
-# === LAYER 1 ===
+# === LAYER 1 (depends only on Layer 0) ===
 # Wait for Layer 0 to be indexed by crates.io (30-60 seconds each)
 
 cargo publish -p buildfix-adapter-sdk
+cargo publish -p buildfix-edit
+cargo publish -p buildfix-fixer-catalog
 cargo publish -p buildfix-receipts
 cargo publish -p buildfix-render
-cargo publish -p buildfix-edit
 
-# === LAYER 2 ===
+# === LAYER 2 (depends on Layer 0-1) ===
 # Wait for Layer 1 to be indexed
 
-cargo publish -p buildfix-receipts-sarif
+cargo publish -p buildfix-artifacts
+cargo publish -p buildfix-core-runtime
 cargo publish -p buildfix-fixer-api
 cargo publish -p buildfix-report
-cargo publish -p buildfix-artifacts
-cargo publish -p buildfix-fixer-catalog
 
-# === LAYER 3 ===
+# Intake adapter crates (depend on adapter-sdk + types, both Layer 0-1)
+cargo publish -p buildfix-receipts-cargo-audit
+cargo publish -p buildfix-receipts-cargo-audit-freeze
+cargo publish -p buildfix-receipts-cargo-bloat
+cargo publish -p buildfix-receipts-cargo-crev
+cargo publish -p buildfix-receipts-cargo-cyclonedds
+cargo publish -p buildfix-receipts-cargo-deny
+cargo publish -p buildfix-receipts-cargo-geiger
+cargo publish -p buildfix-receipts-cargo-krate
+cargo publish -p buildfix-receipts-cargo-llvm-lines
+cargo publish -p buildfix-receipts-cargo-lock
+cargo publish -p buildfix-receipts-cargo-machete
+cargo publish -p buildfix-receipts-cargo-miri
+cargo publish -p buildfix-receipts-cargo-msrv
+cargo publish -p buildfix-receipts-cargo-outdated
+cargo publish -p buildfix-receipts-cargo-sec-audit
+cargo publish -p buildfix-receipts-cargo-semver-checks
+cargo publish -p buildfix-receipts-cargo-spellcheck
+cargo publish -p buildfix-receipts-cargo-tree
+cargo publish -p buildfix-receipts-cargo-udeps
+cargo publish -p buildfix-receipts-cargo-unused-function
+cargo publish -p buildfix-receipts-cargo-update
+cargo publish -p buildfix-receipts-cargo-warn
+cargo publish -p buildfix-receipts-clippy
+cargo publish -p buildfix-receipts-depguard
+cargo publish -p buildfix-receipts-rustc-json
+cargo publish -p buildfix-receipts-rustfmt
+cargo publish -p buildfix-receipts-sarif
+cargo publish -p buildfix-receipts-tarpaulin
+
+# === LAYER 3 (depends on fixer-api from Layer 2) ===
 # Wait for Layer 2 to be indexed
 
 cargo publish -p buildfix-domain-policy
-
-# Individual fixer crates (can be parallel after fixer-api is indexed)
-cargo publish -p buildfix-fixer-resolver-v2
-cargo publish -p buildfix-fixer-path-dep-version
-cargo publish -p buildfix-fixer-workspace-inheritance
 cargo publish -p buildfix-fixer-duplicate-deps
-cargo publish -p buildfix-fixer-remove-unused-deps
-cargo publish -p buildfix-fixer-msrv
 cargo publish -p buildfix-fixer-edition
 cargo publish -p buildfix-fixer-license
-
-# Intake adapter crates (depend on adapter-sdk)
-cargo publish -p buildfix-receipts-cargo-crev
-cargo publish -p buildfix-receipts-cargo-deny
-cargo publish -p buildfix-receipts-cargo-udeps
-cargo publish -p buildfix-receipts-cargo-machete
-cargo publish -p buildfix-receipts-cargo-outdated
-cargo publish -p buildfix-receipts-cargo-lock
-cargo publish -p buildfix-receipts-cargo-update
-cargo publish -p buildfix-receipts-depguard
-cargo publish -p buildfix-receipts-rustc-json
-cargo publish -p buildfix-receipts-clippy
-cargo publish -p buildfix-receipts-rustfmt
-cargo publish -p buildfix-receipts-cargo-miri
-cargo publish -p buildfix-receipts-cargo-spellcheck
-cargo publish -p buildfix-receipts-cargo-audit
-cargo publish -p buildfix-receipts-cargo-sec-audit
-cargo publish -p buildfix-receipts-cargo-tree
-cargo publish -p buildfix-receipts-cargo-bloat
-cargo publish -p buildfix-receipts-cargo-llvm-lines
-cargo publish -p buildfix-receipts-cargo-cyclonedds
-cargo publish -p buildfix-receipts-cargo-geiger
-cargo publish -p buildfix-receipts-cargo-semver-checks
-cargo publish -p buildfix-receipts-cargo-warn
-cargo publish -p buildfix-receipts-cargo-msrv
-cargo publish -p buildfix-receipts-cargo-krate
-cargo publish -p buildfix-receipts-tarpaulin
-cargo publish -p buildfix-receipts-cargo-audit-freeze
-cargo publish -p buildfix-receipts-cargo-unused-function
-
-# Core runtime (needs edit + receipts)
-cargo publish -p buildfix-core-runtime
+cargo publish -p buildfix-fixer-msrv
+cargo publish -p buildfix-fixer-path-dep-version
+cargo publish -p buildfix-fixer-remove-unused-deps
+cargo publish -p buildfix-fixer-resolver-v2
+cargo publish -p buildfix-fixer-workspace-inheritance
 
 # === LAYER 4 ===
 # Wait for all Layer 3 crates to be indexed
@@ -178,7 +175,8 @@ cargo publish -p buildfix  # This is buildfix-cli, published as "buildfix"
 ### Crates NOT Published
 
 - `buildfix-bdd` — `publish = false` (test-only)
-- `xtask` — Not in workspace members for publishing
+- `buildfix-receipts-template` — `publish = false` (copy-paste template for new adapters)
+- `xtask` — `publish = false` (build helpers)
 - `fuzz` — Excluded from workspace
 
 ---
@@ -322,56 +320,63 @@ cargo publish -p buildfix
 # resume-publish.sh - Resume from a specific crate
 
 CRATES=(
+  # Layer 0
   "buildfix-types"
   "buildfix-hash"
+  # Layer 1
   "buildfix-adapter-sdk"
+  "buildfix-edit"
+  "buildfix-fixer-catalog"
   "buildfix-receipts"
   "buildfix-render"
-  "buildfix-edit"
-  "buildfix-receipts-sarif"
+  # Layer 2
+  "buildfix-artifacts"
+  "buildfix-core-runtime"
   "buildfix-fixer-api"
   "buildfix-report"
-  "buildfix-artifacts"
-  "buildfix-fixer-catalog"
-  "buildfix-domain-policy"
-  "buildfix-fixer-resolver-v2"
-  "buildfix-fixer-path-dep-version"
-  "buildfix-fixer-workspace-inheritance"
-  "buildfix-fixer-duplicate-deps"
-  "buildfix-fixer-remove-unused-deps"
-  "buildfix-fixer-msrv"
-  "buildfix-fixer-edition"
-  "buildfix-fixer-license"
+  "buildfix-receipts-cargo-audit"
+  "buildfix-receipts-cargo-audit-freeze"
+  "buildfix-receipts-cargo-bloat"
   "buildfix-receipts-cargo-crev"
+  "buildfix-receipts-cargo-cyclonedds"
   "buildfix-receipts-cargo-deny"
-  "buildfix-receipts-cargo-udeps"
-  "buildfix-receipts-cargo-machete"
-  "buildfix-receipts-cargo-outdated"
+  "buildfix-receipts-cargo-geiger"
+  "buildfix-receipts-cargo-krate"
+  "buildfix-receipts-cargo-llvm-lines"
   "buildfix-receipts-cargo-lock"
+  "buildfix-receipts-cargo-machete"
+  "buildfix-receipts-cargo-miri"
+  "buildfix-receipts-cargo-msrv"
+  "buildfix-receipts-cargo-outdated"
+  "buildfix-receipts-cargo-sec-audit"
+  "buildfix-receipts-cargo-semver-checks"
+  "buildfix-receipts-cargo-spellcheck"
+  "buildfix-receipts-cargo-tree"
+  "buildfix-receipts-cargo-udeps"
+  "buildfix-receipts-cargo-unused-function"
   "buildfix-receipts-cargo-update"
+  "buildfix-receipts-cargo-warn"
+  "buildfix-receipts-clippy"
   "buildfix-receipts-depguard"
   "buildfix-receipts-rustc-json"
-  "buildfix-receipts-clippy"
   "buildfix-receipts-rustfmt"
-  "buildfix-receipts-cargo-miri"
-  "buildfix-receipts-cargo-spellcheck"
-  "buildfix-receipts-cargo-audit"
-  "buildfix-receipts-cargo-sec-audit"
-  "buildfix-receipts-cargo-tree"
-  "buildfix-receipts-cargo-bloat"
-  "buildfix-receipts-cargo-llvm-lines"
-  "buildfix-receipts-cargo-cyclonedds"
-  "buildfix-receipts-cargo-geiger"
-  "buildfix-receipts-cargo-semver-checks"
-  "buildfix-receipts-cargo-warn"
-  "buildfix-receipts-cargo-msrv"
-  "buildfix-receipts-cargo-krate"
+  "buildfix-receipts-sarif"
   "buildfix-receipts-tarpaulin"
-  "buildfix-receipts-cargo-audit-freeze"
-  "buildfix-receipts-cargo-unused-function"
-  "buildfix-core-runtime"
+  # Layer 3
+  "buildfix-domain-policy"
+  "buildfix-fixer-duplicate-deps"
+  "buildfix-fixer-edition"
+  "buildfix-fixer-license"
+  "buildfix-fixer-msrv"
+  "buildfix-fixer-path-dep-version"
+  "buildfix-fixer-remove-unused-deps"
+  "buildfix-fixer-resolver-v2"
+  "buildfix-fixer-workspace-inheritance"
+  # Layer 4
   "buildfix-domain"
+  # Layer 5
   "buildfix-core"
+  # Layer 6
   "buildfix"
 )
 
@@ -405,29 +410,31 @@ chmod +x resume-publish.sh
 
 ```bash
 # Check all published crates (must match CRATES array in resume-publish.sh)
-for crate in buildfix-types buildfix-hash buildfix-adapter-sdk \
-             buildfix-receipts buildfix-render buildfix-edit \
-             buildfix-receipts-sarif buildfix-fixer-api buildfix-report \
-             buildfix-artifacts buildfix-fixer-catalog buildfix-domain-policy \
-             buildfix-fixer-resolver-v2 buildfix-fixer-path-dep-version \
-             buildfix-fixer-workspace-inheritance buildfix-fixer-duplicate-deps \
-             buildfix-fixer-remove-unused-deps buildfix-fixer-msrv \
-             buildfix-fixer-edition buildfix-fixer-license \
-             buildfix-receipts-cargo-crev buildfix-receipts-cargo-deny \
-             buildfix-receipts-cargo-udeps buildfix-receipts-cargo-machete \
-             buildfix-receipts-cargo-outdated buildfix-receipts-cargo-lock \
-             buildfix-receipts-cargo-update buildfix-receipts-depguard \
-             buildfix-receipts-rustc-json buildfix-receipts-clippy \
-             buildfix-receipts-rustfmt buildfix-receipts-cargo-miri \
-             buildfix-receipts-cargo-spellcheck buildfix-receipts-cargo-audit \
-             buildfix-receipts-cargo-sec-audit buildfix-receipts-cargo-tree \
-             buildfix-receipts-cargo-bloat buildfix-receipts-cargo-llvm-lines \
-             buildfix-receipts-cargo-cyclonedds buildfix-receipts-cargo-geiger \
-             buildfix-receipts-cargo-semver-checks buildfix-receipts-cargo-warn \
-             buildfix-receipts-cargo-msrv buildfix-receipts-cargo-krate \
-             buildfix-receipts-tarpaulin buildfix-receipts-cargo-audit-freeze \
-             buildfix-receipts-cargo-unused-function \
-             buildfix-core-runtime buildfix-domain buildfix-core buildfix; do
+for crate in buildfix-types buildfix-hash \
+             buildfix-adapter-sdk buildfix-edit buildfix-fixer-catalog \
+             buildfix-receipts buildfix-render \
+             buildfix-artifacts buildfix-core-runtime buildfix-fixer-api \
+             buildfix-report \
+             buildfix-receipts-cargo-audit buildfix-receipts-cargo-audit-freeze \
+             buildfix-receipts-cargo-bloat buildfix-receipts-cargo-crev \
+             buildfix-receipts-cargo-cyclonedds buildfix-receipts-cargo-deny \
+             buildfix-receipts-cargo-geiger buildfix-receipts-cargo-krate \
+             buildfix-receipts-cargo-llvm-lines buildfix-receipts-cargo-lock \
+             buildfix-receipts-cargo-machete buildfix-receipts-cargo-miri \
+             buildfix-receipts-cargo-msrv buildfix-receipts-cargo-outdated \
+             buildfix-receipts-cargo-sec-audit buildfix-receipts-cargo-semver-checks \
+             buildfix-receipts-cargo-spellcheck buildfix-receipts-cargo-tree \
+             buildfix-receipts-cargo-udeps buildfix-receipts-cargo-unused-function \
+             buildfix-receipts-cargo-update buildfix-receipts-cargo-warn \
+             buildfix-receipts-clippy buildfix-receipts-depguard \
+             buildfix-receipts-rustc-json buildfix-receipts-rustfmt \
+             buildfix-receipts-sarif buildfix-receipts-tarpaulin \
+             buildfix-domain-policy \
+             buildfix-fixer-duplicate-deps buildfix-fixer-edition \
+             buildfix-fixer-license buildfix-fixer-msrv \
+             buildfix-fixer-path-dep-version buildfix-fixer-remove-unused-deps \
+             buildfix-fixer-resolver-v2 buildfix-fixer-workspace-inheritance \
+             buildfix-domain buildfix-core buildfix; do
   echo -n "$crate: "
   cargo search "$crate" 2>/dev/null | grep "^$crate = " || echo "NOT FOUND"
 done
@@ -560,6 +567,7 @@ buildfix --version
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-03-26 | 1.3 | Recomputed layer assignments from real dependency graph; moved fixer-catalog to L1, core-runtime and adapters to L2, fixers to L3; added buildfix-receipts-template to NOT Published list; fixed xtask description |
 | 2026-03-26 | 1.2 | Added missing buildfix-receipts to publish order; moved buildfix-receipts-sarif to Layer 2; completed verification crate list |
 | 2026-03-20 | 1.1 | Updated dependency graph to include all intake adapters; added missing adapter crates to publish sequence |
 | 2026-03-16 | 1.0 | Initial runbook created from v0.2.0 release lessons |

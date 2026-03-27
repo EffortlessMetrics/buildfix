@@ -8,7 +8,7 @@ license.workspace = true
 description = "Adapter that parses cargo-update JSON output and converts it to buildfix receipts."
 repository.workspace = true
 homepage.workspace = true
-readme = "README.md"
+readme = false
 keywords = ["cargo", "adapter", "cargo-update", "receipt"]
 categories = ["development-tools"]
 

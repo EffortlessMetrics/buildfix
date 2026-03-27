@@ -8,6 +8,7 @@ license.workspace = true
 description = "License normalization fixer implementation."
 repository.workspace = true
 homepage.workspace = true
+readme = false
 categories = ["development-tools"]
 keywords = ["cargo", "fixer", "buildfix", "license"]
 

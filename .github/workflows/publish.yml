@@ -90,64 +90,63 @@ jobs:
   #     fail-fast: false
   #     matrix:
   #       crate:
-  #         # Layer 1: No internal dependencies
+  #         # Layer 0: No internal dependencies
   #         - buildfix-hash
   #         - buildfix-types
-  #         # Layer 2: Depends on Layer 1
-  #         - buildfix-render
-  #         - buildfix-receipts
-  #         - buildfix-edit
+  #         # Layer 1: Depends on Layer 0 only
   #         - buildfix-adapter-sdk
+  #         - buildfix-edit
   #         - buildfix-fixer-catalog
-  #         # Layer 3: Receipt adapters
-  #         - buildfix-receipts-sarif
+  #         - buildfix-receipts
+  #         - buildfix-render
+  #         # Layer 2: Depends on Layer 0-1
+  #         - buildfix-artifacts
+  #         - buildfix-core-runtime
+  #         - buildfix-fixer-api
+  #         - buildfix-report
+  #         - buildfix-receipts-cargo-audit
+  #         - buildfix-receipts-cargo-audit-freeze
+  #         - buildfix-receipts-cargo-bloat
+  #         - buildfix-receipts-cargo-crev
+  #         - buildfix-receipts-cargo-cyclonedds
+  #         - buildfix-receipts-cargo-deny
+  #         - buildfix-receipts-cargo-geiger
+  #         - buildfix-receipts-cargo-krate
+  #         - buildfix-receipts-cargo-llvm-lines
+  #         - buildfix-receipts-cargo-lock
+  #         - buildfix-receipts-cargo-machete
+  #         - buildfix-receipts-cargo-miri
+  #         - buildfix-receipts-cargo-msrv
+  #         - buildfix-receipts-cargo-outdated
+  #         - buildfix-receipts-cargo-sec-audit
+  #         - buildfix-receipts-cargo-semver-checks
+  #         - buildfix-receipts-cargo-spellcheck
+  #         - buildfix-receipts-cargo-tree
+  #         - buildfix-receipts-cargo-udeps
+  #         - buildfix-receipts-cargo-unused-function
+  #         - buildfix-receipts-cargo-update
+  #         - buildfix-receipts-cargo-warn
   #         - buildfix-receipts-clippy
+  #         - buildfix-receipts-depguard
   #         - buildfix-receipts-rustc-json
   #         - buildfix-receipts-rustfmt
-  #         - buildfix-receipts-depguard
+  #         - buildfix-receipts-sarif
   #         - buildfix-receipts-tarpaulin
-  #         - buildfix-receipts-cargo-deny
-  #         - buildfix-receipts-cargo-machete
-  #         - buildfix-receipts-cargo-udeps
-  #         - buildfix-receipts-cargo-outdated
-  #         - buildfix-receipts-cargo-lock
-  #         - buildfix-receipts-cargo-update
-  #         - buildfix-receipts-cargo-tree
-  #         - buildfix-receipts-cargo-bloat
-  #         - buildfix-receipts-cargo-llvm-lines
-  #         - buildfix-receipts-cargo-cyclonedds
-  #         - buildfix-receipts-cargo-geiger
-  #         - buildfix-receipts-cargo-semver-checks
-  #         - buildfix-receipts-cargo-warn
-  #         - buildfix-receipts-cargo-msrv
-  #         - buildfix-receipts-cargo-krate
-  #         - buildfix-receipts-cargo-audit
-  #         - buildfix-receipts-cargo-sec-audit
-  #         - buildfix-receipts-cargo-audit-freeze
-  #         - buildfix-receipts-cargo-crev
-  #         - buildfix-receipts-cargo-miri
-  #         - buildfix-receipts-cargo-spellcheck
-  #         - buildfix-receipts-cargo-unused-function
-  #         - buildfix-receipts-template
-  #         # Layer 4: Fixer microcrates
-  #         - buildfix-fixer-api
-  #         - buildfix-fixer-resolver-v2
-  #         - buildfix-fixer-path-dep-version
-  #         - buildfix-fixer-workspace-inheritance
+  #         # Layer 3: Fixer microcrates (depend on fixer-api from Layer 2)
+  #         - buildfix-domain-policy
   #         - buildfix-fixer-duplicate-deps
-  #         - buildfix-fixer-remove-unused-deps
-  #         - buildfix-fixer-msrv
   #         - buildfix-fixer-edition
   #         - buildfix-fixer-license
-  #         # Layer 5: Domain layer
-  #         - buildfix-domain-policy
+  #         - buildfix-fixer-msrv
+  #         - buildfix-fixer-path-dep-version
+  #         - buildfix-fixer-remove-unused-deps
+  #         - buildfix-fixer-resolver-v2
+  #         - buildfix-fixer-workspace-inheritance
+  #         # Layer 4: Domain
   #         - buildfix-domain
-  #         # Layer 6: Core layer
-  #         - buildfix-report
-  #         - buildfix-core-runtime
-  #         - buildfix-artifacts
+  #         # Layer 5: Core
   #         - buildfix-core
-  #         # Layer 7: CLI (top-level)
+  #         # Layer 6: CLI (top-level)
   #         - buildfix
   #   steps:
   #     - name: Checkout repository
