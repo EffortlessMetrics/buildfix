@@ -282,6 +282,7 @@ mod tests {
                         location: None,
                         fingerprint: None,
                         data: None,
+                        ..Default::default()
                     }],
                     capabilities: Some(ReceiptCapabilities {
                         check_ids: vec!["z.check".to_string(), "a.check".to_string()],
@@ -312,6 +313,7 @@ mod tests {
                         location: None,
                         fingerprint: None,
                         data: None,
+                        ..Default::default()
                     }],
                     capabilities: None,
                     data: None,
@@ -489,6 +491,7 @@ mod tests {
                         location: None,
                         fingerprint: None,
                         data: None,
+                        ..Default::default()
                     },
                     Finding {
                         severity: Default::default(),
@@ -498,6 +501,7 @@ mod tests {
                         location: None,
                         fingerprint: None,
                         data: None,
+                        ..Default::default()
                     },
                 ],
                 capabilities: None,

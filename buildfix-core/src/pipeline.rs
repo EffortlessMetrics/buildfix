@@ -32,6 +32,7 @@ use buildfix_types::wire::PlanV1;
 use chrono::Utc;
 #[cfg(not(feature = "reporting"))]
 use std::collections::BTreeSet;
+use toml_edit::DocumentMut;
 use tracing::debug;
 
 /// Error type for pipeline results.  Exit code 2 = policy block, 1 = tool error.
@@ -41,6 +42,22 @@ pub enum ToolError {
     PolicyBlock,
     #[error("{0:#}")]
     Internal(#[from] anyhow::Error),
+}
+
+/// Validate that the root Cargo.toml is valid TOML.
+/// Returns an error if the file cannot be parsed.
+fn validate_root_cargo_toml(repo: &FsRepoView) -> anyhow::Result<()> {
+    use buildfix_domain::RepoView;
+
+    let contents = repo
+        .read_to_string(camino::Utf8Path::new("Cargo.toml"))
+        .context("read root Cargo.toml")?;
+
+    contents
+        .parse::<DocumentMut>()
+        .map_err(|e| anyhow::anyhow!("root Cargo.toml is not valid TOML: {}", e))?;
+
+    Ok(())
 }
 
 /// Outcome of `run_plan`.
@@ -83,6 +100,9 @@ pub fn run_plan(
         config: planner_cfg.clone(),
     };
     let repo = FsRepoView::new(settings.repo_root.clone());
+
+    // Validate that root Cargo.toml is parseable TOML.
+    validate_root_cargo_toml(&repo)?;
 
     let mut plan = planner
         .plan(&ctx, &repo, &receipts, tool.clone())
@@ -880,6 +900,7 @@ mod tests {
                 }),
                 fingerprint: None,
                 data: None,
+                ..Default::default()
             }],
             capabilities: None,
             data: None,
@@ -1239,6 +1260,7 @@ mod tests {
                 location: None,
                 fingerprint: None,
                 data: None,
+                ..Default::default()
             }],
             capabilities: Some(ReceiptCapabilities {
                 check_ids: vec![
@@ -1271,6 +1293,7 @@ mod tests {
                     location: None,
                     fingerprint: None,
                     data: None,
+                    ..Default::default()
                 },
                 Finding {
                     severity: Default::default(),
@@ -1280,6 +1303,7 @@ mod tests {
                     location: None,
                     fingerprint: None,
                     data: None,
+                    ..Default::default()
                 },
             ],
             capabilities: None,

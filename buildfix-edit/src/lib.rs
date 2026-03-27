@@ -683,7 +683,11 @@ pub fn apply_op_to_content(contents: &str, kind: &OpKind) -> anyhow::Result<Stri
         | OpKind::JsonRemove { .. }
         | OpKind::YamlSet { .. }
         | OpKind::YamlRemove { .. }
-        | OpKind::TextReplaceAnchored { .. } => unreachable!("handled above"),
+        | OpKind::TextReplaceAnchored { .. } => {
+            anyhow::bail!(
+                "internal error: non-TOML operation should have been handled in earlier match branch"
+            )
+        }
         OpKind::TomlTransform { rule_id, args } => match rule_id.as_str() {
             "ensure_workspace_resolver_v2" => {
                 doc["workspace"]["resolver"] = value("2");
@@ -1395,7 +1399,8 @@ pub fn check_policy_block(apply: &BuildfixApply, was_dry_run: bool) -> Option<Po
         .filter(|r| r.status == ApplyStatus::Blocked)
         .collect();
 
-    if !blocked.is_empty() {
+    // Only block if NO ops were applied successfully
+    if !blocked.is_empty() && apply.summary.applied == 0 {
         let reasons: Vec<String> = blocked
             .iter()
             .filter_map(|r| r.blocked_reason.clone())

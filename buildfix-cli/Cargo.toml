@@ -42,7 +42,7 @@ jsonschema.workspace = true
 buildfix-core = { version = "0.2.0", path = "../buildfix-core" }
 buildfix-core-runtime = { version = "0.2.0", path = "../buildfix-core-runtime" }
 buildfix-receipts = { version = "0.2.0", path = "../buildfix-receipts" }
-buildfix-types = { version = "0.2.0", path = "../buildfix-types" }
+buildfix-types = { version = "0.3.0", path = "../buildfix-types" }
 buildfix-fixer-catalog = { version = "0.2.0", path = "../buildfix-fixer-catalog" }
 
 [dev-dependencies]

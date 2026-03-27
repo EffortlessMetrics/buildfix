@@ -22,6 +22,7 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+toml_edit.workspace = true
 uuid.workspace = true
 
 buildfix-domain = { version = "0.2.0", path = "../buildfix-domain" }
@@ -29,7 +30,7 @@ buildfix-edit = { version = "0.2.0", path = "../buildfix-edit" }
 buildfix-artifacts = { version = "0.2.0", path = "../buildfix-artifacts", optional = true }
 buildfix-receipts = { version = "0.2.0", path = "../buildfix-receipts" }
 buildfix-report = { version = "0.2.0", path = "../buildfix-report", optional = true }
-buildfix-types = { version = "0.2.0", path = "../buildfix-types" }
+buildfix-types = { version = "0.3.0", path = "../buildfix-types" }
 
 [dev-dependencies]
 pretty_assertions.workspace = true
