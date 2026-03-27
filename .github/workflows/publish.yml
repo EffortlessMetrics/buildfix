@@ -74,33 +74,28 @@ jobs:
           crate_version_published() {
             local crate="$1"
             local version="$2"
-            local url="https://crates.io/api/v1/crates/${crate}/${version}"
-            local response_body
-            local http_code
+            local probe_dir
+            local output
+            local status
 
-            response_body="$(mktemp)"
-            http_code="$(curl --silent --show-error --location --output "${response_body}" --write-out "%{http_code}" "${url}")" || {
-              rm -f "${response_body}"
-              echo "error: failed to query ${url}" >&2
-              return 2
-            }
+            probe_dir="$(mktemp -d)"
+            output="$(
+              cd "${probe_dir}" &&
+              cargo info "${crate}@${version}" --registry crates-io 2>&1
+            )"
+            status=$?
+            rm -rf "${probe_dir}"
 
-            case "${http_code}" in
-              200)
-                rm -f "${response_body}"
-                return 0
-                ;;
-              404)
-                rm -f "${response_body}"
-                return 1
-                ;;
-              *)
-                echo "error: crates.io lookup for ${crate}@${version} returned HTTP ${http_code}" >&2
-                cat "${response_body}" >&2 || true
-                rm -f "${response_body}"
-                return 2
-                ;;
-            esac
+            if [[ ${status} -eq 0 ]]; then
+              return 0
+            fi
+
+            if grep -Fq "could not find \`${crate}@${version}\` in registry" <<<"${output}"; then
+              return 1
+            fi
+
+            echo "${output}" >&2
+            return 2
           }
 
           crates=(
