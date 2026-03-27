@@ -70,6 +70,32 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Query crates.io directly so the skip check cannot resolve to the local workspace package.
+          crate_version_published() {
+            python3 - "$1" "$2" <<'PY'
+import json
+import sys
+import urllib.error
+import urllib.request
+
+crate, version = sys.argv[1], sys.argv[2]
+url = f"https://crates.io/api/v1/crates/{crate}"
+
+try:
+    with urllib.request.urlopen(url, timeout=30) as response:
+        payload = json.load(response)
+except (urllib.error.URLError, ValueError) as exc:
+    print(f"error: failed to query {url}: {exc}", file=sys.stderr)
+    sys.exit(2)
+
+for item in payload.get("versions", []):
+    if item.get("num") == version:
+        sys.exit(0)
+
+sys.exit(1)
+PY
+          }
+
           crates=(
             buildfix-hash
             buildfix-types
@@ -132,15 +158,41 @@ jobs:
             fi
 
             version="$(grep '^version = ' "${manifest_path}" | head -1 | cut -d'"' -f2)"
-            if cargo info "${crate}@${version}" >/dev/null 2>&1; then
+            if crate_version_published "${crate}" "${version}"; then
               echo "Skipping already published ${crate}@${version}"
               continue
+            else
+              status=$?
+              if [[ ${status} -eq 2 ]]; then
+                echo "Could not verify publication status for ${crate}@${version}"
+                exit 1
+              fi
             fi
 
             echo "Publishing ${crate}@${version} from ${manifest_path}"
             cargo publish --manifest-path "${manifest_path}" --token "${CARGO_REGISTRY_TOKEN}"
             sleep 30
           done
+
+          release_version="${GITHUB_REF_NAME#v}"
+          for attempt in {1..20}; do
+            if crate_version_published buildfix "${release_version}"; then
+              echo "Verified buildfix@${release_version} on crates.io"
+              exit 0
+            else
+              status=$?
+              if [[ ${status} -eq 2 ]]; then
+                echo "Could not verify publication status for buildfix@${release_version}"
+                exit 1
+              fi
+            fi
+
+            echo "Waiting for buildfix@${release_version} to appear on crates.io (attempt ${attempt}/20)"
+            sleep 15
+          done
+
+          echo "buildfix@${release_version} did not appear on crates.io after publish"
+          exit 1
 
   # Alternative: Manual publish in dependency order if cargo-workspaces is not desired
   # Uncomment this job and comment out the publish job above to use manual ordering
