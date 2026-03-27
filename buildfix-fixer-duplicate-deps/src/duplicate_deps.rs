@@ -544,6 +544,7 @@ mod tests {
                 "selected_version": selected_version,
                 "toml_path": toml_path,
             })),
+            ..Default::default()
         }
     }
 
@@ -697,6 +698,7 @@ mod tests {
                 "dep": "serde",
                 "selected_version": "1.0.0"
             })),
+            ..Default::default()
         };
         let receipt_set = receipt_set_for(vec![finding]);
 

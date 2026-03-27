@@ -18,4 +18,4 @@ serde.workspace = true
 serde_json.workspace = true
 
 buildfix-receipts = { version = "0.2.0", path = "../buildfix-receipts" }
-buildfix-types = { version = "0.2.0", path = "../buildfix-types" }
+buildfix-types = { version = "0.3.0", path = "../buildfix-types" }

@@ -1,7 +1,7 @@
 mod planner {
     #[cfg(test)]
     pub use buildfix_fixer_api::PlannerConfig;
-    pub use buildfix_fixer_api::{PlanContext, ReceiptSet};
+    pub use buildfix_fixer_api::{MatchedFinding, PlanContext, ReceiptSet};
 }
 
 mod ports {

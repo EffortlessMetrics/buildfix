@@ -61,10 +61,22 @@ pub trait Fixer {
     ) -> anyhow::Result<Vec<buildfix_types::plan::PlanOp>>;
 }
 
+/// A finding matched from receipts with its associated data and evidence.
+///
+/// Evidence fields (`confidence`, `provenance`, `context`) enable fixers
+/// to make informed decisions about safety classification.
 #[derive(Debug, Clone)]
 pub struct MatchedFinding {
+    /// The core finding reference with source, check_id, code, and location.
     pub finding: FindingRef,
+    /// Tool-specific payload data.
     pub data: Option<serde_json::Value>,
+    /// Confidence score (0.0 to 1.0) indicating certainty of the finding.
+    pub confidence: Option<f64>,
+    /// Provenance chain describing how the finding was derived.
+    pub provenance: Option<buildfix_types::receipt::Provenance>,
+    /// Context metadata including analysis depth and workspace consensus.
+    pub context: Option<buildfix_types::receipt::FindingContext>,
 }
 
 #[derive(Debug, Clone)]
@@ -156,6 +168,9 @@ impl ReceiptSet {
                         fingerprint: f.fingerprint.clone(),
                     },
                     data: f.data.clone(),
+                    confidence: f.confidence,
+                    provenance: f.provenance.clone(),
+                    context: f.context.clone(),
                 });
             }
         }
@@ -216,6 +231,9 @@ mod tests {
             }),
             fingerprint: None,
             data: None,
+            confidence: None,
+            provenance: None,
+            context: None,
         }
     }
 
@@ -336,6 +354,7 @@ mod tests {
             }),
             fingerprint: None,
             data: Some(serde_json::json!({"key": "value"})),
+            ..Default::default()
         };
         let receipt = make_receipt("test-tool", vec![finding]);
         let loaded = vec![buildfix_receipts::LoadedReceipt {
