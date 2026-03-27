@@ -27,6 +27,7 @@ Guarded and unsafe fixes also exist, but they are secondary and require explicit
 ```bash
 cargo install buildfix --locked
 buildfix plan
+cat artifacts/buildfix/plan.md
 buildfix apply
 buildfix apply --apply
 ```
@@ -58,6 +59,7 @@ If you want to try it on a known-good example, start with [`examples/demo`](exam
 ## Read next
 
 - [`docs/index.md`](docs/index.md)
+- [`docs/reference/support-matrix.md`](docs/reference/support-matrix.md)
 - [`docs/tutorials/getting-started.md`](docs/tutorials/getting-started.md)
 - [`docs/tutorials/first-fix.md`](docs/tutorials/first-fix.md)
 - [`docs/reference/fixes.md`](docs/reference/fixes.md)

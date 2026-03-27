@@ -89,6 +89,7 @@ cargo run -p buildfix -- apply --apply --allow-guarded --allow-unsafe
 
 ## Further reading
 
+- [Support matrix](../../docs/reference/support-matrix.md)
 - [Configuration guide](../../docs/how-to/configure.md)
 - [Configuration schema](../../docs/config.md)
 - [Fix catalog](../../docs/reference/fixes.md)

@@ -33,6 +33,7 @@ Solve a specific operator problem.
 
 Look up exact commands, schemas, and supported fix behavior.
 
+- [Support Matrix](reference/support-matrix.md)
 - [CLI Commands](reference/cli.md)
 - [Fix Catalog](reference/fixes.md)
 - [Configuration Schema](reference/config.md)
