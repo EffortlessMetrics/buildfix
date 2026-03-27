@@ -57,6 +57,8 @@ A tool or runtime error occurred. This indicates a problem with buildfix itself 
 | I/O error | `Failed to write plan.json: permission denied` |
 | Missing plan | `File not found: artifacts/buildfix/plan.json` |
 | Unknown fix key | `Unknown fix key: 'foo'` (for explain command) |
+| Invalid argument combo | `--auto-commit requires --apply` |
+| Auto-commit failure | `auto-commit failed: git commit returned non-zero` |
 
 ### Debugging
 
@@ -229,6 +231,10 @@ Even when exiting with code 2, buildfix writes artifacts:
 - `report.json` with `warn` or `fail` status
 
 Always check artifacts for details on why a policy block occurred.
+
+## CLI Help Text
+
+Exit codes are also documented in the CLI long help. Run `buildfix --help` to see the summary.
 
 ## See Also
 

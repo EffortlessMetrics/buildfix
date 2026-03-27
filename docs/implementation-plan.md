@@ -12,9 +12,9 @@
 
 | Version | Theme | Status |
 |---------|-------|--------|
-| v0.2.1 | Operational Hardening | 🔄 Next |
-| v0.3.0 | Adapter Productization | 📋 Planned |
-| v0.4.0 | Evidence-Rich Unsafe Reduction | 📋 Planned |
+| v0.2.1 | Operational Hardening | In Progress |
+| v0.3.0 | Adapter Productization | Substantially Complete |
+| v0.4.0 | Evidence-Rich Unsafe Reduction | Planned |
 
 ---
 
@@ -51,7 +51,7 @@ Make releases boring and documentation trustworthy. Establish the operational fo
   - [x] Remove or archive bootstrap-era notes
 - [x] Ensure exit codes are documented
   - [x] Verify `docs/reference/exit-codes.md` is complete
-  - [ ] Cross-reference exit codes in CLI help text
+  - [x] Cross-reference exit codes in CLI help text
 
 #### Quality Gates
 
@@ -99,61 +99,61 @@ Make intake adapters a first-class extension point. Enable third-party contribut
 
 #### Receipt Model Documentation
 
-- [ ] Document the receipt model with schema and versioning notes
-  - [ ] Create `docs/reference/receipt-schema.md`
-  - [ ] Document receipt envelope structure
-  - [ ] Document versioning strategy for receipt formats
-  - [ ] Add examples for common receipt patterns
+- [x] Document the receipt model with schema and versioning notes
+  - [x] Create `docs/reference/receipt-schema.md`
+  - [x] Document receipt envelope structure
+  - [x] Document versioning strategy for receipt formats
+  - [x] Add examples for common receipt patterns
 
 #### Adapter SDK and Test Harness
 
-- [ ] Add shared adapter test harness
-  - [ ] Create `buildfix-adapter-sdk` crate with test utilities
-  - [ ] Define `AdapterTestHarness` trait or struct
-  - [ ] Provide golden test macros for adapter validation
-  - [ ] Document harness usage patterns
-- [ ] Create adapter authoring guide
-  - [ ] Create `docs/how-to/write-adapter.md`
-  - [ ] Document input → normalized finding → receipt flow
-  - [ ] Include worked example with SARIF
-  - [ ] Document error handling best practices
+- [x] Add shared adapter test harness
+  - [x] Create `buildfix-adapter-sdk` crate with test utilities
+  - [x] Define `AdapterTestHarness` trait or struct
+  - [x] Provide golden test macros for adapter validation
+  - [x] Document harness usage patterns
+- [x] Create adapter authoring guide
+  - [x] Create `docs/how-to/write-adapter.md`
+  - [x] Document input → normalized finding → receipt flow
+  - [x] Include worked example with SARIF
+  - [x] Document error handling best practices
 
 #### First Adapter Microcrates
 
-- [ ] Publish `buildfix-receipts-sarif`
-  - [ ] Create microcrate structure
-  - [ ] Implement SARIF parsing
-  - [ ] Add golden tests with sample SARIF outputs
-  - [ ] Document supported SARIF producers
-- [ ] Publish `buildfix-receipts-cargo-deny`
-  - [ ] Create microcrate structure
-  - [ ] Implement cargo-deny JSON output parsing
-  - [ ] Add golden tests with sample outputs
-  - [ ] Document mapping from cargo-deny findings to receipts
+- [x] Publish `buildfix-receipts-sarif`
+  - [x] Create microcrate structure
+  - [x] Implement SARIF parsing
+  - [x] Add golden tests with sample SARIF outputs
+  - [x] Document supported SARIF producers
+- [x] Publish `buildfix-receipts-cargo-deny`
+  - [x] Create microcrate structure
+  - [x] Implement cargo-deny JSON output parsing
+  - [x] Add golden tests with sample outputs
+  - [x] Document mapping from cargo-deny findings to receipts
 
 #### CI Integration Examples
 
-- [ ] Ship CI integration examples teams can copy
-  - [ ] Create `.github/workflows-templates/` directory
-  - [ ] PR lane workflow: plan only, upload artifacts, optional PR comment
-  - [ ] Main lane workflow: apply safe fixes, optional bot commit, no CI loop
-  - [ ] Document workflow customization points
+- [x] Ship CI integration examples teams can copy
+  - [x] Create `.github/workflows-templates/` directory
+  - [x] PR lane workflow: plan only, upload artifacts, optional PR comment
+  - [x] Main lane workflow: apply safe fixes, optional bot commit, no CI loop
+  - [x] Document workflow customization points
 - [ ] Update `docs/how-to/ci-integration.md` with templates
 
 #### Configuration Profiles
 
-- [ ] Add `buildfix.toml` profile examples
-  - [ ] Create `examples/profiles/conservative.toml` (safe ops only)
-  - [ ] Create `examples/profiles/balanced.toml` (safe + guarded with review)
-  - [ ] Create `examples/profiles/aggressive-but-reviewed.toml` (all ops, human review required)
-  - [ ] Document profile selection guidance
+- [x] Add `buildfix.toml` profile examples
+  - [x] Create `examples/profiles/conservative.toml` (safe ops only)
+  - [x] Create `examples/profiles/balanced.toml` (safe + guarded with review)
+  - [x] Create `examples/profiles/aggressive-but-reviewed.toml` (all ops, human review required)
+  - [x] Document profile selection guidance
 
 ### Success Criteria
 
-- [ ] Adding a new adapter requires no buildfix core changes
-- [ ] CI integration is one copy-paste away
-- [ ] At least 2 intake microcrates published to crates.io
-- [ ] Adapter authoring guide is complete with worked example
+- [x] Adding a new adapter requires no buildfix core changes
+- [x] CI integration is one copy-paste away
+- [x] At least 2 intake microcrates published to crates.io
+- [x] Adapter authoring guide is complete with worked example
 
 ### Effort Guidance
 

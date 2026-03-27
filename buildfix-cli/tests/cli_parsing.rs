@@ -525,3 +525,119 @@ fn test_plan_mode_invalid_rejected() {
         .assert()
         .failure();
 }
+
+// ────────────────────────────────────────────────────────────────────────
+// Exit code contract tests
+//
+// Exit 0 = success
+// Exit 1 = tool / runtime error
+// Exit 2 = policy block (precondition mismatch, safety gate, validation)
+// ────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn exit_code_0_plan_success() {
+    let temp = create_temp_repo();
+
+    buildfix()
+        .current_dir(temp.path())
+        .arg("plan")
+        .assert()
+        .code(0);
+}
+
+#[test]
+fn exit_code_0_apply_dry_run_success() {
+    let temp = create_temp_repo();
+
+    buildfix()
+        .current_dir(temp.path())
+        .arg("plan")
+        .assert()
+        .code(0);
+
+    buildfix()
+        .current_dir(temp.path())
+        .arg("apply")
+        .assert()
+        .code(0);
+}
+
+#[test]
+fn exit_code_0_explain_success() {
+    buildfix()
+        .arg("explain")
+        .arg("resolver-v2")
+        .assert()
+        .code(0);
+}
+
+#[test]
+fn exit_code_0_list_fixes_success() {
+    buildfix().arg("list-fixes").assert().code(0);
+}
+
+#[test]
+fn exit_code_0_validate_success() {
+    let temp = create_temp_repo();
+
+    buildfix()
+        .current_dir(temp.path())
+        .arg("validate")
+        .assert()
+        .code(0);
+}
+
+#[test]
+fn exit_code_1_explain_unknown_fix() {
+    buildfix()
+        .arg("explain")
+        .arg("nonexistent-fix")
+        .assert()
+        .code(1);
+}
+
+#[test]
+fn exit_code_1_apply_missing_plan() {
+    let temp = create_temp_repo();
+
+    // No plan.json exists, so apply should fail with exit 1 (tool error).
+    buildfix()
+        .current_dir(temp.path())
+        .args(["apply", "--apply"])
+        .assert()
+        .code(1);
+}
+
+#[test]
+fn exit_code_2_validate_schema_violation() {
+    let temp = create_temp_repo();
+    let bf_dir = temp.path().join("artifacts").join("buildfix");
+    fs::create_dir_all(&bf_dir).unwrap();
+
+    // Valid JSON but violates the plan schema.
+    fs::write(bf_dir.join("plan.json"), r#"{"not_a_plan": true}"#).unwrap();
+
+    buildfix()
+        .current_dir(temp.path())
+        .arg("validate")
+        .assert()
+        .code(2);
+}
+
+#[test]
+fn exit_code_1_auto_commit_without_apply() {
+    let temp = create_temp_repo();
+
+    buildfix()
+        .current_dir(temp.path())
+        .arg("plan")
+        .assert()
+        .code(0);
+
+    // --auto-commit without --apply is a tool error (invalid argument combo).
+    buildfix()
+        .current_dir(temp.path())
+        .args(["apply", "--auto-commit"])
+        .assert()
+        .code(1);
+}
