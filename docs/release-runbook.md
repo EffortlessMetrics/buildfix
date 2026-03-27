@@ -1,6 +1,6 @@
 # buildfix Release Runbook
 
-> **Version**: 1.5
+> **Version**: 1.6
 > **Last Updated**: 2026-03-27
 > **Applies to**: v0.3.x releases and beyond
 
