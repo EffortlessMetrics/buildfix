@@ -1,39 +1,34 @@
 # Getting Started with buildfix
 
-This tutorial walks you through installing buildfix and generating your first repair plan.
+This tutorial is for operators who already have sensor receipts and want buildfix to explain and repair a Cargo workspace.
 
 ## Prerequisites
 
-- Rust toolchain (1.70+)
-- A Cargo workspace with existing sensor receipts in `artifacts/*/report.json`
+- Rust toolchain
+- A Cargo workspace with `builddiag` or `depguard` receipts in `artifacts/*/report.json`
+- One of the supported fix paths: `resolver-v2`, `path-dep-version`, `workspace-inheritance`, or `duplicate-deps`
 
 ## Installation
 
-Build from source:
+Install from crates.io or build from source:
 
 ```bash
-git clone <repo-url>
-cd buildfix
-cargo build --release
+cargo install buildfix --locked
 ```
 
-The binary is at `target/release/buildfix`.
+If you want a concrete sandbox, use [`examples/demo`](../../examples/demo/README.md) or pick a profile from [`examples/profiles`](../../examples/profiles/README.md).
 
 ## Your First Plan
 
-### 1. Check for receipts
+### 1. Check the receipts
 
-buildfix reads sensor outputs from `artifacts/*/report.json`. Verify you have receipts:
+buildfix reads sensor outputs from `artifacts/*/report.json`. Verify the receipts exist before planning:
 
 ```bash
 ls artifacts/*/report.json
 ```
 
-You should see files like:
-- `artifacts/builddiag/report.json`
-- `artifacts/depguard/report.json`
-
-If you don't have receipts, run your sensors first (buildscan, builddiag, depguard).
+For the supported lane, look for `builddiag` and `depguard` receipts.
 
 ### 2. Generate a plan
 
@@ -42,32 +37,21 @@ buildfix plan
 ```
 
 This produces:
-- `artifacts/buildfix/plan.json` — Machine-readable plan
-- `artifacts/buildfix/plan.md` — Human-readable summary
-- `artifacts/buildfix/patch.diff` — Preview of changes
-- `artifacts/buildfix/report.json` — Cockpit-compatible receipt
+
+- `artifacts/buildfix/plan.json`
+- `artifacts/buildfix/plan.md`
+- `artifacts/buildfix/patch.diff`
+- `artifacts/buildfix/report.json`
 
 ### 3. Review the plan
 
-Open `artifacts/buildfix/plan.md` to see what buildfix found:
+Open `artifacts/buildfix/plan.md` to see what buildfix found and why it thinks the change is safe:
 
 ```bash
 cat artifacts/buildfix/plan.md
 ```
 
-You'll see a summary like:
-
-```
-# buildfix Plan
-
-## Summary
-- Ops total: 3
-- Ops blocked: 0
-- Files touched: 2
-
-## Planned Ops
-...
-```
+You should see the supported lane called out in plain language, not just a list of internal fix IDs.
 
 ### 4. Preview the patch
 
@@ -77,7 +61,7 @@ Check what would change:
 cat artifacts/buildfix/patch.diff
 ```
 
-This shows a unified diff of all planned edits.
+The patch should only include edits you can explain from the receipts.
 
 ## Understanding Safety Classes
 
@@ -85,12 +69,13 @@ Each op has a safety classification:
 
 | Class | Meaning | Apply behavior |
 |-------|---------|---------------|
-| **Safe** | Fully determined, low impact | Applied with `--apply` |
+| **Safe** | Determined from repo truth | Applied with `--apply` |
 | **Guarded** | Deterministic but higher impact | Requires `--allow-guarded` |
-| **Unsafe** | Needs user parameters | Requires `--allow-unsafe` + params |
+| **Unsafe** | Needs explicit parameters | Requires `--allow-unsafe` + params |
 
 ## What's Next?
 
-- [Your First Fix](first-fix.md) — Walk through applying an op
-- [Configure buildfix](../how-to/configure.md) — Customize policy with buildfix.toml
-- [Fix Catalog](../reference/fixes.md) — See all available fixes
+- [Your First Fix](first-fix.md)
+- [Configure buildfix](../how-to/configure.md)
+- [Fix Catalog](../reference/fixes.md)
+- [buildfix demo](../../examples/demo/README.md)

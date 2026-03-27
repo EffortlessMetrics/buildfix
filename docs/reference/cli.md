@@ -2,6 +2,10 @@
 
 Complete reference for buildfix commands and options.
 
+For the current support boundary, see [Support Matrix](support-matrix.md). The
+supported lane is the safe, receipt-driven path for workspace hygiene; guarded
+and unsafe fixes require operator review.
+
 ## Synopsis
 
 ```
@@ -19,6 +23,10 @@ Commands:
 ## buildfix plan
 
 Generate a deterministic fix plan from sensor receipts.
+
+The default supported lane is `builddiag` and `depguard` receipts driving the
+safe fixes in the fix catalog. Anything guarded or unsafe is still documented
+here, but it is not the default automation path.
 
 ```
 buildfix plan [OPTIONS]

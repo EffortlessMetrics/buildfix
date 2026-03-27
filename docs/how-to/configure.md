@@ -2,6 +2,22 @@
 
 This guide explains how to set up `buildfix.toml` to control which ops are allowed, safety gates, and operational limits.
 
+If you are configuring buildfix for the first time, start with the
+[support matrix](../reference/support-matrix.md) and one of the ready-made
+[profiles](../../examples/profiles/README.md). Hand-written policy is most
+useful after you know which lane you want to automate.
+
+## Start with a Profile
+
+For most teams, these are the right defaults:
+
+- `conservative` for unattended CI or bots
+- `balanced` for an operator-reviewed first rollout
+- `aggressive-but-reviewed` only for deliberate cleanup sessions
+
+Copy a profile, run `plan`, and review the generated `plan.md` before you
+open up additional safety classes.
+
 ## Configuration File Location
 
 buildfix looks for `buildfix.toml` in your repository root. Create it if it doesn't exist:
@@ -172,7 +188,7 @@ buildfix plan --no-clean-hashes
 
 ## Example: Conservative Policy
 
-Only allow resolver-v2 and path-dep-version policy keys:
+Only allow the smallest supported subset of the safe lane:
 
 ```toml
 [policy]
@@ -195,7 +211,7 @@ enabled = true
 
 ## Example: Aggressive Policy
 
-Allow all ops including guarded:
+Allow all current safe and guarded fixes while leaving unsafe fixes blocked by default:
 
 ```toml
 [policy]
@@ -215,6 +231,7 @@ enabled = true
 
 ## See Also
 
+- [Support Matrix](../reference/support-matrix.md)
 - [Configuration Schema Reference](../reference/config.md)
 - [Fix Catalog](../reference/fixes.md) — Fix keys for allow/deny lists
 - [Troubleshoot Blocked Fixes](troubleshoot.md)

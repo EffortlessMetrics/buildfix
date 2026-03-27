@@ -1,109 +1,66 @@
 # buildfix
 
-buildfix is a receipt-driven repair tool for Cargo workspace hygiene.
+buildfix repairs Cargo workspace hygiene from sensor receipts.
 
-It consumes sensor receipts from `artifacts/*/report.json`, produces deterministic fix plans, and can apply those plans with explicit safety gates (`safe`, `guarded`, `unsafe`).
+It reads `artifacts/*/report.json`, plans deterministic fixes, and applies them with explicit safety gates.
 
-## Status
+## What buildfix is for
 
-### NOW
+Use buildfix when you already have sensor output and want a repeatable repair plan for a Cargo workspace.
 
-- 8 built-in fixers with deterministic/TOML/JSON/YAML/anchored-text edit support.
-- Receipt-driven planning and safety gates across `safe`, `guarded`, and `unsafe`.
-- SHA-256 preconditions, atomic apply path, and optional git-head enforcement.
-- CLI command surface includes `plan`, `apply`, `explain`, `list-fixes`, and `validate`.
+The currently supported lane is:
 
-### NEXT
+- `builddiag` for resolver and workspace-policy findings
+- `depguard` for path dependency versions, workspace inheritance, and duplicate dependency versions
 
-- Finalize release cut for implemented 0.2.x capability surface (`text_replace_anchored`, JSON/YAML ops, duplicate deps, license normalization, auto-commit).
-- Expand contributor guidance for adding per-crate fixers in the modular architecture.
-- Keep roadmap, changelog, and docs aligned as release milestones move to LATER→NEXT completion.
+Those fixers are safe by default:
 
-### LATER
+- `resolver-v2`
+- `path-dep-version`
+- `workspace-inheritance`
+- `duplicate-deps`
 
-- Add more provably mechanical file formats and sensors/fixers with strong safety review.
-
-## Architecture at a glance
-
-- Shared contracts: `buildfix-types`, `buildfix-receipts`, `buildfix-hash`
-- Policy/domain orchestration: `buildfix-core`, `buildfix-domain`, `buildfix-domain-policy`
-- Fixer layer: `buildfix-fixer-api`, `buildfix-fixer-catalog`, `buildfix-fixer-*`
-- Edit/reporting: `buildfix-edit`, `buildfix-report`, `buildfix-artifacts`, `buildfix-render`
-- Host/runtime: `buildfix-core-runtime`, `buildfix-cli`
-- Quality: `buildfix-bdd`, `xtask`, `fuzz`
-
-## Flow
-
-Receipts → normalized findings → cataloged fixers → planned ops → policies/caps/preconditions → deterministic plan/report artifacts → gated apply
+Guarded and unsafe fixes also exist, but they are secondary and require explicit review or parameters.
 
 ## Quick start
 
 ```bash
 cargo install buildfix --locked
+buildfix plan
+cat artifacts/buildfix/plan.md
+buildfix apply
+buildfix apply --apply
 ```
 
-```bash
-# Generate plan artifacts
-cargo run -p buildfix -- plan
+If you want to try it on a known-good example, start with [`examples/demo`](examples/demo/README.md) and [`examples/profiles`](examples/profiles/README.md).
 
-# Discover fixes and explainability
-cargo run -p buildfix -- list-fixes
-cargo run -p buildfix -- explain resolver-v2
+## What you get
 
-# Dry-run apply (no file writes)
-cargo run -p buildfix -- apply
+`buildfix plan` writes:
 
-# Apply safe operations
-cargo run -p buildfix -- apply --apply
+- `artifacts/buildfix/plan.json`
+- `artifacts/buildfix/plan.md`
+- `artifacts/buildfix/patch.diff`
+- `artifacts/buildfix/report.json`
 
-# Include guarded operations
-cargo run -p buildfix -- apply --apply --allow-guarded
+`buildfix apply` writes:
 
-# Include unsafe operations (requires params)
-cargo run -p buildfix -- apply --apply --allow-unsafe --param version="1.2.3"
+- `artifacts/buildfix/apply.json`
+- `artifacts/buildfix/apply.md`
+- `artifacts/buildfix/patch.diff`
+- `artifacts/buildfix/report.json`
 
-# Validate receipts and artifacts
-cargo run -p buildfix -- validate
-```
+## What it will not do
 
-## Artifacts
+- It does not guess missing values.
+- It does not apply unsafe changes without explicit approval.
+- It does not repair a workspace with stale receipts without refusing first.
 
-`plan` writes to `artifacts/buildfix/`:
-
-- `plan.json`
-- `plan.md`
-- `comment.md`
-- `patch.diff`
-- `report.json`
-- `extras/buildfix.report.v1.json`
-
-`apply` writes to `artifacts/buildfix/`:
-
-- `apply.json`
-- `apply.md`
-- `patch.diff`
-- `report.json`
-- `extras/buildfix.report.v1.json`
-
-## Safety model
-
-- `safe`: deterministic and low-risk; applied with `--apply`
-- `guarded`: deterministic but higher-impact; needs `--allow-guarded`
-- `unsafe`: requires explicit operator approval and/or params; needs `--allow-unsafe`
-
-Exit codes:
-
-- `0`: success
-- `1`: tool/runtime error
-- `2`: policy block (for example precondition mismatch or safety gate)
-
-## Further reading
+## Read next
 
 - [`docs/index.md`](docs/index.md)
-- [`ROADMAP.md`](ROADMAP.md)
-- [`CHANGELOG.md`](CHANGELOG.md)
-- [`docs/architecture.md`](docs/architecture.md)
+- [`docs/reference/support-matrix.md`](docs/reference/support-matrix.md)
+- [`docs/tutorials/getting-started.md`](docs/tutorials/getting-started.md)
+- [`docs/tutorials/first-fix.md`](docs/tutorials/first-fix.md)
 - [`docs/reference/fixes.md`](docs/reference/fixes.md)
-- [`docs/safety-model.md`](docs/safety-model.md)
 - [`docs/reference/cli.md`](docs/reference/cli.md)
-- [`docs/adr/README.md`](docs/adr/README.md)

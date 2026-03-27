@@ -2,12 +2,22 @@
 
 This guide shows common patterns for running buildfix in automated pipelines.
 
+For unattended automation, keep CI on the supported lane from the
+[support matrix](../reference/support-matrix.md): `builddiag` and `depguard`
+receipts driving the safe fixes. Treat guarded and unsafe fixes as
+operator-reviewed workflows rather than default bot behavior.
+
 ## Overview
 
 buildfix fits into CI/CD in two modes:
 
 1. **Plan-only**: Generate plans on PRs for review (informational)
 2. **Plan + Apply**: Automatically fix issues on the main branch
+
+For a first rollout, pair these modes with the example profiles:
+
+- `conservative` for unattended apply on safe fixes only
+- `balanced` for plan generation plus human review before guarded changes
 
 ## Exit Codes
 
@@ -165,6 +175,10 @@ For informational runs, treat exit 2 as success:
 
 For enforcement, let exit 2 fail the job.
 
+If you see frequent exit 2 results in an unattended job, that usually means the
+pipeline is trying to automate fixes outside the supported lane or the receipts
+are stale by the time `apply` runs.
+
 ## Preserving Artifacts
 
 Always upload buildfix artifacts for debugging:
@@ -213,6 +227,8 @@ This provides visibility into:
 
 ## See Also
 
+- [Support Matrix](../reference/support-matrix.md)
+- [Configuration Profiles](../../examples/profiles/README.md)
 - [CLI Reference](../reference/cli.md)
 - [Exit Codes](../reference/exit-codes.md)
 - [Output Schemas](../reference/schemas.md)
