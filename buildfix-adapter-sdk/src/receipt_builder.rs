@@ -162,6 +162,9 @@ impl ReceiptBuilder {
             }),
             fingerprint: None,
             data: None,
+            confidence: None,
+            provenance: None,
+            context: None,
         };
         self.findings.push(finding);
         self
@@ -232,6 +235,9 @@ pub fn simple_finding(
         }),
         fingerprint: None,
         data: None,
+        confidence: None,
+        provenance: None,
+        context: None,
     }
 }
 
