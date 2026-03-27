@@ -4,6 +4,7 @@ members = [
   "buildfix-types",
   "buildfix-receipts",
   "buildfix-adapter-sdk",
+  "buildfix-receipts-template",
   "buildfix-receipts-cargo-crev",
   "buildfix-receipts-cargo-deny",
   "buildfix-receipts-cargo-udeps",

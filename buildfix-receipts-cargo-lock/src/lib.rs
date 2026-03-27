@@ -1,5 +1,5 @@
 use anyhow::Result;
-use buildfix_adapter_sdk::{Adapter, AdapterError, ReceiptBuilder};
+use buildfix_adapter_sdk::{Adapter, AdapterError, AdapterMetadata, ReceiptBuilder};
 use buildfix_types::receipt::{Finding, ReceiptEnvelope, Severity, VerdictStatus};
 use serde::Deserialize;
 use std::path::Path;
@@ -30,6 +30,20 @@ impl Adapter for CargoLockAdapter {
     }
 }
 
+impl AdapterMetadata for CargoLockAdapter {
+    fn name(&self) -> &str {
+        "cargo-lock"
+    }
+
+    fn version(&self) -> &str {
+        env!("CARGO_PKG_VERSION")
+    }
+
+    fn supported_schemas(&self) -> &[&str] {
+        &["cargo-lock.report.v1"]
+    }
+}
+
 fn convert_report(report: LockReport) -> Result<ReceiptEnvelope, AdapterError> {
     let mut findings = Vec::new();
     let mut warn_count = 0u64;
@@ -47,6 +61,7 @@ fn convert_report(report: LockReport) -> Result<ReceiptEnvelope, AdapterError> {
                 location: None,
                 fingerprint: None,
                 data: Some(data),
+                ..Default::default()
             });
 
             warn_count += 1;

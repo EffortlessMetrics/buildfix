@@ -1,5 +1,5 @@
 use anyhow::Result;
-use buildfix_adapter_sdk::{Adapter, AdapterError, ReceiptBuilder};
+use buildfix_adapter_sdk::{Adapter, AdapterError, AdapterMetadata, ReceiptBuilder};
 use buildfix_types::receipt::{Finding, Location, ReceiptEnvelope, Severity, VerdictStatus};
 use camino::Utf8PathBuf;
 use serde::{Deserialize, Serialize};
@@ -16,6 +16,20 @@ impl CargoUdepsAdapter {
 impl Default for CargoUdepsAdapter {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl AdapterMetadata for CargoUdepsAdapter {
+    fn name(&self) -> &str {
+        "cargo-udeps"
+    }
+
+    fn version(&self) -> &str {
+        env!("CARGO_PKG_VERSION")
+    }
+
+    fn supported_schemas(&self) -> &[&str] {
+        &["cargo-udeps.report.v1"]
     }
 }
 
@@ -67,6 +81,7 @@ fn convert_report(report: CargoUdepsReport) -> Result<ReceiptEnvelope, AdapterEr
                 location: Some(location),
                 fingerprint: None,
                 data: Some(serde_json::to_value(data).unwrap_or_default()),
+                ..Default::default()
             });
 
             warn_count += 1;

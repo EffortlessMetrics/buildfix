@@ -1,5 +1,5 @@
 use anyhow::Result;
-use buildfix_adapter_sdk::{Adapter, AdapterError, ReceiptBuilder};
+use buildfix_adapter_sdk::{Adapter, AdapterError, AdapterMetadata, ReceiptBuilder};
 use buildfix_types::receipt::{Finding, Location, ReceiptEnvelope, Severity, VerdictStatus};
 use camino::Utf8PathBuf;
 use serde::Deserialize;
@@ -37,6 +37,20 @@ impl Adapter for SarifAdapter {
         let content = std::fs::read_to_string(path).map_err(AdapterError::Io)?;
         let report: SarifLog = serde_json::from_str(&content).map_err(AdapterError::Json)?;
         convert_sarif(report, &self.sensor_id)
+    }
+}
+
+impl AdapterMetadata for SarifAdapter {
+    fn name(&self) -> &str {
+        "sarif"
+    }
+
+    fn version(&self) -> &str {
+        env!("CARGO_PKG_VERSION")
+    }
+
+    fn supported_schemas(&self) -> &[&str] {
+        &["sarif.report.v1"]
     }
 }
 
@@ -85,6 +99,7 @@ fn convert_sarif(sarif: SarifLog, sensor_id: &str) -> Result<ReceiptEnvelope, Ad
                     location,
                     fingerprint: None,
                     data: None,
+                    ..Default::default()
                 });
             }
         }

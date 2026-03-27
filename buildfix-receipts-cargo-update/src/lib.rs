@@ -1,5 +1,5 @@
 use anyhow::Result;
-use buildfix_adapter_sdk::{Adapter, AdapterError, ReceiptBuilder};
+use buildfix_adapter_sdk::{Adapter, AdapterError, AdapterMetadata, ReceiptBuilder};
 use buildfix_types::receipt::{Finding, Location, ReceiptEnvelope, Severity, VerdictStatus};
 use camino::Utf8PathBuf;
 use serde::{Deserialize, Serialize};
@@ -28,6 +28,20 @@ impl Adapter for CargoUpdateAdapter {
         let content = std::fs::read_to_string(path).map_err(AdapterError::Io)?;
         let report: UpdateReport = serde_json::from_str(&content).map_err(AdapterError::Json)?;
         convert_report(report)
+    }
+}
+
+impl AdapterMetadata for CargoUpdateAdapter {
+    fn name(&self) -> &str {
+        "cargo-update"
+    }
+
+    fn version(&self) -> &str {
+        env!("CARGO_PKG_VERSION")
+    }
+
+    fn supported_schemas(&self) -> &[&str] {
+        &["cargo-update.report.v1"]
     }
 }
 
@@ -63,6 +77,7 @@ fn convert_report(report: UpdateReport) -> Result<ReceiptEnvelope, AdapterError>
                 location: Some(location),
                 fingerprint: None,
                 data: Some(serde_json::to_value(data).unwrap_or_default()),
+                ..Default::default()
             });
 
             warn_count += 1;

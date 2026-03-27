@@ -1,8 +1,10 @@
 use anyhow::Result;
-use buildfix_adapter_sdk::{Adapter, AdapterError, ReceiptBuilder};
-use buildfix_types::receipt::{Finding, Location, ReceiptEnvelope, Severity, VerdictStatus};
+use buildfix_adapter_sdk::{Adapter, AdapterError, AdapterMetadata, ReceiptBuilder};
+use buildfix_types::receipt::{
+    Finding, FindingContext, Location, Provenance, ReceiptEnvelope, Severity, VerdictStatus,
+};
 use camino::Utf8PathBuf;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::path::Path;
 
 pub struct CargoMacheteAdapter;
@@ -16,6 +18,20 @@ impl CargoMacheteAdapter {
 impl Default for CargoMacheteAdapter {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl AdapterMetadata for CargoMacheteAdapter {
+    fn name(&self) -> &str {
+        "cargo-machete"
+    }
+
+    fn version(&self) -> &str {
+        env!("CARGO_PKG_VERSION")
+    }
+
+    fn supported_schemas(&self) -> &[&str] {
+        &["cargo-machete.report.v1"]
     }
 }
 
@@ -45,15 +61,25 @@ fn convert_report(report: MacheteReport) -> Result<ReceiptEnvelope, AdapterError
                 column: None,
             };
 
+            // Preserve evidence fields from the native report
+            let _confidence = machete_crate.confidence;
+            let _provenance = machete_crate.provenance.clone();
+            let _context = machete_crate.context.clone();
+
             let message = format!(
                 "unused dependency: {} (kind: {})",
                 machete_crate.name, machete_crate.kind
             );
 
-            let data = MacheteCrateData {
-                name: machete_crate.name.clone(),
-                kind: machete_crate.kind.clone(),
-            };
+            let data = serde_json::json!({
+                "name": machete_crate.name,
+                "kind": machete_crate.kind,
+            });
+
+            // Preserve evidence fields from the native report
+            let confidence = machete_crate.confidence;
+            let provenance = machete_crate.provenance.clone();
+            let context = machete_crate.context.clone();
 
             findings.push(Finding {
                 severity: Severity::Warn,
@@ -63,6 +89,9 @@ fn convert_report(report: MacheteReport) -> Result<ReceiptEnvelope, AdapterError
                 location: Some(location),
                 fingerprint: None,
                 data: Some(serde_json::to_value(data).unwrap_or_default()),
+                confidence,
+                provenance,
+                context,
             });
 
             warn_count += 1;
@@ -102,13 +131,10 @@ struct MacheteCrate {
     name: String,
     manifest_path: String,
     kind: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct MacheteCrateData {
-    name: String,
-    kind: String,
+    /// Evidence fields for safety promotion
+    confidence: Option<f64>,
+    provenance: Option<Provenance>,
+    context: Option<FindingContext>,
 }
 
 #[cfg(test)]

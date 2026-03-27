@@ -1,15 +1,14 @@
 [package]
-name = "buildfix-receipts-depguard"
-version = "0.2.0"
-publish = ["crates-io"]
+name = "buildfix-receipts-template"
+version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Adapter that parses depguard JSON output and converts it to buildfix receipts."
+description = "Template adapter for buildfix - demonstrates adapter development patterns"
 repository.workspace = true
 homepage.workspace = true
 readme = "README.md"
-keywords = ["cargo", "adapter", "depguard", "receipt"]
+keywords = ["buildfix", "adapter", "template", "example"]
 categories = ["development-tools"]
 
 [dependencies]
@@ -17,6 +16,7 @@ anyhow.workspace = true
 camino.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+thiserror.workspace = true
 buildfix-types = { version = "0.3.0", path = "../buildfix-types" }
 buildfix-adapter-sdk = { version = "0.2.0", path = "../buildfix-adapter-sdk" }
 

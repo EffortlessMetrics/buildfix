@@ -1,5 +1,5 @@
 use anyhow::Result;
-use buildfix_adapter_sdk::{Adapter, AdapterError, ReceiptBuilder};
+use buildfix_adapter_sdk::{Adapter, AdapterError, AdapterMetadata, ReceiptBuilder};
 use buildfix_types::receipt::{Finding, Location, ReceiptEnvelope, Severity, VerdictStatus};
 use camino::Utf8PathBuf;
 use serde::{Deserialize, Serialize};
@@ -53,6 +53,20 @@ impl Adapter for DepguardAdapter {
     }
 }
 
+impl AdapterMetadata for DepguardAdapter {
+    fn name(&self) -> &str {
+        "depguard"
+    }
+
+    fn version(&self) -> &str {
+        env!("CARGO_PKG_VERSION")
+    }
+
+    fn supported_schemas(&self) -> &[&str] {
+        &["depguard.report.v1"]
+    }
+}
+
 fn convert_array_report(report: DepguardArrayReport) -> Result<ReceiptEnvelope, AdapterError> {
     let mut findings = Vec::new();
     let mut warn_count = 0u64;
@@ -87,6 +101,7 @@ fn convert_array_report(report: DepguardArrayReport) -> Result<ReceiptEnvelope, 
                     location: Some(location),
                     fingerprint: None,
                     data: Some(serde_json::to_value(data).unwrap_or_default()),
+                    ..Default::default()
                 });
 
                 warn_count += 1;
@@ -146,6 +161,7 @@ fn convert_files_report(report: DepguardFilesReport) -> Result<ReceiptEnvelope, 
                         location: Some(location),
                         fingerprint: None,
                         data: Some(serde_json::to_value(data).unwrap_or_default()),
+                        ..Default::default()
                     });
 
                     warn_count += 1;

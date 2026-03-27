@@ -1,5 +1,5 @@
 use anyhow::Result;
-use buildfix_adapter_sdk::{Adapter, AdapterError, ReceiptBuilder};
+use buildfix_adapter_sdk::{Adapter, AdapterError, AdapterMetadata, ReceiptBuilder};
 use buildfix_types::receipt::{Finding, ReceiptEnvelope, Severity, VerdictStatus};
 use camino::Utf8PathBuf;
 use serde::Deserialize;
@@ -31,6 +31,20 @@ impl Adapter for CargoHackAdapter {
     fn load(&self, path: &Path) -> Result<ReceiptEnvelope, AdapterError> {
         let content = std::fs::read_to_string(path).map_err(AdapterError::Io)?;
         convert_cargo_hack_json(&content, &self.sensor_id)
+    }
+}
+
+impl AdapterMetadata for CargoHackAdapter {
+    fn name(&self) -> &str {
+        "cargo-cyclonedds"
+    }
+
+    fn version(&self) -> &str {
+        env!("CARGO_PKG_VERSION")
+    }
+
+    fn supported_schemas(&self) -> &[&str] {
+        &["cargo-cyclonedds.report.v1"]
     }
 }
 
@@ -68,6 +82,7 @@ fn convert_cargo_hack_json(
                     "features": report.features,
                     "feature": unstable.feature,
                 })),
+                ..Default::default()
             });
         }
     }

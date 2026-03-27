@@ -17,7 +17,7 @@ anyhow.workspace = true
 camino.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-buildfix-types = { version = "0.2.0", path = "../buildfix-types" }
+buildfix-types = { version = "0.3.0", path = "../buildfix-types" }
 buildfix-adapter-sdk = { version = "0.2.0", path = "../buildfix-adapter-sdk" }
 
 [dev-dependencies]

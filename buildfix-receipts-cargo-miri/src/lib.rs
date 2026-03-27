@@ -1,5 +1,5 @@
 use anyhow::Result;
-use buildfix_adapter_sdk::{Adapter, AdapterError, ReceiptBuilder};
+use buildfix_adapter_sdk::{Adapter, AdapterError, AdapterMetadata, ReceiptBuilder};
 use buildfix_types::receipt::{Finding, Location, ReceiptEnvelope, Severity, VerdictStatus};
 use camino::Utf8PathBuf;
 use serde::Deserialize;
@@ -31,6 +31,20 @@ impl Adapter for MiriAdapter {
     fn load(&self, path: &Path) -> Result<ReceiptEnvelope, AdapterError> {
         let content = std::fs::read_to_string(path).map_err(AdapterError::Io)?;
         convert_miri_json(&content, &self.sensor_id)
+    }
+}
+
+impl AdapterMetadata for MiriAdapter {
+    fn name(&self) -> &str {
+        "cargo-miri"
+    }
+
+    fn version(&self) -> &str {
+        env!("CARGO_PKG_VERSION")
+    }
+
+    fn supported_schemas(&self) -> &[&str] {
+        &["cargo-miri.report.v1"]
     }
 }
 
@@ -82,6 +96,7 @@ fn convert_miri_json(content: &str, sensor_id: &str) -> Result<ReceiptEnvelope, 
             location,
             fingerprint: None,
             data: None,
+            ..Default::default()
         });
     }
 

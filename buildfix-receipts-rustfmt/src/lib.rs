@@ -1,5 +1,5 @@
 use anyhow::Result;
-use buildfix_adapter_sdk::{Adapter, AdapterError, ReceiptBuilder};
+use buildfix_adapter_sdk::{Adapter, AdapterError, AdapterMetadata, ReceiptBuilder};
 use buildfix_types::receipt::{Finding, Location, ReceiptEnvelope, Severity, VerdictStatus};
 use camino::Utf8PathBuf;
 use serde::Deserialize;
@@ -34,6 +34,20 @@ impl Adapter for RustfmtAdapter {
     }
 }
 
+impl AdapterMetadata for RustfmtAdapter {
+    fn name(&self) -> &str {
+        "rustfmt"
+    }
+
+    fn version(&self) -> &str {
+        env!("CARGO_PKG_VERSION")
+    }
+
+    fn supported_schemas(&self) -> &[&str] {
+        &["rustfmt.report.v1"]
+    }
+}
+
 fn convert_rustfmt_json(content: &str, sensor_id: &str) -> Result<ReceiptEnvelope, AdapterError> {
     let report: RustfmtReport = serde_json::from_str(content).map_err(AdapterError::Json)?;
 
@@ -62,6 +76,7 @@ fn convert_rustfmt_json(content: &str, sensor_id: &str) -> Result<ReceiptEnvelop
                 }),
                 fingerprint: None,
                 data: None,
+                ..Default::default()
             });
         }
     }

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use buildfix_adapter_sdk::{Adapter, AdapterError, ReceiptBuilder};
+use buildfix_adapter_sdk::{Adapter, AdapterError, AdapterMetadata, ReceiptBuilder};
 use buildfix_types::receipt::{Finding, Location, ReceiptEnvelope, Severity, VerdictStatus};
 use camino::Utf8PathBuf;
 use serde::Deserialize;
@@ -34,6 +34,20 @@ impl Adapter for CargoUnusedFunctionAdapter {
     }
 }
 
+impl AdapterMetadata for CargoUnusedFunctionAdapter {
+    fn name(&self) -> &str {
+        "cargo-unused-function"
+    }
+
+    fn version(&self) -> &str {
+        env!("CARGO_PKG_VERSION")
+    }
+
+    fn supported_schemas(&self) -> &[&str] {
+        &["cargo-unused-function.report.v1"]
+    }
+}
+
 fn convert_unused_function_json(
     content: &str,
     sensor_id: &str,
@@ -64,6 +78,7 @@ fn convert_unused_function_json(
             location: Some(location),
             fingerprint: None,
             data: None,
+            ..Default::default()
         });
     }
 

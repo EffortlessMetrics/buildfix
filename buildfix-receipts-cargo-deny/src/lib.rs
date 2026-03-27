@@ -1,5 +1,5 @@
 use anyhow::Result;
-use buildfix_adapter_sdk::{Adapter, AdapterError, ReceiptBuilder};
+use buildfix_adapter_sdk::{Adapter, AdapterError, AdapterMetadata, ReceiptBuilder};
 use buildfix_types::receipt::{Finding, Location, ReceiptEnvelope, Severity, VerdictStatus};
 use camino::Utf8PathBuf;
 use serde::{Deserialize, Serialize};
@@ -16,6 +16,20 @@ impl CargoDenyAdapter {
 impl Default for CargoDenyAdapter {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl AdapterMetadata for CargoDenyAdapter {
+    fn name(&self) -> &str {
+        "cargo-deny"
+    }
+
+    fn version(&self) -> &str {
+        env!("CARGO_PKG_VERSION")
+    }
+
+    fn supported_schemas(&self) -> &[&str] {
+        &["cargo-deny.report.v1"]
     }
 }
 
@@ -116,6 +130,7 @@ fn process_license_section(licenses: &LicenseSection, findings: &mut Vec<Finding
             location: parse_cargo_deny_location(&deny.license),
             fingerprint: None,
             data: Some(serde_json::to_value(data).unwrap_or_default()),
+            ..Default::default()
         });
     }
 
@@ -142,6 +157,7 @@ fn process_license_section(licenses: &LicenseSection, findings: &mut Vec<Finding
             location: parse_cargo_deny_location(&warn.license),
             fingerprint: None,
             data: Some(serde_json::to_value(data).unwrap_or_default()),
+            ..Default::default()
         });
     }
 }
@@ -166,6 +182,7 @@ fn process_bans_section(bans: &BansSection, findings: &mut Vec<Finding>) {
             location: parse_bans_location(&deny.package),
             fingerprint: None,
             data: Some(serde_json::to_value(data).unwrap_or_default()),
+            ..Default::default()
         });
     }
 
@@ -188,6 +205,7 @@ fn process_bans_section(bans: &BansSection, findings: &mut Vec<Finding>) {
             location: parse_bans_location(&warn.package),
             fingerprint: None,
             data: Some(serde_json::to_value(data).unwrap_or_default()),
+            ..Default::default()
         });
     }
 }
@@ -235,6 +253,7 @@ fn process_advisories_section(advisories: &AdvisoriesSection, findings: &mut Vec
             location: None,
             fingerprint: None,
             data: Some(serde_json::to_value(data).unwrap_or_default()),
+            ..Default::default()
         });
     }
 
@@ -258,6 +277,7 @@ fn process_advisories_section(advisories: &AdvisoriesSection, findings: &mut Vec
             location: None,
             fingerprint: None,
             data: Some(serde_json::to_value(data).unwrap_or_default()),
+            ..Default::default()
         });
     }
 }
@@ -280,6 +300,7 @@ fn process_sources_section(sources: &SourcesSection, findings: &mut Vec<Finding>
             location: None,
             fingerprint: None,
             data: Some(serde_json::to_value(data).unwrap_or_default()),
+            ..Default::default()
         });
     }
 
@@ -300,6 +321,7 @@ fn process_sources_section(sources: &SourcesSection, findings: &mut Vec<Finding>
             location: None,
             fingerprint: None,
             data: Some(serde_json::to_value(data).unwrap_or_default()),
+            ..Default::default()
         });
     }
 }

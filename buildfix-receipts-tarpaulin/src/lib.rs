@@ -1,5 +1,5 @@
 use anyhow::Result;
-use buildfix_adapter_sdk::{Adapter, AdapterError, ReceiptBuilder};
+use buildfix_adapter_sdk::{Adapter, AdapterError, AdapterMetadata, ReceiptBuilder};
 use buildfix_types::receipt::{Finding, ReceiptEnvelope, Severity, VerdictStatus};
 use camino::Utf8PathBuf;
 use serde::Deserialize;
@@ -31,6 +31,20 @@ impl Adapter for TarpaulinAdapter {
     fn load(&self, path: &Path) -> Result<ReceiptEnvelope, AdapterError> {
         let content = std::fs::read_to_string(path).map_err(AdapterError::Io)?;
         convert_tarpaulin_json(&content, &self.sensor_id)
+    }
+}
+
+impl AdapterMetadata for TarpaulinAdapter {
+    fn name(&self) -> &str {
+        "tarpaulin"
+    }
+
+    fn version(&self) -> &str {
+        env!("CARGO_PKG_VERSION")
+    }
+
+    fn supported_schemas(&self) -> &[&str] {
+        &["tarpaulin.report.v1"]
     }
 }
 
@@ -73,6 +87,7 @@ fn convert_tarpaulin_json(content: &str, sensor_id: &str) -> Result<ReceiptEnvel
         location: None,
         fingerprint: None,
         data: None,
+        ..Default::default()
     });
 
     if report.files.is_empty() {
@@ -116,6 +131,7 @@ fn convert_tarpaulin_json(content: &str, sensor_id: &str) -> Result<ReceiptEnvel
             }),
             fingerprint: None,
             data: None,
+            ..Default::default()
         });
     }
 

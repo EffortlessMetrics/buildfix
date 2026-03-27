@@ -1,5 +1,5 @@
 use anyhow::Result;
-use buildfix_adapter_sdk::{Adapter, AdapterError, ReceiptBuilder};
+use buildfix_adapter_sdk::{Adapter, AdapterError, AdapterMetadata, ReceiptBuilder};
 use buildfix_types::receipt::{Finding, ReceiptEnvelope, Severity, VerdictStatus};
 use serde::Deserialize;
 use std::path::Path;
@@ -33,6 +33,20 @@ impl Adapter for CargoSemverChecksAdapter {
     }
 }
 
+impl AdapterMetadata for CargoSemverChecksAdapter {
+    fn name(&self) -> &str {
+        "cargo-semver-checks"
+    }
+
+    fn version(&self) -> &str {
+        env!("CARGO_PKG_VERSION")
+    }
+
+    fn supported_schemas(&self) -> &[&str] {
+        &["cargo-semver-checks.report.v1"]
+    }
+}
+
 fn convert_semver_json(content: &str, sensor_id: &str) -> Result<ReceiptEnvelope, AdapterError> {
     let report: SemverReport =
         serde_json::from_str(content).map_err(|e| AdapterError::InvalidFormat(e.to_string()))?;
@@ -60,6 +74,7 @@ fn convert_semver_json(content: &str, sensor_id: &str) -> Result<ReceiptEnvelope
                 location: None,
                 fingerprint: None,
                 data: None,
+                ..Default::default()
             });
         }
     }

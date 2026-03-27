@@ -14,7 +14,7 @@ categories = ["development-tools"]
 
 [dependencies]
 anyhow.workspace = true
-buildfix-types = { version = "0.2.0", path = "../buildfix-types" }
+buildfix-types = { version = "0.3.0", path = "../buildfix-types" }
 buildfix-adapter-sdk = { version = "0.2.0", path = "../buildfix-adapter-sdk" }
 camino.workspace = true
 serde.workspace = true

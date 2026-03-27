@@ -1,5 +1,5 @@
 use anyhow::Result;
-use buildfix_adapter_sdk::{Adapter, AdapterError, ReceiptBuilder};
+use buildfix_adapter_sdk::{Adapter, AdapterError, AdapterMetadata, ReceiptBuilder};
 use buildfix_types::receipt::{Finding, Location, ReceiptEnvelope, Severity, VerdictStatus};
 use camino::Utf8PathBuf;
 use serde::Deserialize;
@@ -20,6 +20,20 @@ impl RustcJsonAdapter {
 impl Default for RustcJsonAdapter {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl AdapterMetadata for RustcJsonAdapter {
+    fn name(&self) -> &str {
+        "rustc-json"
+    }
+
+    fn version(&self) -> &str {
+        env!("CARGO_PKG_VERSION")
+    }
+
+    fn supported_schemas(&self) -> &[&str] {
+        &["rustc-json.message.v1"]
     }
 }
 
@@ -79,6 +93,7 @@ fn convert_rustc_json(content: &str, sensor_id: &str) -> Result<ReceiptEnvelope,
             location,
             fingerprint: None,
             data: None,
+            ..Default::default()
         });
     }
 

@@ -2,17 +2,17 @@
   "crates": [
     {
       "name": "unused-crate",
-      "manifest_path": "/path/to/Cargo.toml",
+      "manifest_path": "Cargo.toml",
       "kind": "direct"
     },
     {
       "name": "transitive-unused",
-      "manifest_path": "/path/to/Cargo.toml",
+      "manifest_path": "Cargo.toml",
       "kind": "transitive"
     },
     {
       "name": "another-unused",
-      "manifest_path": "/workspace/foo/Cargo.toml",
+      "manifest_path": "crates/foo/Cargo.toml",
       "kind": "direct"
     }
   ]

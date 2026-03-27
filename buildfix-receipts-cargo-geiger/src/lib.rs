@@ -1,5 +1,5 @@
 use anyhow::Result;
-use buildfix_adapter_sdk::{Adapter, AdapterError, ReceiptBuilder};
+use buildfix_adapter_sdk::{Adapter, AdapterError, AdapterMetadata, ReceiptBuilder};
 use buildfix_types::receipt::{Finding, Location, ReceiptEnvelope, Severity, VerdictStatus};
 use camino::Utf8PathBuf;
 use serde::Deserialize;
@@ -31,6 +31,20 @@ impl Adapter for CargoGeigerAdapter {
     fn load(&self, path: &Path) -> Result<ReceiptEnvelope, AdapterError> {
         let content = std::fs::read_to_string(path).map_err(AdapterError::Io)?;
         convert_cargo_geiger_json(&content, &self.sensor_id)
+    }
+}
+
+impl AdapterMetadata for CargoGeigerAdapter {
+    fn name(&self) -> &str {
+        "cargo-geiger"
+    }
+
+    fn version(&self) -> &str {
+        env!("CARGO_PKG_VERSION")
+    }
+
+    fn supported_schemas(&self) -> &[&str] {
+        &["cargo-geiger.report.v1"]
     }
 }
 
@@ -86,6 +100,7 @@ fn convert_cargo_geiger_json(
                     location: Some(location),
                     fingerprint: None,
                     data: Some(data),
+                    ..Default::default()
                 });
             }
         }
@@ -118,6 +133,7 @@ fn convert_cargo_geiger_json(
                     location: None,
                     fingerprint: None,
                     data: Some(data),
+                    ..Default::default()
                 });
             }
         }
