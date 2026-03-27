@@ -3,14 +3,9 @@ diff --git a/crates/a/Cargo.toml b/crates/a/Cargo.toml
 +++ b/crates/a/Cargo.toml
 --- original
 +++ modified
-@@ -1,5 +1,5 @@
--[package]
--name = "crate-a"
--version = "0.1.0"
--edition = "2021"
+@@ -2,4 +2,4 @@
+ name = "crate-a"
+ version = "0.1.0"
+ edition = "2021"
 -rust-version = "1.65"
-+[package]
-+name = "crate-a"
-+version = "0.1.0"
-+edition = "2021"
 +rust-version = "1.70"

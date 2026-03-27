@@ -3,17 +3,8 @@ diff --git a/crates/a/Cargo.toml b/crates/a/Cargo.toml
 +++ b/crates/a/Cargo.toml
 --- original
 +++ modified
-@@ -1,7 +1,6 @@
--[package]
--name = "a"
--version = "0.1.0"
--edition = "2021"
--
--[dependencies]
+@@ -4,4 +4,3 @@
+ edition = "2021"
+
+ [dependencies]
 -serde = "1.0"
-+[package]
-+name = "a"
-+version = "0.1.0"
-+edition = "2021"
-+
-+[dependencies]
