@@ -78,8 +78,8 @@ The publish order is determined by the dependency graph. **Do not deviate from t
 
 ```
 Layer 0: buildfix-types, buildfix-hash (no internal deps)
-Layer 1: buildfix-adapter-sdk, buildfix-receipts-sarif, buildfix-render, buildfix-edit
-Layer 2: buildfix-fixer-api, buildfix-report, buildfix-artifacts, buildfix-fixer-catalog
+Layer 1: buildfix-adapter-sdk, buildfix-receipts, buildfix-render, buildfix-edit
+Layer 2: buildfix-receipts-sarif, buildfix-fixer-api, buildfix-report, buildfix-artifacts, buildfix-fixer-catalog
 Layer 3: buildfix-domain-policy, individual fixer crates, buildfix-core-runtime, intake adapters
 Layer 4: buildfix-domain
 Layer 5: buildfix-core
@@ -99,13 +99,14 @@ cargo publish -p buildfix-hash
 # Wait for Layer 0 to be indexed by crates.io (30-60 seconds each)
 
 cargo publish -p buildfix-adapter-sdk
-cargo publish -p buildfix-receipts-sarif
+cargo publish -p buildfix-receipts
 cargo publish -p buildfix-render
 cargo publish -p buildfix-edit
 
 # === LAYER 2 ===
 # Wait for Layer 1 to be indexed
 
+cargo publish -p buildfix-receipts-sarif
 cargo publish -p buildfix-fixer-api
 cargo publish -p buildfix-report
 cargo publish -p buildfix-artifacts
@@ -324,9 +325,10 @@ CRATES=(
   "buildfix-types"
   "buildfix-hash"
   "buildfix-adapter-sdk"
-  "buildfix-receipts-sarif"
+  "buildfix-receipts"
   "buildfix-render"
   "buildfix-edit"
+  "buildfix-receipts-sarif"
   "buildfix-fixer-api"
   "buildfix-report"
   "buildfix-artifacts"
@@ -402,16 +404,29 @@ chmod +x resume-publish.sh
 ### 6.1 Verify All Crates Are Published
 
 ```bash
-# Check all published crates
+# Check all published crates (must match CRATES array in resume-publish.sh)
 for crate in buildfix-types buildfix-hash buildfix-adapter-sdk \
-             buildfix-receipts-sarif buildfix-render buildfix-edit \
-             buildfix-fixer-api buildfix-report buildfix-artifacts \
-             buildfix-fixer-catalog buildfix-domain-policy buildfix-fixer-resolver-v2 \
-             buildfix-fixer-path-dep-version buildfix-fixer-workspace-inheritance \
-             buildfix-fixer-duplicate-deps buildfix-fixer-remove-unused-deps \
-             buildfix-fixer-msrv buildfix-fixer-edition buildfix-fixer-license \
-             buildfix-receipts-cargo-deny buildfix-receipts-cargo-machete \
-             buildfix-receipts-depguard buildfix-receipts-clippy \
+             buildfix-receipts buildfix-render buildfix-edit \
+             buildfix-receipts-sarif buildfix-fixer-api buildfix-report \
+             buildfix-artifacts buildfix-fixer-catalog buildfix-domain-policy \
+             buildfix-fixer-resolver-v2 buildfix-fixer-path-dep-version \
+             buildfix-fixer-workspace-inheritance buildfix-fixer-duplicate-deps \
+             buildfix-fixer-remove-unused-deps buildfix-fixer-msrv \
+             buildfix-fixer-edition buildfix-fixer-license \
+             buildfix-receipts-cargo-crev buildfix-receipts-cargo-deny \
+             buildfix-receipts-cargo-udeps buildfix-receipts-cargo-machete \
+             buildfix-receipts-cargo-outdated buildfix-receipts-cargo-lock \
+             buildfix-receipts-cargo-update buildfix-receipts-depguard \
+             buildfix-receipts-rustc-json buildfix-receipts-clippy \
+             buildfix-receipts-rustfmt buildfix-receipts-cargo-miri \
+             buildfix-receipts-cargo-spellcheck buildfix-receipts-cargo-audit \
+             buildfix-receipts-cargo-sec-audit buildfix-receipts-cargo-tree \
+             buildfix-receipts-cargo-bloat buildfix-receipts-cargo-llvm-lines \
+             buildfix-receipts-cargo-cyclonedds buildfix-receipts-cargo-geiger \
+             buildfix-receipts-cargo-semver-checks buildfix-receipts-cargo-warn \
+             buildfix-receipts-cargo-msrv buildfix-receipts-cargo-krate \
+             buildfix-receipts-tarpaulin buildfix-receipts-cargo-audit-freeze \
+             buildfix-receipts-cargo-unused-function \
              buildfix-core-runtime buildfix-domain buildfix-core buildfix; do
   echo -n "$crate: "
   cargo search "$crate" 2>/dev/null | grep "^$crate = " || echo "NOT FOUND"
@@ -545,5 +560,6 @@ buildfix --version
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-03-26 | 1.2 | Added missing buildfix-receipts to publish order; moved buildfix-receipts-sarif to Layer 2; completed verification crate list |
 | 2026-03-20 | 1.1 | Updated dependency graph to include all intake adapters; added missing adapter crates to publish sequence |
 | 2026-03-16 | 1.0 | Initial runbook created from v0.2.0 release lessons |
