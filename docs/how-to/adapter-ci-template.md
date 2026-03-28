@@ -126,7 +126,7 @@ publish:
   steps:
     - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@stable
-    - run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
+    - run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN || secrets.CARGO_REGISTRY_TOKEN }}
 ```
 
 > **Warning**: Store your crates.io API token as a GitHub secret, never commit it to the repository.
@@ -149,7 +149,7 @@ For publishing, you'll need:
 
 | Secret | Purpose |
 |--------|---------|
-| `CRATES_IO_TOKEN` | API token for crates.io publishing |
+| `CRATES_IO_TOKEN` or `CARGO_REGISTRY_TOKEN` | API token for crates.io publishing (`CRATES_IO_TOKEN` preferred) |
 
 ### Workflow Dependencies
 
