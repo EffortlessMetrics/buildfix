@@ -107,6 +107,67 @@ jobs:
             return 2
           }
 
+          sleep_for_rate_limit() {
+            local output="$1"
+            local retry_after
+            local retry_epoch
+            local now_epoch
+            local sleep_seconds
+
+            retry_after="$(sed -n 's/.*Please try again after \(.* GMT\).*/\1/p' <<<"${output}" | head -1)"
+            retry_epoch=""
+
+            if [[ -n "${retry_after}" ]]; then
+              retry_epoch="$(date -u -d "${retry_after}" +%s 2>/dev/null || true)"
+            fi
+
+            now_epoch="$(date -u +%s)"
+            if [[ -n "${retry_epoch}" ]]; then
+              sleep_seconds=$(( retry_epoch - now_epoch + 5 ))
+            else
+              sleep_seconds=300
+            fi
+
+            if [[ ${sleep_seconds} -lt 5 ]]; then
+              sleep_seconds=5
+            fi
+
+            echo "crates.io rate limit hit; sleeping ${sleep_seconds}s before retry"
+            sleep "${sleep_seconds}"
+          }
+
+          publish_crate_with_retry() {
+            local crate="$1"
+            local version="$2"
+            local manifest_path="$3"
+            local output
+            local status
+
+            for attempt in {1..5}; do
+              set +e
+              output="$(cargo publish --manifest-path "${manifest_path}" 2>&1)"
+              status=$?
+              set -e
+
+              if [[ ${status} -eq 0 ]]; then
+                echo "${output}"
+                return 0
+              fi
+
+              echo "${output}" >&2
+
+              if grep -Fq "status 429 Too Many Requests" <<<"${output}" || grep -Fq "You have published too many new crates in a short period of time" <<<"${output}"; then
+                if [[ ${attempt} -lt 5 ]]; then
+                  echo "Retrying ${crate}@${version} after crates.io rate limit (attempt ${attempt}/5)"
+                  sleep_for_rate_limit "${output}"
+                  continue
+                fi
+              fi
+
+              return "${status}"
+            done
+          }
+
           crates=(
             buildfix-hash
             buildfix-types
@@ -181,7 +242,7 @@ jobs:
             fi
 
             echo "Publishing ${crate}@${version} from ${manifest_path}"
-            cargo publish --manifest-path "${manifest_path}" --token "${CARGO_REGISTRY_TOKEN}"
+            publish_crate_with_retry "${crate}" "${version}" "${manifest_path}"
             sleep 30
           done
 

@@ -1,6 +1,6 @@
 # buildfix Release Runbook
 
-> **Version**: 1.7
+> **Version**: 1.8
 > **Last Updated**: 2026-03-28
 > **Applies to**: v0.3.x releases and beyond
 
@@ -295,6 +295,11 @@ sleep 30  # Acceptable for patch versions on established crates
 ```
 
 ### 3.3 Detecting Rate-Limit vs Actual Failures
+
+The tag-triggered GitHub Actions publish workflow now retries crates.io `429 Too
+Many Requests` responses automatically and honors the server-provided retry
+timestamp when one is present. The manual guidance below still matters if you
+are resuming or debugging publishes by hand.
 
 **Rate-limit error (retry after wait):**
 ```
@@ -664,6 +669,7 @@ buildfix --version
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-03-28 | 1.8 | Added crates.io rate-limit retry guidance for the automated publish workflow |
 | 2026-03-28 | 1.7 | Documented the secret-name compatibility alias so the publish workflow accepts either `CRATES_IO_TOKEN` or `CARGO_REGISTRY_TOKEN` |
 | 2026-03-27 | 1.6 | Documented the `CRATES_IO_TOKEN` GitHub secret requirement, updated the runbook to match the dependency-ordered publish workflow, and moved tag creation into the release trigger flow |
 | 2026-03-27 | 1.5 | Split locked-install verification into pre-tag source and post-publish crates.io gates; updated release examples to 0.3.1 |
