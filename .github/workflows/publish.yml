@@ -55,10 +55,10 @@ jobs:
 
       - name: Verify crates.io token is configured
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN || secrets.CARGO_REGISTRY_TOKEN }}
         run: |
           if [[ -z "${CARGO_REGISTRY_TOKEN:-}" ]]; then
-            echo "::error title=Missing CRATES_IO_TOKEN secret::Configure the repository Actions secret CRATES_IO_TOKEN with a crates.io API token before pushing a release tag."
+            echo "::error title=Missing crates.io publish secret::Configure the repository Actions secret CRATES_IO_TOKEN or CARGO_REGISTRY_TOKEN with a crates.io API token before pushing a release tag."
             exit 1
           fi
 
@@ -75,7 +75,7 @@ jobs:
 
       - name: Publish crates
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN || secrets.CARGO_REGISTRY_TOKEN }}
         run: |
           set -euo pipefail
 
@@ -284,7 +284,7 @@ jobs:
   #
   #     - name: Publish ${{ matrix.crate }}
   #       env:
-  #         CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+  #         CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN || secrets.CARGO_REGISTRY_TOKEN }}
   #       run: |
   #         # Find the crate directory
   #         CRATE_DIR=$(grep -l "name = \"${{ matrix.crate }}\"" */Cargo.toml 2>/dev/null | head -1 | xargs dirname)

@@ -1,7 +1,7 @@
 # buildfix Release Runbook
 
-> **Version**: 1.6
-> **Last Updated**: 2026-03-27
+> **Version**: 1.7
+> **Last Updated**: 2026-03-28
 > **Applies to**: v0.3.x releases and beyond
 
 This runbook captures the lessons learned from the v0.2.0 release to make future releases repeatable and require zero institutional knowledge.
@@ -34,8 +34,9 @@ rustc --version  # Should be >= 1.92
 ```
 
 For the tag-triggered GitHub Actions publish path, the repository must also have
-an Actions secret named `CRATES_IO_TOKEN`. Verify it is present before pushing a
-release tag:
+an Actions secret named `CRATES_IO_TOKEN` or `CARGO_REGISTRY_TOKEN`.
+`CRATES_IO_TOKEN` is preferred, but the workflow accepts either name for
+compatibility. Verify one of them is present before pushing a release tag:
 
 ```bash
 gh secret list --repo EffortlessMetrics/buildfix
@@ -43,7 +44,7 @@ gh secret list --repo EffortlessMetrics/buildfix
 
 Expected result:
 
-- `CRATES_IO_TOKEN` appears in the secret list
+- `CRATES_IO_TOKEN` or `CARGO_REGISTRY_TOKEN` appears in the secret list
 - the token belongs to a crates.io owner account for the published `buildfix-*` crates
 
 ### 1.3 Pre-Release Checks
@@ -663,6 +664,7 @@ buildfix --version
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-03-28 | 1.7 | Documented the secret-name compatibility alias so the publish workflow accepts either `CRATES_IO_TOKEN` or `CARGO_REGISTRY_TOKEN` |
 | 2026-03-27 | 1.6 | Documented the `CRATES_IO_TOKEN` GitHub secret requirement, updated the runbook to match the dependency-ordered publish workflow, and moved tag creation into the release trigger flow |
 | 2026-03-27 | 1.5 | Split locked-install verification into pre-tag source and post-publish crates.io gates; updated release examples to 0.3.1 |
 | 2026-03-26 | 1.4 | Added note that cargo-workspaces handles ordering automatically; manual layers are fallback/debugging only |
