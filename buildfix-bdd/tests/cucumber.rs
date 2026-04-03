@@ -1583,6 +1583,20 @@ async fn repo_is_clean_git_repo(world: &mut BuildfixWorld) {
         .expect("git init");
     assert!(status.success(), "git init failed");
 
+    // Disable commit signing so buildfix auto-commit works in CI/test envs.
+    for (key, val) in [
+        ("user.name", "buildfix"),
+        ("user.email", "buildfix@example.com"),
+        ("commit.gpgsign", "false"),
+    ] {
+        let status = StdCommand::new("git")
+            .args(["config", key, val])
+            .current_dir(root.as_str())
+            .status()
+            .expect("git config");
+        assert!(status.success(), "git config {key} failed");
+    }
+
     let status = StdCommand::new("git")
         .arg("add")
         .arg("-A")
@@ -1592,13 +1606,7 @@ async fn repo_is_clean_git_repo(world: &mut BuildfixWorld) {
     assert!(status.success(), "git add failed");
 
     let status = StdCommand::new("git")
-        .arg("-c")
-        .arg("user.name=buildfix")
-        .arg("-c")
-        .arg("user.email=buildfix@example.com")
-        .arg("commit")
-        .arg("-m")
-        .arg("init")
+        .args(["commit", "-m", "init"])
         .current_dir(root.as_str())
         .status()
         .expect("git commit");
@@ -5514,12 +5522,10 @@ async fn assert_plan_no_root_workspace_dep_op(world: &mut BuildfixWorld) {
     let plan_str = fs::read_to_string(&plan_path).expect("read plan.json");
     let v: serde_json::Value = serde_json::from_str(&plan_str).expect("parse plan.json");
 
-    // TODO(pending): When the fixer gains pre-existing workspace dep detection,
-    // strengthen this to:
-    //   assert!(!plan_has_rule(&v, "ensure_workspace_dependency_version"))
-    // Currently the fixer may still produce a root op when it doesn't check for
-    // pre-existing entries. We verify the plan is at least parseable and well-formed.
-    let _ = plan_ops(&v); // validates ops array exists
+    assert!(
+        !plan_has_rule(&v, "ensure_workspace_dependency_version"),
+        "fixer should skip root op when workspace dependency already exists"
+    );
 }
 
 #[given("a repo with duplicate target-specific dependencies")]
@@ -6696,15 +6702,10 @@ async fn assert_plan_no_msrv_fix_for_inherited(world: &mut BuildfixWorld) {
     let plan_str = fs::read_to_string(&plan_path).expect("read plan.json");
     let v: serde_json::Value = serde_json::from_str(&plan_str).expect("parse plan.json");
 
-    // TODO(pending): When the fixer gains workspace inheritance detection,
-    // strengthen to: assert!(!plan_has_rule(&v, "set_package_rust_version"))
-    // Currently the fixer may not detect `rust-version.workspace = true`.
-    if plan_has_rule(&v, "set_package_rust_version") {
-        eprintln!(
-            "NOTE: fixer produced MSRV fix for crate using workspace inheritance \
-             (known limitation, workspace inheritance detection not yet implemented)"
-        );
-    }
+    assert!(
+        !plan_has_rule(&v, "set_package_rust_version"),
+        "fixer should skip crates using workspace inheritance"
+    );
 }
 
 #[given("crate-a with rust-version workspace = true")]
@@ -7420,27 +7421,10 @@ async fn assert_plan_no_license_fix_inherited(world: &mut BuildfixWorld) {
     let plan_str = fs::read_to_string(&plan_path).expect("read plan.json");
     let v: serde_json::Value = serde_json::from_str(&plan_str).expect("parse plan.json");
 
-    // TODO: When the fixer gains workspace inheritance detection for license,
-    // this should strictly assert no license fix targets the inherited crate:
-    //   assert!(!plan_has_rule(&v, "set_package_license"))
-    // Currently the fixer may not detect `license.workspace = true`.
-    let has_rule = plan_has_rule(&v, "set_package_license");
-    if has_rule {
-        let ops = plan_ops(&v);
-        let targets_inherited = ops.iter().any(|op| {
-            op["kind"]["rule_id"] == "set_package_license"
-                && op["target"]["path"]
-                    .as_str()
-                    .is_some_and(|p| p.contains("crate-a"))
-        });
-        // Soft assertion: log the known limitation but don't fail the test
-        if targets_inherited {
-            eprintln!(
-                "NOTE: fixer produced license fix for crate using workspace inheritance \
-                 (known limitation, workspace inheritance detection not yet implemented)"
-            );
-        }
-    }
+    assert!(
+        !plan_has_rule(&v, "set_package_license"),
+        "fixer should skip crates using workspace inheritance"
+    );
 }
 
 #[given("crate-a with license workspace = true")]
@@ -7557,14 +7541,12 @@ async fn assert_plan_no_license_fix_invalid(world: &mut BuildfixWorld) {
     let plan_str = fs::read_to_string(&plan_path).expect("read plan.json");
     let v: serde_json::Value = serde_json::from_str(&plan_str).expect("parse plan.json");
 
-    // Graceful handling: fixer should not crash on invalid manifest.
-    // TODO(pending): When the fixer handles edge cases (empty license string),
-    // strengthen to: assert!(!plan_has_rule(&v, "set_package_license"))
+    // TODO(pending): When the fixer handles edge cases (empty license string,
+    // missing [package] section), strengthen to:
+    //   assert!(!plan_has_rule(&v, "set_package_license"))
+    // Currently the fixer may produce fixes for invalid manifests.
     if plan_has_rule(&v, "set_package_license") {
-        eprintln!(
-            "NOTE: fixer produced license fix for invalid manifest \
-             (known limitation, edge case handling not yet implemented)"
-        );
+        eprintln!("note: fixer produced license fix for invalid manifest (known limitation)");
     }
 }
 
