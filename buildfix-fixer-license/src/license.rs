@@ -147,10 +147,31 @@ impl LicenseNormalizeFixer {
             return true;
         };
 
+        // Check workspace inheritance:
+        //   license = { workspace = true }  (inline table)
+        //   license.workspace = true         (dotted key, parsed as table)
+        if let Some(lic) = pkg.get("license") {
+            let is_workspace = lic
+                .as_inline_table()
+                .and_then(|t| t.get("workspace"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+                || lic
+                    .as_table()
+                    .and_then(|t| t.get("workspace"))
+                    .and_then(|v| v.as_value())
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+            if is_workspace {
+                return false;
+            }
+        }
+
         let current = pkg
             .get("license")
             .and_then(|i| i.as_value())
             .and_then(|v| v.as_str());
+
         current != Some(license)
     }
 }
@@ -811,5 +832,65 @@ mod tests {
             .expect("plan");
         assert_eq!(ops.len(), 1);
         assert_eq!(ops[0].safety, SafetyClass::Guarded);
+    }
+
+    // =========================================================================
+    // Workspace inheritance detection
+    // =========================================================================
+
+    #[test]
+    fn needs_change_false_when_workspace_inherited() {
+        let contents = r#"
+            [package]
+            name = "a"
+            license = { workspace = true }
+        "#;
+        assert!(!LicenseNormalizeFixer::needs_change(contents, "MIT"));
+    }
+
+    #[test]
+    fn plan_skips_when_license_workspace_inherited() {
+        let repo = TestRepo::new(&[
+            (
+                "Cargo.toml",
+                r#"
+                    [workspace.package]
+                    license = "MIT"
+                "#,
+            ),
+            (
+                "crates/a/Cargo.toml",
+                r#"
+                    [package]
+                    name = "a"
+                    license = { workspace = true }
+                "#,
+            ),
+        ]);
+
+        let receipts = make_receipt_set(
+            "ignored.rs",
+            Some(serde_json::json!({
+                "manifest_path": "crates/a/Cargo.toml"
+            })),
+        );
+        let ops = LicenseNormalizeFixer
+            .plan(&ctx(), &repo, &receipts)
+            .expect("plan");
+        assert!(ops.is_empty(), "should skip workspace-inherited license");
+    }
+
+    // =========================================================================
+    // Empty license string edge case
+    // =========================================================================
+
+    #[test]
+    fn needs_change_true_when_license_empty_string() {
+        let contents = r#"
+            [package]
+            name = "a"
+            license = ""
+        "#;
+        assert!(LicenseNormalizeFixer::needs_change(contents, "MIT"));
     }
 }
