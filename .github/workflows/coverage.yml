@@ -1,0 +1,179 @@
+name: Coverage
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "buildfix-*/**"
+      - "xtask/**"
+      - "tests/**"
+      - "examples/**"
+      - ".github/workflows/coverage.yml"
+      - "codecov.yml"
+      - "docs/ci/coverage.md"
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    branches: [main]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "buildfix-*/**"
+      - "xtask/**"
+      - "tests/**"
+      - "examples/**"
+      - ".github/workflows/coverage.yml"
+      - "codecov.yml"
+      - "docs/ci/coverage.md"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: coverage-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  RUSTFLAGS: "-C debuginfo=0"
+jobs:
+  coverage:
+    name: Codecov Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'coverage') ||
+      contains(github.event.pull_request.labels.*.name, 'full-ci') ||
+      contains(github.event.pull_request.labels.*.name, 'ci:full')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@1.92.0
+        with:
+          components: llvm-tools-preview
+      - name: Use larger target dir
+        run: echo "CARGO_TARGET_DIR=${RUNNER_TEMP}/target" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          cache-directories: ${{ runner.temp }}/target
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - name: Generate coverage
+        env:
+          CI: true
+          INSTA_UPDATE: "no"
+        run: |
+          set -euo pipefail
+          cargo llvm-cov clean --workspace
+          cargo llvm-cov test \
+            --workspace \
+            --locked \
+            --all-features \
+            --exclude buildfix-bdd \
+            --no-report
+          cargo llvm-cov report --json --output-path coverage.json
+          cargo llvm-cov report --lcov --output-path lcov.info
+          cargo llvm-cov report --text | tee coverage.txt
+      - name: Validate coverage output
+        run: |
+          set -euo pipefail
+          test -s coverage.json
+          test -s coverage.txt
+          test -s lcov.info
+      - name: Detect Codecov token
+        id: codecov-token
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        run: |
+          if [ -n "${CODECOV_TOKEN:-}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Upload coverage to Codecov (main)
+        if: ${{ always() && github.event_name == 'push' && hashFiles('lcov.info') != '' && steps.codecov-token.outputs.present == 'true' }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info
+          flags: rust-core
+          name: buildfix-rust-core
+          fail_ci_if_error: true
+      - name: Upload coverage to Codecov (advisory)
+        if: ${{ always() && github.event_name != 'push' && hashFiles('lcov.info') != '' && steps.codecov-token.outputs.present == 'true' }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info
+          flags: rust-core
+          name: buildfix-rust-core
+          fail_ci_if_error: false
+      - name: Write coverage receipt
+        if: always()
+        run: |
+          mkdir -p target/coverage
+          python3 - <<'PY'
+          import json
+          import pathlib
+          receipt = {
+              "schema_version": 1,
+              "repo": "buildfix",
+              "lane": "coverage",
+              "tool": "cargo-llvm-cov",
+              "flag": "rust-core",
+              "workflow": "Coverage",
+              "artifacts": {
+                  "coverage_json": pathlib.Path("coverage.json").exists(),
+                  "coverage_text": pathlib.Path("coverage.txt").exists(),
+                  "lcov": pathlib.Path("lcov.info").exists(),
+              },
+              "claim_boundary": [
+                  "execution_surface_only",
+                  "not_fixer_safety",
+                  "not_patch_correctness",
+                  "not_receipt_adapter_completeness",
+                  "not_stale_receipt_detection",
+                  "not_fix_classification_correctness",
+                  "not_conformance_completeness",
+                  "not_bdd_adequacy",
+                  "not_package_readiness",
+                  "not_release_readiness"
+              ],
+          }
+          pathlib.Path("target/coverage/coverage-receipt.json").write_text(
+              json.dumps(receipt, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+      - name: Summarize coverage artifacts
+        if: always()
+        run: |
+          {
+            echo "## Coverage"
+            echo ""
+            echo "| Artifact | Present |"
+            echo "| --- | ---: |"
+            echo "| coverage.json | $([ -s coverage.json ] && echo yes || echo no) |"
+            echo "| coverage.txt | $([ -s coverage.txt ] && echo yes || echo no) |"
+            echo "| lcov.info | $([ -s lcov.info ] && echo yes || echo no) |"
+            echo "| coverage-receipt.json | $([ -s target/coverage/coverage-receipt.json ] && echo yes || echo no) |"
+            echo ""
+            echo "Codecov flag: \`rust-core\`"
+            echo "Claim boundary: Rust execution-surface evidence only."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.json
+            coverage.txt
+            lcov.info
+            target/coverage/coverage-receipt.json
+          retention-days: 14
