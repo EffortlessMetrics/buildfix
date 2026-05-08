@@ -10,7 +10,7 @@ buildfix repairs Cargo workspace hygiene from sensor receipts.
 
 It reads `artifacts/*/report.json`, plans deterministic fixes, and applies them with explicit safety gates.
 
-Codecov is Rust execution-surface telemetry only; see [Coverage](docs/ci/coverage.md) for what the badge does and does not claim.
+Codecov is Rust execution-surface telemetry only; see [Coverage](docs/ci/coverage.md) for details, claim boundaries, and how to run coverage locally. View [coverage history](https://codecov.io/gh/EffortlessMetrics/buildfix) on Codecov.
 
 ## What buildfix is for
 
