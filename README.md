@@ -1,5 +1,11 @@
 # buildfix
 
+[![CI](https://github.com/EffortlessMetrics/buildfix/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/EffortlessMetrics/buildfix/actions/workflows/ci.yml)
+[![Coverage](https://github.com/EffortlessMetrics/buildfix/actions/workflows/coverage.yml/badge.svg?branch=main)](https://github.com/EffortlessMetrics/buildfix/actions/workflows/coverage.yml)
+[![Codecov](https://codecov.io/gh/EffortlessMetrics/buildfix/branch/main/graph/badge.svg)](https://codecov.io/gh/EffortlessMetrics/buildfix)
+[![MSRV](https://img.shields.io/badge/MSRV-1.92-blue.svg)](Cargo.toml)
+[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
+
 buildfix repairs Cargo workspace hygiene from sensor receipts.
 
 It reads `artifacts/*/report.json`, plans deterministic fixes, and applies them with explicit safety gates.
