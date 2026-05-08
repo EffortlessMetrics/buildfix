@@ -10,6 +10,8 @@ buildfix repairs Cargo workspace hygiene from sensor receipts.
 
 It reads `artifacts/*/report.json`, plans deterministic fixes, and applies them with explicit safety gates.
 
+Codecov is Rust execution-surface telemetry only; see [Coverage](docs/ci/coverage.md) for what the badge does and does not claim.
+
 ## What buildfix is for
 
 Use buildfix when you already have sensor output and want a repeatable repair plan for a Cargo workspace.
