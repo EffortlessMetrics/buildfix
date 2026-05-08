@@ -113,6 +113,59 @@ jobs:
           flags: rust-core
           name: buildfix-rust-core
           fail_ci_if_error: false
+      - name: Write coverage receipt
+        if: always()
+        run: |
+          mkdir -p target/coverage
+          python3 - <<'PY'
+          import json
+          import pathlib
+          receipt = {
+              "schema_version": 1,
+              "repo": "buildfix",
+              "lane": "coverage",
+              "tool": "cargo-llvm-cov",
+              "flag": "rust-core",
+              "workflow": "Coverage",
+              "artifacts": {
+                  "coverage_json": pathlib.Path("coverage.json").exists(),
+                  "coverage_text": pathlib.Path("coverage.txt").exists(),
+                  "lcov": pathlib.Path("lcov.info").exists(),
+              },
+              "claim_boundary": [
+                  "execution_surface_only",
+                  "not_fixer_safety",
+                  "not_patch_correctness",
+                  "not_receipt_adapter_completeness",
+                  "not_stale_receipt_detection",
+                  "not_fix_classification_correctness",
+                  "not_conformance_completeness",
+                  "not_bdd_adequacy",
+                  "not_package_readiness",
+                  "not_release_readiness"
+              ],
+          }
+          pathlib.Path("target/coverage/coverage-receipt.json").write_text(
+              json.dumps(receipt, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+      - name: Summarize coverage artifacts
+        if: always()
+        run: |
+          {
+            echo "## Coverage"
+            echo ""
+            echo "| Artifact | Present |"
+            echo "| --- | ---: |"
+            echo "| coverage.json | $([ -s coverage.json ] && echo yes || echo no) |"
+            echo "| coverage.txt | $([ -s coverage.txt ] && echo yes || echo no) |"
+            echo "| lcov.info | $([ -s lcov.info ] && echo yes || echo no) |"
+            echo "| coverage-receipt.json | $([ -s target/coverage/coverage-receipt.json ] && echo yes || echo no) |"
+            echo ""
+            echo "Codecov flag: \`rust-core\`"
+            echo "Claim boundary: Rust execution-surface evidence only."
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload coverage artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -122,4 +175,5 @@ jobs:
             coverage.json
             coverage.txt
             lcov.info
+            target/coverage/coverage-receipt.json
           retention-days: 14
