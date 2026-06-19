@@ -58,6 +58,19 @@ impl DuplicateDepsConsolidationFixer {
         })
     }
 
+    fn workspace_dep_exists(repo: &dyn RepoView, dep_name: &str) -> bool {
+        let Ok(contents) = repo.read_to_string("Cargo.toml".as_ref()) else {
+            return false;
+        };
+        let Ok(doc) = contents.parse::<DocumentMut>() else {
+            return false;
+        };
+        doc.get("workspace")
+            .and_then(|w| w.get("dependencies"))
+            .and_then(|d| d.get(dep_name))
+            .is_some()
+    }
+
     fn enrich_candidate(repo: &dyn RepoView, raw: RawCandidate) -> Option<ConsolidationCandidate> {
         let contents = repo.read_to_string(&raw.manifest).ok()?;
         let doc = contents.parse::<DocumentMut>().ok()?;
@@ -248,8 +261,10 @@ impl Fixer for DuplicateDepsConsolidationFixer {
                 }
             }
 
-            let findings = findings_by_key.into_values().collect();
-            ops.push(Self::root_op(&dep, &selected_version, findings));
+            if !Self::workspace_dep_exists(repo, &dep) {
+                let findings = findings_by_key.into_values().collect();
+                ops.push(Self::root_op(&dep, &selected_version, findings));
+            }
         }
 
         Ok(ops)
@@ -706,6 +721,78 @@ mod tests {
             .plan(&plan_ctx(), &repo, &receipt_set)
             .expect("plan");
         assert!(ops.is_empty());
+    }
+
+    #[test]
+    fn plan_skips_root_op_when_workspace_dep_exists() {
+        let repo = TestRepo::new(&[
+            (
+                "crates/a/Cargo.toml",
+                r#"
+                [package]
+                name = "a"
+
+                [dependencies]
+                serde = "1.0.200"
+                "#,
+            ),
+            (
+                "crates/b/Cargo.toml",
+                r#"
+                [package]
+                name = "b"
+
+                [dependencies]
+                serde = { version = "1.0.200", features = ["derive"] }
+                "#,
+            ),
+            (
+                "Cargo.toml",
+                "[workspace]\nmembers = [\"crates/a\", \"crates/b\"]\n\n[workspace.dependencies]\nserde = \"1.0.200\"\n",
+            ),
+        ]);
+
+        let receipt_set = receipt_set_for(vec![
+            duplicate_finding(
+                "crates/a/Cargo.toml",
+                "serde",
+                "1.0.200",
+                &["dependencies", "serde"],
+            ),
+            duplicate_finding(
+                "crates/b/Cargo.toml",
+                "serde",
+                "1.0.200",
+                &["dependencies", "serde"],
+            ),
+        ]);
+
+        let ops = DuplicateDepsConsolidationFixer
+            .plan(&plan_ctx(), &repo, &receipt_set)
+            .expect("plan");
+
+        // Should have only member ops, no root op
+        assert_eq!(ops.len(), 2);
+        assert!(
+            !ops.iter().any(|op| {
+                op.target.path == "Cargo.toml"
+                    && matches!(
+                        op.kind,
+                        OpKind::TomlTransform {
+                            ref rule_id,
+                            args: Some(_)
+                        } if rule_id == "ensure_workspace_dependency_version"
+                    )
+            }),
+            "root op should not be emitted when workspace dep already exists"
+        );
+
+        // All ops should be member ops
+        for op in &ops {
+            if let OpKind::TomlTransform { ref rule_id, .. } = op.kind {
+                assert_eq!(rule_id, "use_workspace_dependency");
+            }
+        }
     }
 
     #[test]

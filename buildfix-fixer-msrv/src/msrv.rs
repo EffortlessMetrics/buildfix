@@ -68,6 +68,26 @@ impl MsrvNormalizeFixer {
             return true;
         };
 
+        // Check workspace inheritance:
+        //   rust-version = { workspace = true }  (inline table)
+        //   rust-version.workspace = true         (dotted key, parsed as table)
+        if let Some(rv) = pkg.get("rust-version") {
+            let is_workspace = rv
+                .as_inline_table()
+                .and_then(|t| t.get("workspace"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+                || rv
+                    .as_table()
+                    .and_then(|t| t.get("workspace"))
+                    .and_then(|v| v.as_value())
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+            if is_workspace {
+                return false;
+            }
+        }
+
         let current = pkg
             .get("rust-version")
             .and_then(|i| i.as_value())
@@ -388,6 +408,24 @@ mod tests {
         assert!(MsrvNormalizeFixer::needs_change("[workspace]", "1.70"));
         assert!(MsrvNormalizeFixer::needs_change(manifest, "1.70"));
         assert!(!MsrvNormalizeFixer::needs_change(manifest, "1.60"));
+    }
+
+    #[test]
+    fn needs_change_skips_workspace_inheritance() {
+        let manifest = r#"
+            [package]
+            name = "a"
+            rust-version.workspace = true
+        "#;
+        assert!(!MsrvNormalizeFixer::needs_change(manifest, "1.70"));
+
+        // Also test the inline-table syntax
+        let manifest2 = r#"
+            [package]
+            name = "a"
+            rust-version = { workspace = true }
+        "#;
+        assert!(!MsrvNormalizeFixer::needs_change(manifest2, "1.70"));
     }
 
     #[test]

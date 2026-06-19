@@ -414,6 +414,7 @@ mod tests {
         run_git(&root, &["init"]);
         run_git(&root, &["config", "user.email", "test@example.com"]);
         run_git(&root, &["config", "user.name", "Test User"]);
+        run_git(&root, &["config", "commit.gpgsign", "false"]);
         run_git(&root, &["add", "."]);
         run_git(&root, &["commit", "-m", "init"]);
 
